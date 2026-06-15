@@ -20,12 +20,87 @@ use Psr\Log\LoggerInterface;
  */
 abstract class BaseController extends Controller
 {
+    protected $helpers = ['form', 'url'];
+
     /**
      * Be sure to declare properties for any property fetch you initialized.
      * The creation of dynamic property is deprecated in PHP 8.2.
      */
 
     // protected $session;
+
+    protected function renderPage(string $view, array $page = []): string
+    {
+        try {
+          $isLoggedIn = auth()->loggedIn();
+        } catch (\CodeIgniter\Database\Exceptions\DatabaseException $exception) {
+          $isLoggedIn = false;
+        }
+
+        $defaults = [
+            'siteName' => 'TanHub',
+            'pageTitle' => 'TanHub',
+            'metaDescription' => 'Centralised wildlife observation reporting hub.',
+            'tagline' => 'Centralised wildlife observation reporting hub.',
+            'bodyClass' => 'app-shell',
+            'navItems' => [
+                [
+                    'label' => 'Home',
+                    'url' => site_url('/'),
+                    'path' => '',
+                    'style' => 'link',
+                ],
+                [
+                    'label' => 'Login',
+                    'url' => site_url('login'),
+                    'path' => 'login',
+                    'style' => 'link',
+                ],
+                [
+                    'label' => 'Logout',
+                    'url' => site_url('logout'),
+                    'path' => 'logout',
+                    'style' => 'link',
+                ],
+                [
+                    'label' => 'Register',
+                    'url' => site_url('register'),
+                    'path' => 'register',
+                    'style' => 'button',
+                ],
+                [
+                    'label' => 'Docs',
+                    'url' => 'https://codeigniter.com/user_guide/',
+                    'style' => 'outline',
+                    'external' => true,
+                ],
+            ],
+            'features' => [
+                ['value' => 'NBN Atlas', 'label' => 'Data available from the NBN Atlas'],
+                ['value' => 'iRecord', 'label' => 'Data available from iRecord'],
+                ['value' => 'Reporting API', 'label' => 'Combined data available via the Reporting API'],
+            ],
+            'footer' => [
+                'headline' => 'TanHub',
+                'copy' => 'Built with CodeIgniter ' . \CodeIgniter\CodeIgniter::CI_VERSION . ' and Bootstrap 5.',
+            ],
+            'year' => date('Y'),
+        ];
+        if ($isLoggedIn) {
+          // Hide login and register for logged-in users, since they are not relevant.
+          $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
+            return ! isset($item['path']) || ! in_array($item['path'], ['login', 'register']);
+          });
+        }
+        else {
+          // Hide logout for guests, since it is not relevant.
+          $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
+            return ! isset($item['path']) || $item['path'] !== 'logout';
+          });
+        }
+
+        return view($view, ['page' => array_replace($defaults, $page)]);
+    }
 
     /**
      * @return void

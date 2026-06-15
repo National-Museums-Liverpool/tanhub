@@ -67,3 +67,9 @@
 #--------------------------------------------------------------------
 
 # logger.threshold = 4
+
+#--------------------------------------------------------------------
+# DISABLE DEBUG TOOLBAR
+# This can be removed after installation.
+#--------------------------------------------------------------------
+Config\Filters.required.after.2 = performance

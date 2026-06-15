@@ -1,0 +1,232 @@
+:root {
+    --th-sand: #f3ede2;
+    --th-ink: #1d2733;
+    --th-slate: #5b6776;
+    --th-gold: #c98f2b;
+    --th-gold-deep: #9e6b16;
+    --th-panel: rgba(255, 255, 255, 0.82);
+    --th-panel-strong: rgba(255, 255, 255, 0.9);
+    --th-border: rgba(29, 39, 51, 0.1);
+    --th-shadow: 0 24px 80px rgba(22, 30, 39, 0.12);
+}
+
+body {
+    min-height: 100vh;
+    color: var(--th-ink);
+    font-family: "Source Sans 3", sans-serif;
+    background:
+        radial-gradient(circle at top left, rgba(201, 143, 43, 0.18), transparent 28%),
+        radial-gradient(circle at right center, rgba(29, 39, 51, 0.08), transparent 30%),
+        linear-gradient(180deg, #fcfaf6 0%, #f3ede2 100%);
+}
+
+h1,
+h2,
+h3,
+.navbar-brand,
+.display-4 {
+    font-family: "Outfit", sans-serif;
+    letter-spacing: -0.03em;
+}
+
+a {
+    color: var(--th-gold-deep);
+}
+
+a:hover,
+a:focus {
+    color: var(--th-ink);
+}
+
+.app-main {
+    min-height: calc(100vh - 12rem);
+}
+
+.navbar-shell,
+.hero-card,
+.feature-card,
+.checklist-card,
+.stat-card,
+.auth-panel,
+.auth-card {
+    background: var(--th-panel);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--th-border);
+    box-shadow: var(--th-shadow);
+}
+
+.navbar-shell {
+    border-radius: 1.25rem;
+    margin-top: 1.5rem;
+}
+
+.navbar .nav-link {
+    color: var(--th-slate);
+}
+
+.navbar .nav-link:hover,
+.navbar .nav-link:focus,
+.navbar .nav-link.active {
+    color: var(--th-ink);
+}
+
+.hero,
+.page-section {
+    padding: 4rem 0 3rem;
+}
+
+.hero-card,
+.auth-panel,
+.auth-card {
+    border-radius: 2rem;
+    overflow: hidden;
+    position: relative;
+}
+
+.hero-card::after,
+.auth-panel::after {
+    content: "";
+    position: absolute;
+    inset: auto -10% -25% auto;
+    width: 16rem;
+    height: 16rem;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(201, 143, 43, 0.38) 0%, rgba(201, 143, 43, 0) 72%);
+}
+
+.eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.8rem;
+    border-radius: 999px;
+    background: rgba(29, 39, 51, 0.06);
+    color: var(--th-slate);
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.display-4 {
+    font-weight: 800;
+    line-height: 0.95;
+}
+
+.hero-copy,
+.section-copy,
+.feature-copy,
+.checklist-card li,
+.auth-benefits li,
+.site-footer p {
+    color: var(--th-slate);
+    font-size: 1.05rem;
+}
+
+.auth-benefits strong {
+    color: var(--th-ink);
+}
+
+.btn-brand {
+    background: var(--th-ink);
+    border-color: var(--th-ink);
+    color: #fff;
+}
+
+.btn-brand:hover,
+.btn-brand:focus {
+    background: #111923;
+    border-color: #111923;
+    color: #fff;
+}
+
+.btn-outline-brand {
+    border-color: rgba(29, 39, 51, 0.2);
+    color: var(--th-ink);
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.btn-outline-brand:hover,
+.btn-outline-brand:focus {
+    background: rgba(29, 39, 51, 0.06);
+    border-color: rgba(29, 39, 51, 0.3);
+    color: var(--th-ink);
+}
+
+.stat-card,
+.feature-card,
+.checklist-card {
+    border-radius: 1.5rem;
+    height: 100%;
+}
+
+.stat-value {
+    font-family: "Outfit", sans-serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.feature-icon {
+    width: 3rem;
+    height: 3rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 1rem;
+    background: rgba(201, 143, 43, 0.15);
+    color: var(--th-gold-deep);
+    font-weight: 700;
+}
+
+.section-heading {
+    font-size: clamp(2rem, 3vw, 3rem);
+    font-weight: 700;
+}
+
+.checklist-card ul,
+.auth-benefits {
+    padding-left: 1.1rem;
+}
+
+.checklist-card li + li,
+.auth-benefits li + li {
+    margin-top: 0.85rem;
+}
+
+.auth-page {
+    padding-top: 2.75rem;
+}
+
+.auth-panel {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(243, 237, 226, 0.96) 100%);
+}
+
+.auth-card {
+    background: var(--th-panel-strong);
+}
+
+.auth-card .form-control {
+    min-height: 3.25rem;
+    border-color: rgba(29, 39, 51, 0.14);
+    padding-inline: 1rem;
+}
+
+.auth-card .form-control:focus {
+    border-color: rgba(201, 143, 43, 0.8);
+    box-shadow: 0 0 0 0.25rem rgba(201, 143, 43, 0.18);
+}
+
+.site-footer {
+    padding: 1.5rem 0 2.5rem;
+}
+
+@media (max-width: 767.98px) {
+    .hero,
+    .page-section {
+        padding-top: 2rem;
+    }
+
+    .display-4 {
+        font-size: 2.8rem;
+    }
+}

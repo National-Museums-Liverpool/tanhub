@@ -20,6 +20,11 @@ use Psr\Log\LoggerInterface;
  */
 abstract class BaseController extends Controller
 {
+  /**
+   * Global helpers available to all controllers.
+   *
+   * @var array<int, string>
+   */
     protected $helpers = ['form', 'url'];
 
     /**
@@ -29,6 +34,11 @@ abstract class BaseController extends Controller
 
     // protected $session;
 
+    /**
+     * Render a page with shared defaults and role-aware navigation.
+     *
+     * @param array<string, mixed> $page
+     */
     protected function renderPage(string $view, array $page = []): string
     {
         try {

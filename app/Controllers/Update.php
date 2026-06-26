@@ -4,14 +4,16 @@ namespace App\Controllers;
 
 use App\Database\Seeds\DataSourcesSeeder;
 use CodeIgniter\Database\Exceptions\DatabaseException;
-use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\HTTP\RedirectResponse;
-use CodeIgniter\Shield\Models\UserModel;
-use Config\Auth;
 
+/**
+ * Handles database migrations and seed updates from the web UI.
+ */
 class Update extends BaseController
 {
-
+    /**
+     * Show update status or process an update request.
+     */
     public function index(): string|RedirectResponse
     {
         if ($this->request->getMethod() === 'POST') {
@@ -34,6 +36,9 @@ class Update extends BaseController
         ]);
     }
 
+    /**
+     * Execute the update workflow and render the result page.
+     */
     private function handleSubmit(): string|RedirectResponse
     {
         try {
@@ -52,6 +57,9 @@ class Update extends BaseController
         ]);
     }
 
+    /**
+     * Run all pending migrations, including package migrations.
+     */
     private function runMigrations(): void
     {
         $runner = service('migrations');
@@ -64,10 +72,12 @@ class Update extends BaseController
         }
     }
 
+    /**
+     * Run required seeders for baseline lookup data.
+     */
     private function runSeeders(): void
     {
         $seeder = \Config\Database::seeder();
         $seeder->call(DataSourcesSeeder::class);
     }
-
 }

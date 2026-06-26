@@ -8,10 +8,16 @@ use CodeIgniter\HTTP\RedirectResponse;
 use CodeIgniter\Shield\Models\UserModel;
 use Config\Auth;
 
+/**
+ * One-time setup flow for creating the first administrator account.
+ */
 class SetupAdminUser extends BaseController
 {
     private const LOCK_FILE = WRITEPATH . 'setupAdminUser.lock';
 
+    /**
+     * Show the setup form or process submitted setup data.
+     */
     public function index(): string|RedirectResponse
     {
         if ($this->isSetupLocked()) {
@@ -29,6 +35,9 @@ class SetupAdminUser extends BaseController
         ]);
     }
 
+    /**
+     * Validate setup form data and create the first administrator.
+     */
     private function handleSubmit(): RedirectResponse
     {
         $rules = [
@@ -62,6 +71,11 @@ class SetupAdminUser extends BaseController
         return redirect()->to(site_url('login'))->with('message', $message);
     }
 
+    /**
+     * Create and activate the initial administrator account.
+     *
+     * @return object
+     */
     private function createAdminUser(string $name, string $email, string $password)
     {
         if ($this->hasAnyUsers()) {
@@ -95,6 +109,9 @@ class SetupAdminUser extends BaseController
         return $user;
     }
 
+    /**
+     * Determine whether any users already exist.
+     */
     private function hasAnyUsers(): bool
     {
         $db = db_connect(config(Auth::class)->DBGroup);
@@ -106,11 +123,17 @@ class SetupAdminUser extends BaseController
         return $db->table($tables['users'])->countAllResults() > 0;
     }
 
+    /**
+     * Determine whether the setup route should be locked.
+     */
     private function isSetupLocked(): bool
     {
         return is_file(self::LOCK_FILE) || $this->hasAnyUsers();
     }
 
+    /**
+     * Write a lock file to mark setup as complete.
+     */
     private function writeLockFile(string $email): bool
     {
         $contents = implode("\n", [
@@ -121,6 +144,9 @@ class SetupAdminUser extends BaseController
         return @file_put_contents(self::LOCK_FILE, $contents, LOCK_EX) !== false;
     }
 
+    /**
+     * Generate a username from the supplied name or email.
+     */
     private function makeUsername(string $name, string $email): string
     {
         $base = strtolower(trim((string) preg_replace('/[^A-Za-z0-9]+/', '-', $name), '-'));

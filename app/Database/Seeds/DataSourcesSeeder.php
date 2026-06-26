@@ -4,8 +4,14 @@ namespace App\Database\Seeds;
 
 use CodeIgniter\Database\Seeder;
 
+/**
+ * Seeds baseline external data sources.
+ */
 class DataSourcesSeeder extends Seeder
 {
+    /**
+     * Insert or update default data source records.
+     */
     public function run(): void
     {
         $table = $this->db->table('data_sources');

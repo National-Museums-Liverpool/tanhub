@@ -5,8 +5,14 @@ namespace App\Database\Migrations;
 use CodeIgniter\Database\Migration;
 use CodeIgniter\Database\RawSql;
 
+/**
+ * Creates the recording schemes lookup table.
+ */
 class CreateRecordingSchemesTable extends Migration
 {
+    /**
+     * Apply schema changes.
+     */
     public function up(): void
     {
         $this->forge->addField([
@@ -45,6 +51,9 @@ class CreateRecordingSchemesTable extends Migration
         $this->forge->createTable('recording_schemes', true);
     }
 
+    /**
+     * Revert schema changes.
+     */
     public function down(): void
     {
         $this->forge->dropTable('recording_schemes', true);

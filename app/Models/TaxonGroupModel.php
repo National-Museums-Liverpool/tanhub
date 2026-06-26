@@ -4,6 +4,9 @@ namespace App\Models;
 
 use CodeIgniter\Model;
 
+/**
+ * Persistence model for taxon groups.
+ */
 class TaxonGroupModel extends Model
 {
     protected $table = 'taxon_groups';

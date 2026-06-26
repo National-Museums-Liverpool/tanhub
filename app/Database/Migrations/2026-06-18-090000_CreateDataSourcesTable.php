@@ -4,8 +4,14 @@ namespace App\Database\Migrations;
 
 use CodeIgniter\Database\Migration;
 
+/**
+ * Creates the data sources lookup table.
+ */
 class CreateDataSourcesTable extends Migration
 {
+    /**
+     * Apply schema changes.
+     */
     public function up(): void
     {
         $this->forge->addField([
@@ -35,6 +41,9 @@ class CreateDataSourcesTable extends Migration
         $this->forge->createTable('data_sources', true);
     }
 
+    /**
+     * Revert schema changes.
+     */
     public function down(): void
     {
         $this->forge->dropTable('data_sources', true);

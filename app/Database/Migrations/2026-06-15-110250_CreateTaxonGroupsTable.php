@@ -5,8 +5,14 @@ namespace App\Database\Migrations;
 use CodeIgniter\Database\Migration;
 use CodeIgniter\Database\RawSql;
 
+/**
+ * Creates the taxon groups lookup table.
+ */
 class CreateTaxonGroupsTable extends Migration
 {
+    /**
+     * Apply schema changes.
+     */
     public function up(): void
     {
         $this->forge->addField([
@@ -50,6 +56,9 @@ class CreateTaxonGroupsTable extends Migration
         $this->forge->createTable('taxon_groups', true);
     }
 
+    /**
+     * Revert schema changes.
+     */
     public function down(): void
     {
         $this->forge->dropTable('taxon_groups', true);

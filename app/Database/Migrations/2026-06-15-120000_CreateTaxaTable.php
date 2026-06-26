@@ -5,8 +5,14 @@ namespace App\Database\Migrations;
 use CodeIgniter\Database\RawSql;
 use CodeIgniter\Database\Migration;
 
+/**
+ * Creates the taxa table with taxonomy relationships.
+ */
 class CreateTaxaTable extends Migration
 {
+    /**
+     * Apply schema changes.
+     */
     public function up(): void
     {
         $this->forge->addField([
@@ -123,6 +129,9 @@ class CreateTaxaTable extends Migration
         $this->forge->createTable('taxa', true);
     }
 
+    /**
+     * Revert schema changes.
+     */
     public function down(): void
     {
         $this->forge->dropTable('taxa', true);

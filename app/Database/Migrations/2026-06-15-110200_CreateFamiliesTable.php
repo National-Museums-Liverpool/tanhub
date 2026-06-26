@@ -5,8 +5,14 @@ namespace App\Database\Migrations;
 use CodeIgniter\Database\Migration;
 use CodeIgniter\Database\RawSql;
 
+/**
+ * Creates the families lookup table.
+ */
 class CreateFamiliesTable extends Migration
 {
+    /**
+     * Apply schema changes.
+     */
     public function up(): void
     {
         $this->forge->addField([
@@ -59,6 +65,9 @@ class CreateFamiliesTable extends Migration
         $this->forge->createTable('families', true);
     }
 
+    /**
+     * Revert schema changes.
+     */
     public function down(): void
     {
         $this->forge->dropTable('families', true);

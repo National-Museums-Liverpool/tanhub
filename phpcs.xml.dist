@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<ruleset name="TanHub PHPDoc Rules">
+    <description>Require PHPDoc docblocks for classes, functions/methods, and class properties in custom application code.</description>
+
+    <file>app/Controllers</file>
+    <file>app/Models</file>
+    <file>app/Database</file>
+
+    <arg name="extensions" value="php"/>
+    <arg value="sp"/>
+
+    <!-- Presence checks only (no strict tag-content enforcement). -->
+    <rule ref="Squiz.Commenting.ClassComment.Missing"/>
+    <rule ref="Squiz.Commenting.FunctionComment.Missing"/>
+
+    <!-- Property-only docblock presence (not local variables). -->
+    <rule ref="Squiz.Commenting.VariableComment.Missing"/>
+</ruleset>

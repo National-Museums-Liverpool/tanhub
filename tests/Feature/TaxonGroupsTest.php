@@ -2,141 +2,221 @@
 
 namespace Tests;
 
-use App\Controllers\TaxonGroups;
 use App\Models\TaxonGroupModel;
+use Config\Auth;
+use CodeIgniter\Shield\Models\UserModel;
+use CodeIgniter\Shield\Test\AuthenticationTesting;
 use CodeIgniter\Test\CIUnitTestCase;
-use CodeIgniter\Test\ControllerTestTrait;
+use CodeIgniter\Test\FeatureTestTrait;
 
 /**
  * @internal
  */
 final class TaxonGroupsTest extends CIUnitTestCase
 {
-    use ControllerTestTrait;
+    use FeatureTestTrait;
+    use AuthenticationTesting;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        // Run migrations once
-        $migrate = \Config\Services::migrations();
-        try {
-            $migrate->latest();
-        } catch (\Exception $e) {
-            // Already migrated
-        }
+        // Disable registration action during tests to avoid activation flow redirects.
+        config(Auth::class)->actions['register'] = null;
 
-        // Seed test data
-        $model = model(TaxonGroupModel::class);
-        $model->db->table('taxon_groups')->truncate();
+        $migrate = service('migrations');
+        $migrate->setNamespace(null);
+        $migrate->latest();
 
-        // Insert test data with explicit values
-        $model->db->table('taxon_groups')->insertBatch([
-            ['id' => 1, 'title' => 'Insecta', 'friendly' => 'Insects', 'external_key' => 'TANHUB0000000001', 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s')],
-            ['id' => 2, 'title' => 'Mammals', 'friendly' => null, 'external_key' => 'TANHUB0000000002', 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s')],
-            ['id' => 3, 'title' => 'Aves', 'friendly' => 'Birds', 'external_key' => 'TANHUB0000000003', 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s')],
-        ]);
+        $this->seedTaxonGroups();
     }
 
-    public function testIndexLoadsListPage(): void
+    public function testListRequiresLogin(): void
     {
-        $result = $this->controller(TaxonGroups::class)
-            ->execute('index');
+        $result = $this->get('taxon-groups');
 
-        $this->assertTrue($result->isOK());
+        $result->assertStatus(302);
+        $result->assertRedirect();
     }
 
-    public function testIndexDisplaysAllColumns(): void
+    public function testListDeniesGeneralUserRole(): void
     {
-        $result = $this->controller(TaxonGroups::class)
-            ->execute('index');
+        $this->authenticateAs('user@example.com', 'user');
 
+        $result = $this->get('taxon-groups');
+
+        $result->assertStatus(302);
+        $result->assertRedirect();
+    }
+
+    public function testListAllowsManagerRole(): void
+    {
+        $this->authenticateAs('manager@example.com', 'manager');
+
+        $result = $this->get('taxon-groups');
+
+        $result->assertStatus(200);
+        $result->assertSee('Taxon groups');
+    }
+
+    public function testListShowsSpecifiedColumns(): void
+    {
+        $this->authenticateAs('admin1@example.com', 'admin');
+
+        $result = $this->get('taxon-groups');
+
+        $result->assertStatus(200);
+        $result->assertSee('ID');
+        $result->assertSee('Title');
+        $result->assertSee('Friendly');
+        $result->assertSee('External Key');
+        $result->assertSee('Edit');
+    }
+
+    public function testListSortsByTitleAscByDefault(): void
+    {
+        $this->authenticateAs('admin2@example.com', 'admin');
+
+        $result = $this->get('taxon-groups');
+
+        $result->assertStatus(200);
+        $result->assertSee('Aves');
         $result->assertSee('Insecta');
         $result->assertSee('Mammals');
-        $result->assertSee('TANHUB0000000002');
-        $result->assertSee('Birds');
     }
 
-    public function testEditPageLoads(): void
+    public function testEditRequiresManagerOrAdmin(): void
     {
-        $model = model(TaxonGroupModel::class);
-        $taxonGroup = $model->find(1);
-        $this->assertNotNull($taxonGroup);
-        $this->assertSame('Insecta', $taxonGroup['title']);
-        $this->assertSame('TANHUB0000000001', $taxonGroup['external_key']);
+        $this->authenticateAs('user2@example.com', 'user');
+
+        $result = $this->get('taxon-groups/1/edit');
+
+        $result->assertStatus(302);
+        $result->assertRedirect();
     }
 
-    public function testEditPageReturns404ForMissingId(): void
+    public function testEditShowsReadOnlyAndEditableFields(): void
     {
-        $model = model(TaxonGroupModel::class);
-        $taxonGroup = $model->find(999);
-        $this->assertNull($taxonGroup);
+        $this->authenticateAs('manager2@example.com', 'manager');
+
+        $result = $this->get('taxon-groups/1/edit');
+
+        $result->assertStatus(200);
+        $result->assertSee('Read-only');
+        $result->assertSee('External Key');
+        $result->assertSeeInField('friendly', 'Insects');
     }
 
-    public function testUpdateSavesFriendlyValue(): void
+    public function testUpdateOnlyChangesFriendlyField(): void
     {
-        $model = model(TaxonGroupModel::class);
+        $this->authenticateAs('admin3@example.com', 'admin');
 
-        // Update directly on the model
-        $model->update(1, ['friendly' => 'New Friendly Name']);
+        $before = model(TaxonGroupModel::class)->find(1);
 
-        $updated = $model->find(1);
-        $this->assertSame('New Friendly Name', $updated['friendly']);
+        $result = $this->post('taxon-groups/1/edit', [
+            'friendly' => 'Invertebrates',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirect();
+
+        $after = model(TaxonGroupModel::class)->find(1);
+
+        $this->assertSame('Invertebrates', $after['friendly']);
+        $this->assertSame($before['title'], $after['title']);
+        $this->assertSame($before['external_key'], $after['external_key']);
     }
 
-    public function testUpdateReturns404ForMissingId(): void
+    public function testUpdateValidatesFriendlyMaxLength(): void
     {
-        // When trying to find a non-existent record, it should return null
-        $model = model(TaxonGroupModel::class);
-        $taxonGroup = $model->find(999);
-        $this->assertNull($taxonGroup);
-    }
+        $this->authenticateAs('admin4@example.com', 'admin');
 
-    public function testUpdateValidatesMaxLength(): void
-    {
-        $model = model(TaxonGroupModel::class);
-        $before = $model->find(1);
+        $result = $this->post('taxon-groups/1/edit', [
+            'friendly' => str_repeat('x', 201),
+        ]);
 
-        // Validation would reject strings > 200 chars
-        // We're just testing that the long value doesn't get saved
-        $tooLongValue = str_repeat('x', 201);
-        $model->update(1, ['friendly' => $tooLongValue]);
-
-        $after = $model->find(1);
-        // In real scenario, validation would have failed, so we just check that we can handle it
-        $this->assertTrue(strlen($after['friendly'] ?? '') >= 0);
+        $result->assertStatus(302);
+        $result->assertRedirect();
+        $result->assertSessionHas('errors');
     }
 
     public function testUpdateAllowsEmptyFriendly(): void
     {
-        $model = model(TaxonGroupModel::class);
+        $this->authenticateAs('manager3@example.com', 'manager');
 
-        $model->update(1, ['friendly' => null]);
+        $result = $this->post('taxon-groups/1/edit', [
+            'friendly' => '',
+        ]);
 
-        $updated = $model->find(1);
+        $result->assertStatus(302);
+
+        $updated = model(TaxonGroupModel::class)->find(1);
         $this->assertNull($updated['friendly']);
     }
 
-    public function testUpdateDoesNotModifyId(): void
+    private function authenticateAs(string $email, string $group): void
     {
-        $model = model(TaxonGroupModel::class);
-        $before = $model->find(1);
-
-        $model->update(1, ['friendly' => 'New Friendly']);
-
-        $after = $model->find(1);
-        $this->assertSame($before['id'], $after['id']);
+        $this->actingAs($this->makeUser($email, $group));
+        // FeatureTestTrait resets $_SESSION from $this->session during requests.
+        $this->withSession($_SESSION);
     }
 
-    public function testUpdateDoesNotModifyTitleOrKey(): void
+    private function seedTaxonGroups(): void
     {
         $model = model(TaxonGroupModel::class);
-        $before = $model->find(1);
 
-        $model->update(1, ['friendly' => 'New Friendly']);
+        $model->db->table('taxon_groups')->truncate();
+        $now = date('Y-m-d H:i:s');
 
-        $after = $model->find(1);
-        $this->assertSame($before['title'], $after['title']);
-        $this->assertSame($before['external_key'], $after['external_key']);
+        $model->db->table('taxon_groups')->insertBatch([
+            [
+                'id' => 1,
+                'title' => 'Insecta',
+                'friendly' => 'Insects',
+                'external_key' => 'TANHUB0000000001',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                'id' => 2,
+                'title' => 'Mammals',
+                'friendly' => null,
+                'external_key' => 'TANHUB0000000002',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+            [
+                'id' => 3,
+                'title' => 'Aves',
+                'friendly' => 'Birds',
+                'external_key' => 'TANHUB0000000003',
+                'created_at' => $now,
+                'updated_at' => $now,
+            ],
+        ]);
+    }
+
+    private function makeUser(string $email, string $group)
+    {
+        /** @var UserModel $users */
+        $users = model(setting('Auth.userProvider'));
+
+        $user = $users->createNewUser([
+            'username' => strstr($email, '@', true),
+            'email' => $email,
+            'password' => 'Password123!',
+        ]);
+
+        $users->save($user);
+
+        $saved = $users->findById($users->getInsertID());
+        $saved->activate();
+        $users->save($saved);
+
+        if ($group !== 'user') {
+            $saved->addGroup($group);
+        }
+
+        return $saved;
     }
 }

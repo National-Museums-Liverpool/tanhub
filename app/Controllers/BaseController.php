@@ -33,8 +33,10 @@ abstract class BaseController extends Controller
     {
         try {
           $isLoggedIn = auth()->loggedIn();
+          $isTaxonGroupManager = $isLoggedIn && auth()->user() !== null && auth()->user()->inGroup('admin', 'manager');
         } catch (\CodeIgniter\Database\Exceptions\DatabaseException $exception) {
           $isLoggedIn = false;
+          $isTaxonGroupManager = false;
         }
 
         $defaults = [
@@ -97,6 +99,12 @@ abstract class BaseController extends Controller
           $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
             return ! isset($item['path']) || ! in_array($item['path'], ['login', 'register']);
           });
+
+          if (! $isTaxonGroupManager) {
+            $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
+              return ! isset($item['path']) || $item['path'] !== 'taxon-groups';
+            });
+          }
         }
         else {
           // Hide logout for guests, since it is not relevant.

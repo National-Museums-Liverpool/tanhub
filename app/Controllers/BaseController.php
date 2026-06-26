@@ -69,6 +69,30 @@ abstract class BaseController extends Controller
                   'style' => 'link',
                 ],
                 [
+                  'label' => 'Orders',
+                  'url' => site_url('orders'),
+                  'path' => 'orders',
+                  'style' => 'link',
+                ],
+                [
+                  'label' => 'Superfamilies',
+                  'url' => site_url('superfamilies'),
+                  'path' => 'superfamilies',
+                  'style' => 'link',
+                ],
+                [
+                  'label' => 'Families',
+                  'url' => site_url('families'),
+                  'path' => 'families',
+                  'style' => 'link',
+                ],
+                [
+                  'label' => 'Recording schemes',
+                  'url' => site_url('recording-schemes'),
+                  'path' => 'recording-schemes',
+                  'style' => 'link',
+                ],
+                [
                     'label' => 'Login',
                     'url' => site_url('login'),
                     'path' => 'login',
@@ -112,14 +136,14 @@ abstract class BaseController extends Controller
 
           if (! $isTaxonGroupManager) {
             $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
-              return ! isset($item['path']) || $item['path'] !== 'taxon-groups';
+              return ! isset($item['path']) || ! in_array($item['path'], ['taxon-groups', 'orders', 'superfamilies', 'families', 'recording-schemes']);
             });
           }
         }
         else {
           // Hide logout for guests, since it is not relevant.
           $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
-            return ! isset($item['path']) || ! in_array($item['path'], ['logout', 'taxon-groups']);
+            return ! isset($item['path']) || ! in_array($item['path'], ['logout', 'taxon-groups', 'orders', 'superfamilies', 'families', 'recording-schemes']);
           });
         }
 

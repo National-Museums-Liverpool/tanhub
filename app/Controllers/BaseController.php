@@ -51,6 +51,12 @@ abstract class BaseController extends Controller
                     'style' => 'link',
                 ],
                 [
+                  'label' => 'Taxon groups',
+                  'url' => site_url('taxon-groups'),
+                  'path' => 'taxon-groups',
+                  'style' => 'link',
+                ],
+                [
                     'label' => 'Login',
                     'url' => site_url('login'),
                     'path' => 'login',
@@ -95,7 +101,7 @@ abstract class BaseController extends Controller
         else {
           // Hide logout for guests, since it is not relevant.
           $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
-            return ! isset($item['path']) || $item['path'] !== 'logout';
+            return ! isset($item['path']) || ! in_array($item['path'], ['logout', 'taxon-groups']);
           });
         }
 

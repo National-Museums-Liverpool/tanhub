@@ -2,6 +2,7 @@
 
 namespace App\Controllers;
 
+use App\Database\Seeds\DataSourcesSeeder;
 use CodeIgniter\Database\Exceptions\DatabaseException;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\HTTP\RedirectResponse;
@@ -37,6 +38,7 @@ class Update extends BaseController
     {
         try {
             $this->runMigrations();
+            $this->runSeeders();
         } catch (\Throwable $exception) {
             return redirect()->back()->withInput()->with('error', $exception->getMessage());
         }
@@ -60,6 +62,12 @@ class Update extends BaseController
             $messages = $runner->getCliMessages();
             throw new DatabaseException(is_array($messages) ? implode("\n", $messages) : 'Database migrations failed.');
         }
+    }
+
+    private function runSeeders(): void
+    {
+        $seeder = \Config\Database::seeder();
+        $seeder->call(DataSourcesSeeder::class);
     }
 
 }

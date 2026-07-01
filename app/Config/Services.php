@@ -19,14 +19,64 @@ use CodeIgniter\Config\BaseService;
  */
 class Services extends BaseService
 {
-    /*
-     * public static function example($getShared = true)
-     * {
-     *     if ($getShared) {
-     *         return static::getSharedInstance('example');
-     *     }
-     *
-     *     return new \CodeIgniter\Example();
-     * }
+    /**
+     * Occurrence import adapter factory service.
      */
+    public static function occurrenceSourceAdapterFactory(bool $getShared = true): \App\Services\Import\Adapter\OccurrenceSourceAdapterFactory
+    {
+        if ($getShared) {
+            return static::getSharedInstance('occurrenceSourceAdapterFactory');
+        }
+
+        return new \App\Services\Import\Adapter\OccurrenceSourceAdapterFactory(config(\Config\Import::class));
+    }
+
+    /**
+     * Occurrence import orchestrator service.
+     */
+    public static function importOrchestrator(bool $getShared = true): \App\Services\Import\ImportOrchestrator
+    {
+        if ($getShared) {
+            return static::getSharedInstance('importOrchestrator');
+        }
+
+        return new \App\Services\Import\ImportOrchestrator(
+            config(\Config\Import::class),
+            static::occurrenceSourceAdapterFactory(false),
+            new \App\Services\Import\Persistence\OccurrenceImportService(),
+            model(\App\Models\ImportRunModel::class),
+            model(\App\Models\DataSourceModel::class),
+        );
+    }
+
+    /**
+     * Taxonomy import adapter factory service.
+     */
+    public static function taxonomySourceAdapterFactory(bool $getShared = true): \App\Services\Import\Adapter\TaxonomySourceAdapterFactory
+    {
+        if ($getShared) {
+            return static::getSharedInstance('taxonomySourceAdapterFactory');
+        }
+
+        return new \App\Services\Import\Adapter\TaxonomySourceAdapterFactory(config(\Config\Import::class));
+    }
+
+    /**
+     * Taxonomy import orchestrator service.
+     */
+    public static function taxonomyImportOrchestrator(bool $getShared = true): \App\Services\Import\TaxonomyImportOrchestrator
+    {
+        if ($getShared) {
+            return static::getSharedInstance('taxonomyImportOrchestrator');
+        }
+
+        return new \App\Services\Import\TaxonomyImportOrchestrator(
+            config(\Config\Import::class),
+            static::taxonomySourceAdapterFactory(false),
+            new \App\Services\Import\Persistence\TaxonomyImportService(),
+            model(\App\Models\ImportRunModel::class),
+            model(\App\Models\DataSourceModel::class),
+            model(\App\Models\ImportOffsetModel::class),
+        );
+    }
 }

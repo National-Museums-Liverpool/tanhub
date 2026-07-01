@@ -30,6 +30,13 @@
                             <input class="form-control" id="<?= esc($field) ?>" type="text" value="<?= esc((string) ($page['recordingScheme'][$field] ?? '')) ?>" disabled>
                         </div>
                     <?php endforeach; ?>
+                    <div class="col-12">
+                        <label class="form-label" for="description">
+                            Description
+                            <span class="badge bg-secondary ms-2">Read-only</span>
+                        </label>
+                        <textarea class="form-control" id="description" rows="3" disabled><?= esc((string) ($page['recordingScheme']['description'] ?? '')) ?></textarea>
+                    </div>
 
                     <div class="col-12">
                         <label class="form-label" for="taxa_count">

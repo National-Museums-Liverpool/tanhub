@@ -5,14 +5,14 @@ namespace App\Models;
 use CodeIgniter\Model;
 
 /**
- * Persistence model for recording schemes.
+ * Persistence model for import run tracking.
  */
-class RecordingSchemeModel extends Model
+class ImportRunModel extends Model
 {
     /**
      * @var string
      */
-    protected $table = 'recording_schemes';
+    protected $table = 'import_runs';
 
     /**
      * @var string
@@ -25,17 +25,21 @@ class RecordingSchemeModel extends Model
     protected $returnType = 'array';
 
     /**
-     * @var bool
-     */
-    protected $useSoftDeletes = true;
-
-    /**
      * @var array<int, string>
      */
     protected $allowedFields = [
-        'external_key',
-        'title',
-        'description',
+        'source_key',
+        'source_abbr',
+        'status',
+        'checkpoint',
+        'fetched_count',
+        'inserted_count',
+        'updated_count',
+        'skipped_count',
+        'error_count',
+        'message',
+        'started_at',
+        'finished_at',
     ];
 
     /**
@@ -52,9 +56,4 @@ class RecordingSchemeModel extends Model
      * @var string
      */
     protected $updatedField = 'updated_at';
-
-    /**
-     * @var string
-     */
-    protected $deletedField = 'deleted_at';
 }

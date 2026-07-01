@@ -73,3 +73,15 @@
 # This can be removed after installation.
 #--------------------------------------------------------------------
 Config\Filters.required.after.2 = performance
+
+#--------------------------------------------------------------------
+# IMPORT
+#--------------------------------------------------------------------
+Config\Import.indiciaWarehouseUrl = ''
+Config\Import.indiciaTaxonListId = 1
+Config\Import.indiciaProjId = 'TANHUB'
+Config\Import.indiciaUsername = 'tanhub'
+Config\Import.indiciaSecret = ''
+
+Config\Import.nbnUrl = ''
+

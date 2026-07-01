@@ -6,9 +6,9 @@ use CodeIgniter\Database\Migration;
 use CodeIgniter\Database\RawSql;
 
 /**
- * Creates the recording schemes lookup table.
+ * Creates the import offset tracking table.
  */
-class CreateRecordingSchemesTable extends Migration
+class CreateImportOffsetsTable extends Migration
 {
     /**
      * Apply schema changes.
@@ -22,17 +22,15 @@ class CreateRecordingSchemesTable extends Migration
                 'unsigned'       => true,
                 'auto_increment' => true,
             ],
-            'external_key' => [
-                'type'       => 'CHAR',
-                'constraint' => 16,
-            ],
-            'title' => [
+            'source_key' => [
                 'type'       => 'VARCHAR',
-                'constraint' => 100,
+                'constraint' => 64,
             ],
-            'description' => [
-                'type'       => 'TEXT',
-                'null'       => true,
+            'next_offset' => [
+                'type'       => 'INT',
+                'constraint' => 10,
+                'unsigned'   => true,
+                'default'    => 0,
             ],
             'created_at' => [
                 'type'    => 'DATETIME',
@@ -43,16 +41,11 @@ class CreateRecordingSchemesTable extends Migration
                 'type' => 'DATETIME',
                 'null' => true,
             ],
-            'deleted_at' => [
-                'type' => 'DATETIME',
-                'null' => true,
-            ],
         ]);
 
         $this->forge->addKey('id', true);
-        $this->forge->addUniqueKey('external_key');
-        $this->forge->addKey('title');
-        $this->forge->createTable('recording_schemes', true);
+        $this->forge->addUniqueKey('source_key');
+        $this->forge->createTable('import_offsets', true);
     }
 
     /**
@@ -60,6 +53,6 @@ class CreateRecordingSchemesTable extends Migration
      */
     public function down(): void
     {
-        $this->forge->dropTable('recording_schemes', true);
+        $this->forge->dropTable('import_offsets', true);
     }
 }

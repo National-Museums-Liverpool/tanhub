@@ -5,14 +5,14 @@ namespace App\Models;
 use CodeIgniter\Model;
 
 /**
- * Persistence model for recording schemes.
+ * Persistence model for taxon names.
  */
-class RecordingSchemeModel extends Model
+class TaxonNameModel extends Model
 {
     /**
      * @var string
      */
-    protected $table = 'recording_schemes';
+    protected $table = 'taxon_names';
 
     /**
      * @var string
@@ -28,15 +28,6 @@ class RecordingSchemeModel extends Model
      * @var bool
      */
     protected $useSoftDeletes = true;
-
-    /**
-     * @var array<int, string>
-     */
-    protected $allowedFields = [
-        'external_key',
-        'title',
-        'description',
-    ];
 
     /**
      * @var bool

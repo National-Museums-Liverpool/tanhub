@@ -5,14 +5,14 @@ namespace App\Models;
 use CodeIgniter\Model;
 
 /**
- * Persistence model for recording schemes.
+ * Persistence model for occurrences.
  */
-class RecordingSchemeModel extends Model
+class OccurrenceModel extends Model
 {
     /**
      * @var string
      */
-    protected $table = 'recording_schemes';
+    protected $table = 'occurrences';
 
     /**
      * @var string
@@ -33,9 +33,23 @@ class RecordingSchemeModel extends Model
      * @var array<int, string>
      */
     protected $allowedFields = [
-        'external_key',
-        'title',
-        'description',
+        'unique_key',
+        'taxon_id',
+        'taxon_name_id',
+        'from_date',
+        'to_date',
+        'grid_ref',
+        'grid_ref_2km',
+        'locality',
+        'recorded_by',
+        'identified_by',
+        'identification_verification_status',
+        'sex',
+        'life_stage',
+        'organism_quantity',
+        'data_source_id',
+        'blocked',
+        'blocked_reason',
     ];
 
     /**

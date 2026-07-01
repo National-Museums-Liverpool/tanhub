@@ -19,11 +19,13 @@ class DataSourcesSeeder extends Seeder
         $rows = [
             [
                 'id' => 1,
+                'abbr' => 'NBN',
                 'title' => 'NBN Atlas',
                 'url' => 'https://species.nbnatlas.org',
             ],
             [
                 'id' => 2,
+                'abbr' => 'IREC',
                 'title' => 'iRecord',
                 'url' => 'https://irecord.org.uk',
             ],
@@ -38,6 +40,7 @@ class DataSourcesSeeder extends Seeder
             }
 
             $table->where('id', $row['id'])->update([
+                'abbr' => $row['abbr'],
                 'title' => $row['title'],
                 'url' => $row['url'],
             ]);

@@ -67,4 +67,32 @@ class Import extends BaseConfig
         ],
     ];
 
+    /**
+     * Taxonomic levels we allow reporting at.
+     *
+     * @var array|string
+     */
+    public array|string $taxonRanks = [
+        'Order',
+        'Superfamily',
+        'Family',
+        'Genus',
+        'Species',
+    ];
+
+    /**
+     * Constructor loads array overrides from .env.
+     */
+    public function __construct()
+    {
+        parent::__construct();
+        $configuredRanks = env('import.taxonRanks');
+        if (is_string($configuredRanks) && $configuredRanks !== '') {
+            // Cleanup stray characters or whitespace.
+            $configuredRanks = preg_replace('/[^a-z,]+/i', '', $configuredRanks);
+            $this->taxonRanks = array_map('trim', explode(',', $configuredRanks));
+            log_message('info', 'Configured taxon ranks overriden: ' . $configuredRanks);
+        }
+    }
+
 }

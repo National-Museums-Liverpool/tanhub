@@ -36,18 +36,6 @@ erDiagram
     BIGINT id PK
   }
 
-  orders {
-    BIGINT id PK
-  }
-
-  superfamilies {
-    BIGINT id PK
-  }
-
-  families {
-    BIGINT id PK
-  }
-
   recording_schemes {
     BIGINT id PK
   }
@@ -60,64 +48,26 @@ erDiagram
 
   recording_schemes |o--o{ taxa: records
   taxa ||--|{ taxon_names: has
-  taxa }o--|| orders: "belongs to"
-  taxa }o--o| superfamilies: "belongs to"
-  taxa }o--|| families: "belongs to"
+  taxa }o--o| taxa: "rank parent(s)"
   taxa }o--|| taxon_groups: "belongs to"
   occurrences }o--|| taxa: "is a record of"
+  occurrences }o--o| taxa: "rank parent(s)"
   occurrences }o--|| taxon_names: "was recorded as"
 
 ```
 
 ## Table details
 
-### orders
+### Dynamic taxon rank foreign keys
 
-List of all taxonomic Orders associated with taxa in the `taxa` table.
+Taxonomic hierarchy is stored using dynamic foreign-key columns on both the
+`taxa` and `occurrences` tables. During installation, a column is added for
+each configured taxon rank using the pattern `<rank>_id` (for example
+`kingdom_id`, `class_id`, `family_id`, `order_id`).
 
-| Column                     | Type         | Null | Key | Default           | Description                                                  |
-| -------------------------- | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------ |
-| id                         | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                  |
-| taxon_identifier           | VARCHAR(100) | NO   | UQ  |                   | Taxon identifier, DwC taxonID, unique key for the API.       |
-| scientific_name_identifier | VARCHAR(100) | NO   |     |                   | Unique identifier of the accepted name, DwC scientificNameID |
-| scientific_name            | VARCHAR(200) | NO   |     |                   | Accepted scientific taxon name, DwC scientificName           |
-| scientific_name_authorship | VARCHAR(100) | YES  |     |                   | Taxon name author, DwC scientificNameAuthorship              |
-| vernacular_name            | VARCHAR(200) | NO   |     |                   | Common taxon name, DwC vernacularName                        |
-| created_at                 | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                |
-| updated_at                 | DATETIME     | YES  |     |                   | Update date                                                  |
-| deleted_at                 | DATETIME     | YES  |     |                   | Deletion date                                                |
-
-### superfamilies
-
-List of all taxonomic Superfamilies associated with taxa in the `taxa` table.
-
-| Column                     | Type         | Null | Key | Default           | Description                                                  |
-| -------------------------- | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------ |
-| id                         | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                  |
-| taxon_identifier           | VARCHAR(100) | NO   | UQ  |                   | Taxon identifier, DwC taxonID. Unique key for the API.                 |
-| scientific_name_identifier | VARCHAR(100) | NO   |     |                   | Unique identifier of the accepted name, DwC scientificNameID |
-| scientific_name            | VARCHAR(200) | NO   |     |                   | Accepted scientific taxon name, DwC scientificName           |
-| scientific_name_authorship | VARCHAR(100) | YES  |     |                   | Taxon name author, DwC scientificNameAuthorship              |
-| vernacular_name            | VARCHAR(200) | NO   |     |                   | Common taxon name, DwC vernacularName                        |
-| created_at                 | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                |
-| updated_at                 | DATETIME     | YES  |     |                   | Update date                                                  |
-| deleted_at                 | DATETIME     | YES  |     |                   | Deletion date                                                |
-
-### families
-
-List of all taxonomic Families associated with taxa in the `taxa` table.
-
-| Column                     | Type         | Null | Key | Default           | Description                                                  |
-| -------------------------- | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------ |
-| id                         | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                  |
-| taxon_identifier           | VARCHAR(100) | NO   | UQ  |                   | Taxon identifier, DwC taxonID. Unique key for the API.                 |
-| scientific_name_identifier | VARCHAR(100) | NO   |     |                   | Unique identifier of the accepted name, DwC scientificNameID |
-| scientific_name            | VARCHAR(200) | NO   |     |                   | Accepted scientific taxon name, DwC scientificName           |
-| scientific_name_authorship | VARCHAR(100) | YES  |     |                   | Taxon name author, DwC scientificNameAuthorship              |
-| vernacular_name            | VARCHAR(200) | NO   |     |                   | Common taxon name, DwC vernacularName                        |
-| created_at                 | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                |
-| updated_at                 | DATETIME     | YES  |     |                   | Update date                                                  |
-| deleted_at                 | DATETIME     | YES  |     |                   | Deletion date                                                |
+Each of these columns is a foreign key to `taxa.id`, so rank relationships are
+modelled as self-references to the `taxa` table rather than separate
+`orders`, `superfamilies`, or `families` tables.
 
 ### taxa
 
@@ -134,9 +84,7 @@ indicated in the description.
 | scientific_name            | VARCHAR(200) | NO   |     |                   | Accepted scientific taxon name, DwC scientificName           |
 | scientific_name_authorship | VARCHAR(100) | YES  |     |                   | Taxon name author, DwC scientificNameAuthorship              |
 | vernacular_name            | VARCHAR(200) | NO   |     |                   | Common taxon name, DwC vernacularName                        |
-| order_id                   | BIGINT       | NO   | FK  |                   | ID of the taxonomic Order                                    |
-| superfamily_id             | BIGINT       | YES  | FK  |                   | ID of the taxonomic Superfamily                              |
-| family_id                  | BIGINT       | NO   | FK  |                   | ID of the taxonomic Family                                   |
+| <rank>_id                  | BIGINT       | YES  | FK  |                   | Dynamic taxon-rank FK (for each configured rank), references `taxa.id` |
 | taxon_group_id             | BIGINT       | NO   | FK  |                   | ID of the taxon reporting group                              |
 | id_difficulty              | TINYINT      | YES  |     |                   | Record Cleaner ID difficulty (1-5)                           |
 | recording_scheme_id        | BIGINT       | YES  | FK  |                   | ID of the associated recording scheme                        |
@@ -228,6 +176,7 @@ unique ID of the record as loaded from the remote system.
 | id                                 | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                                           |
 | unique_key                         | VARCHAR(100) | NO   | UQ  |                   | Unique key for the API                                                                |
 | taxon_id                           | BIGINT       | NO   | FK  |                   | ID of the taxon this is a record of                                                   |
+| <rank>_id                          | BIGINT       | YES  | FK  |                   | Dynamic taxon-rank FK (for each configured rank), references `taxa.id`               |
 | taxon_name_id                      | BIGINT       | NO   | FK  |                   | ID of the name given for this occurrence which may be accepted, synonym or vernacular |
 | from_date                          | DATE         | YES  |     |                   | Start of the date range that covers the record                                        |
 | to_date                            | DATE         | YES  |     |                   | End of the date range that covers the record                                          |

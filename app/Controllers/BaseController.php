@@ -69,21 +69,9 @@ abstract class BaseController extends Controller
                   'style' => 'link',
                 ],
                 [
-                  'label' => 'Orders',
-                  'url' => site_url('orders'),
-                  'path' => 'orders',
-                  'style' => 'link',
-                ],
-                [
-                  'label' => 'Superfamilies',
-                  'url' => site_url('superfamilies'),
-                  'path' => 'superfamilies',
-                  'style' => 'link',
-                ],
-                [
-                  'label' => 'Families',
-                  'url' => site_url('families'),
-                  'path' => 'families',
+                  'label' => 'Taxon ranks',
+                  'url' => site_url('taxon-ranks'),
+                  'path' => 'taxon-ranks',
                   'style' => 'link',
                 ],
                 [

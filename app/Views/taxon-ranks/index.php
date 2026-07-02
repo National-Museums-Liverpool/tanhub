@@ -6,7 +6,7 @@
         <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
             <div>
                 <span class="eyebrow">Taxonomy</span>
-                <h1 class="section-heading mb-0">Superfamilies</h1>
+                <h1 class="section-heading mb-0">Taxon ranks</h1>
             </div>
         </div>
 
@@ -21,7 +21,7 @@
                 $nextDirection = 'desc';
             }
 
-            return site_url('superfamilies') . '?' . http_build_query([
+            return site_url('taxon-ranks') . '?' . http_build_query([
                 'sort' => $column,
                 'direction' => $nextDirection,
             ]);
@@ -41,27 +41,25 @@
                 <thead>
                 <tr>
                     <th scope="col"><a href="<?= esc($sortUrl('id')) ?>">ID<?= esc($sortIndicator('id')) ?></a></th>
-                    <th scope="col"><a href="<?= esc($sortUrl('taxon_identifier')) ?>">Taxon identifier<?= esc($sortIndicator('taxon_identifier')) ?></a></th>
-                    <th scope="col"><a href="<?= esc($sortUrl('scientific_name')) ?>">Scientific name<?= esc($sortIndicator('scientific_name')) ?></a></th>
-                    <th scope="col"><a href="<?= esc($sortUrl('vernacular_name')) ?>">Vernacular name<?= esc($sortIndicator('vernacular_name')) ?></a></th>
-                    <th scope="col">Taxa count</th>
+                    <th scope="col"><a href="<?= esc($sortUrl('rank')) ?>">Rank<?= esc($sortIndicator('rank')) ?></a></th>
+                    <th scope="col"><a href="<?= esc($sortUrl('code')) ?>">Code<?= esc($sortIndicator('code')) ?></a></th>
+                    <th scope="col"><a href="<?= esc($sortUrl('sort_order')) ?>">Sort order<?= esc($sortIndicator('sort_order')) ?></a></th>
                     <th scope="col">View</th>
                 </tr>
                 </thead>
                 <tbody>
-                <?php if ($page['superfamilies'] === []): ?>
+                <?php if ($page['taxonRanks'] === []): ?>
                     <tr>
-                        <td colspan="6" class="text-muted">No superfamilies found.</td>
+                        <td colspan="5" class="text-muted">No taxon ranks found.</td>
                     </tr>
                 <?php else: ?>
-                    <?php foreach ($page['superfamilies'] as $superfamily): ?>
+                    <?php foreach ($page['taxonRanks'] as $taxonRank): ?>
                         <tr>
-                            <td><?= esc((string) $superfamily['id']) ?></td>
-                            <td><?= esc($superfamily['taxon_identifier']) ?></td>
-                            <td><?= esc($superfamily['scientific_name']) ?></td>
-                            <td><?= esc($superfamily['vernacular_name']) ?></td>
-                            <td><?= esc((string) $superfamily['taxa_count']) ?></td>
-                            <td><a class="btn btn-sm btn-outline-brand" href="<?= esc(site_url('superfamilies/' . $superfamily['id'])) ?>">View</a></td>
+                            <td><?= esc((string) $taxonRank['id']) ?></td>
+                            <td><?= esc($taxonRank['rank']) ?></td>
+                            <td><?= esc($taxonRank['code']) ?></td>
+                            <td><?= esc((string) $taxonRank['sort_order']) ?></td>
+                            <td><a class="btn btn-sm btn-outline-brand" href="<?= esc(site_url('taxon-ranks/' . $taxonRank['id'])) ?>">View</a></td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

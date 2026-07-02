@@ -15,6 +15,8 @@ class CreateOccurrencesTable extends Migration
      */
     public function up(): void
     {
+        $ranks = config('Import')->taxonRanks;
+        $rankColumns = array_map(fn ($rank) => strtolower($rank) . '_id', $ranks);
         $this->forge->addField([
             'id' => [
                 'type'           => 'BIGINT',
@@ -36,6 +38,20 @@ class CreateOccurrencesTable extends Migration
                 'constraint' => 20,
                 'unsigned'   => true,
             ],
+        ]);
+        // Dynamically add fields for each taxon rank based on the
+        // configuration.
+        foreach ($rankColumns as $rankColumn) {
+            $this->forge->addField([
+                $rankColumn => [
+                    'type'       => 'BIGINT',
+                    'constraint' => 20,
+                    'unsigned'   => true,
+                    'null'       => true,
+                ],
+            ]);
+        }
+        $this->forge->addField([
             'from_date' => [
                 'type' => 'DATE',
                 'null' => true,
@@ -122,11 +138,24 @@ class CreateOccurrencesTable extends Migration
         $this->forge->addKey('from_date');
         $this->forge->addKey('to_date');
         $this->forge->addKey('grid_ref_2km');
+        foreach ($rankColumns as $rankColumn) {
+            $this->forge->addKey($rankColumn);
+        }
 
         $this->forge->addForeignKey('taxon_id', 'taxa', 'id', 'CASCADE', 'RESTRICT');
         $this->forge->addForeignKey('taxon_name_id', 'taxon_names', 'id', 'CASCADE', 'RESTRICT');
         $this->forge->addForeignKey('data_source_id', 'data_sources', 'id', 'CASCADE', 'RESTRICT');
         $this->forge->createTable('occurrences', true);
+
+        // Add self-referential rank foreign keys after table creation.
+        $db = db_connect();
+
+        foreach ($rankColumns as $rankColumn) {
+            $constraint = substr('fk_occurrences_' . $rankColumn . '_taxa_id', 0, 64);
+            $db->query(
+                'ALTER TABLE `taxa` ADD CONSTRAINT `' . $constraint . '` FOREIGN KEY (`' . $rankColumn . '`) REFERENCES `taxa`(`id`) ON UPDATE CASCADE ON DELETE SET NULL'
+            );
+        }
     }
 
     /**

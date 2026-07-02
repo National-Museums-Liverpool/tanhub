@@ -3,7 +3,7 @@
 namespace App\Services\Import\Persistence;
 
 use App\Models\OccurrenceModel;
-use App\Models\TaxaModel;
+use App\Models\TaxonModel;
 use App\Models\TaxonNameModel;
 
 /**
@@ -29,8 +29,8 @@ class OccurrenceImportService
             return $counts;
         }
 
-        /** @var TaxaModel $taxaModel */
-        $taxaModel = model(TaxaModel::class);
+        /** @var TaxonModel $TaxonModel */
+        $TaxonModel = model(TaxonModel::class);
         /** @var TaxonNameModel $taxonNameModel */
         $taxonNameModel = model(TaxonNameModel::class);
         /** @var OccurrenceModel $occurrenceModel */
@@ -40,7 +40,7 @@ class OccurrenceImportService
             return (string) ($record['taxon_identifier'] ?? '');
         }, $records))));
 
-        $taxaRows = $taxaModel->select(['id', 'taxon_identifier'])
+        $taxaRows = $TaxonModel->select(['id', 'taxon_identifier'])
             ->whereIn('taxon_identifier', $taxonIdentifiers)
             ->findAll();
 

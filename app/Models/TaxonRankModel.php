@@ -5,14 +5,14 @@ namespace App\Models;
 use CodeIgniter\Model;
 
 /**
- * Persistence model for taxa.
+ * Persistence model for taxon ranks.
  */
-class TaxaModel extends Model
+class TaxonRankModel extends Model
 {
     /**
      * @var string
      */
-    protected $table = 'taxa';
+    protected $table = 'taxon_ranks';
 
     /**
      * @var string
@@ -28,6 +28,15 @@ class TaxaModel extends Model
      * @var bool
      */
     protected $useSoftDeletes = true;
+
+    /**
+     * @var array<int, string>
+     */
+    protected $allowedFields = [
+        'rank',
+        'code',
+        'sort_order',
+    ];
 
     /**
      * @var bool

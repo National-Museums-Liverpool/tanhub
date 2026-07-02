@@ -6,9 +6,9 @@ use CodeIgniter\Database\Migration;
 use CodeIgniter\Database\RawSql;
 
 /**
- * Creates the orders lookup table.
+ * Creates the taxon ranks table.
  */
-class CreateOrdersTable extends Migration
+class CreateTaxonRanksTable extends Migration
 {
     /**
      * Apply schema changes.
@@ -22,26 +22,19 @@ class CreateOrdersTable extends Migration
                 'unsigned'       => true,
                 'auto_increment' => true,
             ],
-            'taxon_identifier' => [
+            'rank' => [
                 'type'       => 'VARCHAR',
-                'constraint' => 100,
+                'constraint' => 50,
             ],
-            'scientific_name_identifier' => [
+            'code' => [
                 'type'       => 'VARCHAR',
-                'constraint' => 100,
+                'constraint' => 50,
             ],
-            'scientific_name' => [
-                'type'       => 'VARCHAR',
-                'constraint' => 200,
-            ],
-            'scientific_name_authorship' => [
-                'type'       => 'VARCHAR',
-                'constraint' => 100,
-                'null'       => true,
-            ],
-            'vernacular_name' => [
-                'type'       => 'VARCHAR',
-                'constraint' => 200,
+            'sort_order' => [
+                'type'       => 'INT',
+                'constraint' => 10,
+                'unsigned'   => true,
+                'default'    => 0,
             ],
             'created_at' => [
                 'type'    => 'DATETIME',
@@ -53,16 +46,16 @@ class CreateOrdersTable extends Migration
                 'null' => true,
             ],
             'deleted_at' => [
-                'type' => 'DATETIME',
-                'null' => true,
+                'type'       => 'DATETIME',
+                'null'       => true,
             ],
         ]);
 
         $this->forge->addKey('id', true);
-        $this->forge->addUniqueKey('taxon_identifier');
-        $this->forge->addKey('scientific_name_identifier');
-        $this->forge->addKey('scientific_name');
-        $this->forge->createTable('orders', true);
+        $this->forge->addUniqueKey('rank');
+        $this->forge->addUniqueKey('code');
+        $this->forge->addKey('sort_order');
+        $this->forge->createTable('taxon_ranks', true);
     }
 
     /**
@@ -70,6 +63,6 @@ class CreateOrdersTable extends Migration
      */
     public function down(): void
     {
-        $this->forge->dropTable('orders', true);
+        $this->forge->dropTable('taxon_ranks', true);
     }
 }

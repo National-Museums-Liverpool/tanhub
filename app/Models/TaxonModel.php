@@ -5,14 +5,14 @@ namespace App\Models;
 use CodeIgniter\Model;
 
 /**
- * Persistence model for families.
+ * Persistence model for taxa.
  */
-class FamilyModel extends Model
+class TaxonModel extends Model
 {
     /**
      * @var string
      */
-    protected $table = 'families';
+    protected $table = 'taxa';
 
     /**
      * @var string
@@ -28,17 +28,6 @@ class FamilyModel extends Model
      * @var bool
      */
     protected $useSoftDeletes = true;
-
-    /**
-     * @var array<int, string>
-     */
-    protected $allowedFields = [
-        'taxon_identifier',
-        'scientific_name_identifier',
-        'scientific_name',
-        'scientific_name_authorship',
-        'vernacular_name',
-    ];
 
     /**
      * @var bool

@@ -30,11 +30,9 @@ Empty the import_offsets table if refreshing the taxonomy. Repeat each command
 until it returns "Has more: no".
 
 ```bash
-$ php spark import:taxonomy --source indicia --entity orders
-$ php spark import:taxonomy --source indicia --entity superfamilies
-$ php spark import:taxonomy --source indicia --entity families
 $ php spark import:taxonomy --source indicia --entity recording_schemes
 $ php spark import:taxonomy --source indicia --entity taxon_groups
+$ php spark import:taxonomy --source indicia --entity taxon_ranks
 $ php spark import:taxonomy --source indicia --entity taxa
 ```
 
@@ -51,14 +49,10 @@ Optional parameters:
 
 Notes
 
-For taxa imports, related lookup data should be loaded first (orders/families/taxon_groups at minimum), otherwise taxa rows may be skipped due to missing foreign key mappings.
+Taxonomic hierarchy is populated through dynamic `<rank>_id` fields on `taxa`
+and `occurrences`, based on configured import ranks (for example
+`kingdom_id`, `class_id`, `family_id`).
 
-## Process
-
-- php spark import:taxonomy --source=indicia --entity=orders
-  - calls Commands\ImportTaxonomy->run().
-    - checks the parameters
-    - calls Services\TaxonomyImportOrchestrator->run($sourceKey)
-      - gets config
-      - gets a TaxonomySourceAdapterFactory.
-      - calls Sevices/Import/TaxonomyImportService->import()
+For taxa imports, load related lookup data first (`recording_schemes`,
+`taxon_ranks` and `taxon_groups` at minimum), otherwise taxa rows may be
+skipped due to missing foreign key mappings.

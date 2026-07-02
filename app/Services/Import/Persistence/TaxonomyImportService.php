@@ -21,11 +21,9 @@ class TaxonomyImportService
     private function serviceFor(string $entity): TaxonomyEntityImportServiceInterface
     {
         return match (strtolower($entity)) {
-            'orders' => new LookupTaxonomyImportService('orders'),
-            'families' => new LookupTaxonomyImportService('families'),
-            'superfamilies' => new LookupTaxonomyImportService('superfamilies'),
             'taxon_groups' => new TaxonGroupsImportService(),
             'recording_schemes' => new RecordingSchemesImportService(),
+            'taxon_ranks' => new TaxonRanksImportService(),
             'taxa' => new TaxaImportService(),
             default => throw new InvalidArgumentException('Unsupported taxonomy entity: ' . $entity),
         };

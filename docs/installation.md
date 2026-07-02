@@ -15,9 +15,11 @@
   * Config\Email.fromEmail
   * Config\Email.fromName
   * Settings for database.default
-6. Visit /update to run the database migrations and seed baseline lookup data.
-7. Visit /setup-admin-user to define an admin user.
-8. Uncomment this line in your .env file if this is a production server by
+6. Optionally, uncomment import.taxonRanks in the env file to provide a custom
+   list of ranks which you will be able to report against.
+7. Visit /update to run the database migrations and seed baseline lookup data.
+8. Visit /setup-admin-user to define an admin user.
+9. Uncomment this line in your .env file if this is a production server by
    removing the # at the start:
    ```
    # CI_ENVIRONMENT = production
@@ -32,7 +34,7 @@
 5. Elasticsearch endpoint es.
 6. Click allow reports, and paste the following in:
    ```
-   projects/tanhub/higher_taxa.xml
+   projects/tanhub/taxon_ranks.xml
    projects/tanhub/taxon_groups.xml
    projects/tanhub/recording_schemes.xml
    projects/tanhub/taxa.xml

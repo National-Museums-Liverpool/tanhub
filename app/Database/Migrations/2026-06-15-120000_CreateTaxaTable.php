@@ -15,6 +15,9 @@ class CreateTaxaTable extends Migration
      */
     public function up(): void
     {
+        $ranks = config('Import')->taxonRanks;
+        $rankColumns = array_map(fn ($rank) => strtolower($rank) . '_id', $ranks);
+
         $this->forge->addField([
             'id' => [
                 'type'           => 'BIGINT',
@@ -43,22 +46,26 @@ class CreateTaxaTable extends Migration
                 'type'       => 'VARCHAR',
                 'constraint' => 200,
             ],
-            'order_id' => [
+            'taxon_rank_id' => [
                 'type'       => 'BIGINT',
                 'constraint' => 20,
                 'unsigned'   => true,
             ],
-            'superfamily_id' => [
-                'type'       => 'BIGINT',
-                'constraint' => 20,
-                'unsigned'   => true,
-                'null'       => true,
-            ],
-            'family_id' => [
-                'type'       => 'BIGINT',
-                'constraint' => 20,
-                'unsigned'   => true,
-            ],
+        ]);
+
+        // Dynamically add fields for each taxon rank based on the
+        // configuration.
+        foreach ($rankColumns as $rankColumn) {
+            $this->forge->addField([
+                $rankColumn => [
+                    'type'       => 'BIGINT',
+                    'constraint' => 20,
+                    'unsigned'   => true,
+                    'null'       => true,
+                ],
+            ]);
+        }
+        $this->forge->addField([
             'taxon_group_id' => [
                 'type'       => 'BIGINT',
                 'constraint' => 20,
@@ -115,18 +122,26 @@ class CreateTaxaTable extends Migration
         $this->forge->addKey('id', true);
         $this->forge->addUniqueKey('taxon_identifier');
         $this->forge->addKey('scientific_name_identifier');
-        $this->forge->addKey('order_id');
-        $this->forge->addKey('superfamily_id');
-        $this->forge->addKey('family_id');
+        $this->forge->addKey('taxon_rank_id');
         $this->forge->addKey('taxon_group_id');
         $this->forge->addKey('recording_scheme_id');
-
-        $this->forge->addForeignKey('order_id', 'orders', 'id', 'CASCADE', 'RESTRICT');
-        $this->forge->addForeignKey('superfamily_id', 'superfamilies', 'id', 'CASCADE', 'SET NULL');
-        $this->forge->addForeignKey('family_id', 'families', 'id', 'CASCADE', 'RESTRICT');
+        foreach ($rankColumns as $rankColumn) {
+            $this->forge->addKey($rankColumn);
+        }
+        $this->forge->addForeignKey('taxon_rank_id', 'taxon_ranks', 'id', 'CASCADE', 'RESTRICT');
         $this->forge->addForeignKey('taxon_group_id', 'taxon_groups', 'id', 'CASCADE', 'RESTRICT');
         $this->forge->addForeignKey('recording_scheme_id', 'recording_schemes', 'id', 'CASCADE', 'SET NULL');
         $this->forge->createTable('taxa', true);
+
+        // Add self-referential rank foreign keys after table creation.
+        $db = db_connect();
+
+        foreach ($rankColumns as $rankColumn) {
+            $constraint = substr('fk_taxa_' . $rankColumn . '_taxa_id', 0, 64);
+            $db->query(
+                'ALTER TABLE `taxa` ADD CONSTRAINT `' . $constraint . '` FOREIGN KEY (`' . $rankColumn . '`) REFERENCES `taxa`(`id`) ON UPDATE CASCADE ON DELETE SET NULL'
+            );
+        }
     }
 
     /**
@@ -136,4 +151,5 @@ class CreateTaxaTable extends Migration
     {
         $this->forge->dropTable('taxa', true);
     }
+
 }

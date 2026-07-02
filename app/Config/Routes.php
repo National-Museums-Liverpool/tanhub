@@ -9,12 +9,12 @@ $routes->match(['GET', 'POST'], 'setup-admin-user', 'SetupAdminUser::index');
 $routes->get('taxon-groups', 'TaxonGroups::index', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('taxon-groups/(:num)/edit', 'TaxonGroups::edit/$1', ['filter' => ['session', 'group:admin,manager']]);
 $routes->post('taxon-groups/(:num)/edit', 'TaxonGroups::update/$1', ['filter' => ['session', 'group:admin,manager']]);
-$routes->get('orders', 'Orders::index', ['filter' => ['session', 'group:admin,manager']]);
-$routes->get('orders/(:num)', 'Orders::show/$1', ['filter' => ['session', 'group:admin,manager']]);
-$routes->get('superfamilies', 'Superfamilies::index', ['filter' => ['session', 'group:admin,manager']]);
-$routes->get('superfamilies/(:num)', 'Superfamilies::show/$1', ['filter' => ['session', 'group:admin,manager']]);
-$routes->get('families', 'Families::index', ['filter' => ['session', 'group:admin,manager']]);
-$routes->get('families/(:num)', 'Families::show/$1', ['filter' => ['session', 'group:admin,manager']]);
+$routes->get('taxon-ranks', 'TaxonRanks::index', ['filter' => ['session', 'group:admin,manager']]);
+$routes->get('taxon-ranks/(:num)/edit', 'TaxonRanks::edit/$1', ['filter' => ['session', 'group:admin,manager']]);
+$routes->post('taxon-ranks/(:num)/edit', 'TaxonRanks::update/$1', ['filter' => ['session', 'group:admin,manager']]);
+$routes->get('taxa', 'Taxa::index', ['filter' => ['session', 'group:admin,manager']]);
+$routes->get('taxa/(:num)/edit', 'Taxa::edit/$1', ['filter' => ['session', 'group:admin,manager']]);
+$routes->post('taxa/(:num)/edit', 'Taxa::update/$1', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('recording-schemes', 'RecordingSchemes::index', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('recording-schemes/(:num)', 'RecordingSchemes::show/$1', ['filter' => ['session', 'group:admin,manager']]);
 

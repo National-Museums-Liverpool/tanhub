@@ -7,10 +7,17 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * Fetches normalized taxonomy rows from Indicia report endpoints.
+ * Fetches normalised taxonomy rows from Indicia report endpoints.
  */
 class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
 {
+    private readonly \Config\Import $importConfig;
+
+    /**
+     * @var array<string, mixed>
+     */
+    private readonly array $sourceConfig;
+
     /**
      * @var array<int, string>
      */
@@ -21,6 +28,7 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
         'superfamilies',
         'recording_schemes',
         'taxon_groups',
+        'taxon_ranks',
     ];
 
     /**
@@ -28,13 +36,15 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
      */
     public function __construct(
         private readonly CURLRequest $client,
-        private readonly \Config\Import $config,
-        private readonly array $dataSourceConfig,
+        \Config\Import $config,
+        array $dataSourceConfig,
     ) {
+        $this->importConfig = $config;
+        $this->sourceConfig = $dataSourceConfig;
     }
 
     /**
-     * Fetch one normalized taxonomy batch.
+     * Fetch one normalised taxonomy batch.
      */
     public function fetchBatch(string $entity, int $limit, int $offset): TaxonomyImportBatch
     {
@@ -49,12 +59,12 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
 
         // @todo: Fetch correct report depending on $entity.
         $rawRows = $this->fetchTaxonomyData($entityKey, $batchLimit, $batchOffset);
-        $normalizedRows = $this->normalizeRows($entityKey, $rawRows);
+        $normalisedRows = $this->normaliseRows($entityKey, $rawRows);
 
         return new TaxonomyImportBatch(
             entity: $entityKey,
             offset: $batchOffset,
-            rows: $normalizedRows,
+            rows: $normalisedRows,
             nextOffset: $batchOffset + count($rawRows),
             hasMore: count($rawRows) >= $batchLimit,
         );
@@ -65,7 +75,7 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
      */
     private function fetchTaxonomyData(string $entity, int $limit, int $offset): array
     {
-        $url = rtrim((string) ($this->config->indiciaWarehouseUrl ?? ''), '/');
+        $url = rtrim((string) ($this->importConfig->indiciaWarehouseUrl ?? ''), '/');
 
         if ($url === '') {
             throw new RuntimeException('Indicia taxonomy source URL is not configured.');
@@ -74,15 +84,10 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
         // Fetch correct report depending on $entity. Higher taxa share the
         // same report.
         switch ($entity) {
-            case 'orders':
-            case 'families':
-            case 'superfamilies':
-                $report = 'higher_taxa';
-                break;
-
             case 'recording_schemes':
             case 'taxon_groups':
             case 'taxa':
+            case 'taxon_ranks':
                 $report = $entity;
                 break;
 
@@ -93,16 +98,17 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
         $endpoint = "$url/index.php/services/rest/reports/projects/tanhub/$report.xml";
         $query = [
             // Fetch indicia.import.proj_id from config, default to empty string if not set.
-            'proj_id' => (string) ($this->config->indiciaProjId ?? ''),
-            'taxon_list_id' => (int) ($this->config->indiciaTaxonListId ?? 0),
+            'proj_id' => (string) ($this->importConfig->indiciaProjId ?? ''),
+            'taxon_list_id' => (int) ($this->importConfig->indiciaTaxonListId ?? 0),
             'limit' => $limit,
             'offset' => $offset,
         ];
-        if ($report === 'higher_taxa') {
-            $query['taxon_rank'] = $this->entityRank($entity);
+        if ($report === 'taxon_ranks' || $report === 'taxa') {
+            $query['taxon_ranks'] = $this->rankCsvParam();
         }
-        $user = (string) ($this->config->indiciaUsername ?? '');
-        $secret = (string) ($this->config->indiciaSecret ?? '');
+
+        $user = (string) ($this->importConfig->indiciaUsername ?? '');
+        $secret = (string) ($this->importConfig->indiciaSecret ?? '');
         $response = $this->client->get($endpoint, [
             'headers' => [
                 'Content-Type' => 'application/json',
@@ -110,7 +116,7 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
             ],
             'query' => $query,
             'http_errors' => false,
-            'timeout' => $this->config->httpTimeout ?? 30,
+            'timeout' => $this->importConfig->httpTimeout ?? 30,
         ]);
 
         if ($response->getStatusCode() >= 400) {
@@ -126,77 +132,48 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
         return $this->extractRecords($payload);
     }
 
-
-    /**
-     * @return array<int, array<string, mixed>>
-     *
-    private function fetchEndpointRows(string $endpointKey, ?string $checkpoint, int $limit): array
-    {
-        $endpoint = (string) ($this->config[$endpointKey] ?? '');
-
-        log_message('info', 'Indicia taxonomy endpoint for {key}: {endpoint}', [
-            'key' => $endpointKey,
-            'endpoint' => $endpoint,
-        ]);
-
-        if ($endpoint === '') {
-            return [];
-        }
-
-        $query = (array) ($this->config['query'] ?? []);
-        $query['limit'] = $limit;
-
-        $checkpointParam = (string) ($this->config['checkpoint_param'] ?? 'since');
-
-        if ($checkpoint !== null && $checkpoint !== '') {
-            $query[$checkpointParam] = $checkpoint;
-        }
-
-        $response = $this->client->get($endpoint, [
-            'query' => $query,
-            'http_errors' => false,
-            'timeout' => $this->timeout,
-        ]);
-
-        if ($response->getStatusCode() >= 400) {
-            throw new RuntimeException('Indicia taxonomy request failed with status ' . $response->getStatusCode() . ' for ' . $endpointKey);
-        }
-
-        $payload = json_decode($response->getBody(), true);
-
-        if (! is_array($payload)) {
-            throw new RuntimeException('Indicia taxonomy response was not valid JSON for ' . $endpointKey);
-        }
-
-        return $this->extractRecords($payload);
-    }
-        */
-
     /**
      * @param array<int, array<string, mixed>> $rows
      * @return array<int, array<string, mixed>>
      */
-    private function normalizeRows(string $entity, array $rows): array
+    private function normaliseRows(string $entity, array $rows): array
     {
         return match ($entity) {
-            'taxa' => array_map(fn (array $row): array => $this->normalizeTaxaRow($row), $rows),
-            'orders' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normalizeLookupRow($row, 'order'), $rows), 'taxon_identifier'),
-            'superfamilies' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normalizeLookupRow($row, 'superfamily'), $rows), 'taxon_identifier'),
-            'families' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normalizeLookupRow($row, 'family'), $rows), 'taxon_identifier'),
-            'recording_schemes' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normalizeRecordingSchemeRow($row), $rows), 'external_key'),
-            'taxon_groups' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normalizeTaxonGroupRow($row), $rows), 'external_key'),
+            'taxa' => array_map(fn (array $row): array => $this->normaliseTaxaRow($row), $rows),
+            'recording_schemes' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseRecordingSchemeRow($row), $rows), 'external_key'),
+            'taxon_groups' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseTaxonGroupRow($row), $rows), 'external_key'),
+            'taxon_ranks' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseTaxonRankRow($row), $rows), 'rank'),
             default => [],
         };
     }
 
-    private function entityRank(string $entity): ?string
+    /**
+     * Convert the list of ranks to a CSV style param for an Indicia report.
+     *
+     * @return string
+     */
+    private function rankCsvParam(): string
     {
-        return match ($entity) {
-            'orders' => 'Order',
-            'superfamilies' => 'Superfamily',
-            'families' => 'Family',
-            default => null,
-        };
+        $configured = $this->importConfig->taxonRanks ?? [];
+
+        $ranks = is_array($configured) ? $configured : explode(',', (string) $configured);
+        $normalised = [];
+
+        foreach ($ranks as $rank) {
+            if (! is_scalar($rank)) {
+                continue;
+            }
+
+            $name = trim((string) $rank, " \t\n\r\0\x0B\"'");
+
+            if ($name === '') {
+                continue;
+            }
+
+            $normalised[] = "'" . str_replace("'", "''", $name) . "'";
+        }
+
+        return implode(',', $normalised);
     }
 
     /**
@@ -211,30 +188,14 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
         return [];
     }
 
+
     /**
+     * Cleanup a taxon group row read from Indicia.
+     *
      * @param array<string, mixed> $row
      * @return array<string, mixed>
      */
-    private function normalizeLookupRow(array $row, string $prefix): array
-    {
-        $taxonIdentifier = trim((string) ($row[$prefix . '_taxon_identifier'] ?? $row['taxon_identifier'] ?? ''));
-        $scientificNameIdentifier = trim((string) ($row[$prefix . '_scientific_name_identifier'] ?? $row['scientific_name_identifier'] ?? ''));
-        $scientificName = trim((string) ($row[$prefix . '_scientific_name'] ?? $row[$prefix] ?? $row['scientific_name'] ?? ''));
-
-        return [
-            'taxon_identifier' => $taxonIdentifier,
-            'scientific_name_identifier' => $scientificNameIdentifier,
-            'scientific_name' => $scientificName,
-            'scientific_name_authorship' => $row[$prefix . '_scientific_name_authorship'] ?? $row['scientific_name_authorship'] ?? null,
-            'vernacular_name' => trim((string) ($row[$prefix . '_vernacular_name'] ?? $row['vernacular_name'] ?? $scientificName)),
-        ];
-    }
-
-    /**
-     * @param array<string, mixed> $row
-     * @return array<string, mixed>
-     */
-    private function normalizeTaxonGroupRow(array $row): array
+    private function normaliseTaxonGroupRow(array $row): array
     {
         return [
             'external_key' => trim((string) ($row['taxon_group_external_key'] ?? $row['external_key'] ?? '')),
@@ -243,10 +204,12 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
     }
 
     /**
+     * Cleanup a recording scheme row read from Indicia.
+     *
      * @param array<string, mixed> $row
      * @return array<string, mixed>
      */
-    private function normalizeRecordingSchemeRow(array $row): array
+    private function normaliseRecordingSchemeRow(array $row): array
     {
         return [
             'external_key' => trim((string) ($row['recording_scheme_external_key'] ?? $row['external_key'] ?? '')),
@@ -256,10 +219,27 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
     }
 
     /**
+     * Cleanup a taxon rank row read from Indicia.
+     *
      * @param array<string, mixed> $row
      * @return array<string, mixed>
      */
-    private function normalizeTaxaRow(array $row): array
+    private function normaliseTaxonRankRow(array $row): array
+    {
+        return [
+            'rank' => trim((string) ($row['rank'] ?? $row['name'] ?? $row['title'] ?? '')),
+            'code' => trim((string) ($row['code'] ?? $row['external_key'] ?? $row['slug'] ?? '')),
+            'sort_order' => (int) ($row['sort_order'] ?? $row['sort'] ?? $row['weight'] ?? 0),
+        ];
+    }
+
+    /**
+     * Cleanup a taxon row read from Indicia.
+     *
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function normaliseTaxaRow(array $row): array
     {
         return [
             'taxon_identifier' => (string) ($row['taxon_identifier'] ?? ''),
@@ -272,9 +252,8 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
             'recording_scheme' => (string) ($row['recording_scheme'] ?? ''),
             'recording_scheme_external_key' => (string) ($row['recording_scheme_external_key'] ?? ''),
             'conservation_status' => $row['conservation_status'] ?? null,
-            'order_taxon_identifier' => (string) ($row['order_taxon_identifier'] ?? ''),
-            'superfamily_taxon_identifier' => (string) ($row['superfamily_taxon_identifier'] ?? ''),
-            'family_taxon_identifier' => (string) ($row['family_taxon_identifier'] ?? ''),
+            'taxon_rank' => (string) ($row['taxon_rank'] ?? ''),
+            'higher_taxa' => json_decode((string) ($row['higher_taxa'] ?? '[]')),
         ];
     }
 

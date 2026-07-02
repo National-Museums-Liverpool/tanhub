@@ -85,3 +85,7 @@ Config\Import.indiciaSecret = ''
 
 Config\Import.nbnUrl = ''
 
+# Uncomment to alter the taxonomic ranks used in the reporting hieararchy.
+# Do not change this after initial installation.
+# import.taxonRanks = 'Order,Superfamily,Family,Genus,Species'
+

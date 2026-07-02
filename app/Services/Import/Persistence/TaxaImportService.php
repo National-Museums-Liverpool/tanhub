@@ -32,35 +32,32 @@ class TaxaImportService implements TaxonomyEntityImportServiceInterface
         }
 
         try {
-            $orderMap = $this->lookupByTaxonIdentifier('orders');
-            $superfamilyMap = $this->lookupByTaxonIdentifier('superfamilies');
-            $familyMap = $this->lookupByTaxonIdentifier('families');
-            $groupMap = $this->lookupByExternalKey('taxon_groups');
-            $schemeMap = $this->lookupByExternalKey('recording_schemes');
+            $groupMap = $this->prepareLookup('taxon_groups', 'external_key', 'id');
+            $schemeMap = $this->prepareLookup('recording_schemes', 'external_key', 'id');
+            $taxonRankMap = $this->prepareLookup('taxon_ranks', 'rank', 'id');
+            $taxonRanks = config('Import')->taxonRanks;
 
             foreach ($rows as $row) {
                 $taxonIdentifier = trim((string) ($row['taxon_identifier'] ?? ''));
                 $sciNameIdentifier = trim((string) ($row['scientific_name_identifier'] ?? ''));
                 $scientificName = trim((string) ($row['scientific_name'] ?? ''));
                 $vernacularName = trim((string) ($row['vernacular_name'] ?? ''));
-                $orderIdentifier = trim((string) ($row['order_taxon_identifier'] ?? ''));
-                $familyIdentifier = trim((string) ($row['family_taxon_identifier'] ?? ''));
-                $superfamilyIdentifier = trim((string) ($row['superfamily_taxon_identifier'] ?? ''));
                 $groupExternalKey = trim((string) ($row['taxon_group_external_key'] ?? ''));
                 $schemeExternalKey = trim((string) ($row['recording_scheme_external_key'] ?? ''));
+                $taxonRank = trim((string) ($row['taxon_rank'] ?? ''));
 
-                if ($taxonIdentifier === '' || $sciNameIdentifier === '' || $scientificName === '' || $vernacularName === '') {
+                if ($taxonIdentifier === '' || $sciNameIdentifier === '' || $scientificName === '') {
+                    log_message('info', 'Skipping taxa row due to missing required fields: ' . var_export($row, TRUE));
                     $counts['skipped']++;
                     continue;
                 }
 
-                $orderId = $orderMap[$orderIdentifier] ?? null;
-                $familyId = $familyMap[$familyIdentifier] ?? null;
-                $superfamilyId = $superfamilyMap[$superfamilyIdentifier] ?? null;
                 $groupId = $groupMap[$groupExternalKey] ?? null;
                 $schemeId = $schemeMap[$schemeExternalKey] ?? null;
+                $taxonRankId = $taxonRankMap[$taxonRank] ?? null;
 
-                if ($orderId === null || $familyId === null || $groupId === null) {
+                if ($groupId === null) {
+                    log_message('info', 'Skipping taxa row due to missing taxon group: ' . var_export($row, TRUE));
                     $counts['skipped']++;
                     continue;
                 }
@@ -71,74 +68,60 @@ class TaxaImportService implements TaxonomyEntityImportServiceInterface
                     'scientific_name' => substr($scientificName, 0, 200),
                     'scientific_name_authorship' => $this->nullableString($row['scientific_name_authorship'] ?? null, 100),
                     'vernacular_name' => substr($vernacularName, 0, 200),
-                    'order_id' => $orderId,
-                    'superfamily_id' => $superfamilyId,
-                    'family_id' => $familyId,
                     'taxon_group_id' => $groupId,
                     'recording_scheme_id' => $schemeId,
+                    'taxon_rank_id' => $taxonRankId,
                     'conservation_status' => $this->nullableString($row['conservation_status'] ?? null, 10),
                     'rarity_group_name' => 'Unassigned',
                     'blocked' => 0,
                     'blocked_reason' => null,
                     'deleted_at' => null,
                 ];
+                // Format $higherTaxaInRow to an associative array keyed by
+                // rank.
+                $higherTaxaInRow = array_combine(array_column($row['higher_taxa'], 'taxon_rank'), $row['higher_taxa']);
+                // Dynamically add the FKs for the taxon ranks we are
+                // supporting.
+                foreach ($taxonRanks as $parentTaxonRank) {
+                    // Don't try to find the taxon we are about to insert, we
+                    // will point this rank to self later.
+                    if ($parentTaxonRank === $taxonRank) {
+                        continue;
+                    }
+                    $rankColumn = strtolower($parentTaxonRank) . '_id';
+                    if (!empty($higherTaxaInRow[$parentTaxonRank])) {
+                        $taxaPayload[$rankColumn] = $this->lookupParentTaxon($higherTaxaInRow[$parentTaxonRank]->organism_key) ?? null;
+                    }
+                    else
+                    {
+                        $taxaPayload[$rankColumn] = null;
+                    }
+                }
 
                 $existingTaxa = $db->table('taxa')->where('taxon_identifier', $taxonIdentifier)->get()->getRowArray();
-                $taxaId = null;
 
                 if ($existingTaxa === null) {
                     $counts['inserted']++;
 
                     if (! $dryRun) {
                         $db->table('taxa')->insert($taxaPayload);
-                        $taxaId = (int) $db->insertID();
+                        $taxaId = $db->insertId();
                     }
                 } else {
                     $counts['updated']++;
                     $taxaId = (int) $existingTaxa['id'];
-
                     if (! $dryRun) {
                         $db->table('taxa')->where('id', $existingTaxa['id'])->update($taxaPayload);
                     }
                 }
-
+                if (! $dryRun) {
+                    // Need to set the current rank's FK as a self-reference,
+                    // so this taxon is included in searches for itself.
+                    $taxonRankFkField = strtolower($taxonRank) . '_id';
+                    $db->table('taxa')->where('id', $taxaId)->update([$taxonRankFkField => $taxaId]);
+                }
                 if ($dryRun) {
-                    continue;
                 }
-
-                if ($taxaId === null && $existingTaxa !== null) {
-                    $taxaId = (int) $existingTaxa['id'];
-                }
-
-                if ($taxaId === null) {
-                    $counts['errors']++;
-                    continue;
-                }
-
-                $taxonNamePayload = [
-                    'uuid' => $this->stableUuid('taxon:' . $taxonIdentifier),
-                    'taxon_id' => $taxaId,
-                    'name' => substr($scientificName, 0, 200),
-                    'scientific_name_identifier' => substr($sciNameIdentifier, 0, 100),
-                    'accepted' => 1,
-                    'scientific' => 1,
-                    'deleted_at' => null,
-                ];
-
-                $existingTaxonName = $db->table('taxon_names')
-                    ->where('scientific_name_identifier', $sciNameIdentifier)
-                    ->where('taxon_id', $taxaId)
-                    ->get()
-                    ->getRowArray();
-
-                if ($existingTaxonName === null) {
-                    $counts['inserted']++;
-                    $db->table('taxon_names')->insert($taxonNamePayload);
-                    continue;
-                }
-
-                $counts['updated']++;
-                $db->table('taxon_names')->where('id', $existingTaxonName['id'])->update($taxonNamePayload);
             }
 
             if (! $dryRun) {
@@ -149,6 +132,7 @@ class TaxaImportService implements TaxonomyEntityImportServiceInterface
                 }
             }
         } catch (\Throwable $exception) {
+            log_message('error', $exception->getMessage());
             $counts['errors']++;
 
             if (! $dryRun && $db->transStatus()) {
@@ -160,41 +144,48 @@ class TaxaImportService implements TaxonomyEntityImportServiceInterface
     }
 
     /**
-     * @return array<string, int>
+     * Fetch the PK for an existing parent taxon row.
+     *
+     * Since taxa are inserted in rank order, we should be able to lookup the
+     * parent taxon by its taxon_identifier, which is unique.
+     *
+     * @param string $key
+     *   Taxon identifier (organism_key) of the parent taxon to lookup.
+     *
+     * @return int
+     *   Looked up parent taxon's PK.
      */
-    private function lookupByTaxonIdentifier(string $table): array
+    private function lookupParentTaxon(string $key): int
     {
-        $rows = db_connect()->table($table)
-            ->select(['id', 'taxon_identifier'])
+        $rows = db_connect()->table('taxa')
+            ->select(['id'])
             ->where('deleted_at', null)
+            ->where('taxon_identifier', $key)
             ->get()
             ->getResultArray();
 
-        $map = [];
-
-        foreach ($rows as $row) {
-            $map[(string) $row['taxon_identifier']] = (int) $row['id'];
+        if (count($rows) <> 1) {
+            throw new \RuntimeException('Failed to find unique parent for taxon identifier ' . $key);
         }
-
-        return $map;
+        return (int) $rows[0]['id'];
     }
 
     /**
      * @return array<string, int>
      */
-    private function lookupByExternalKey(string $table): array
+    private function prepareLookup(string $table, string $keyColumn = 'external_key', string $valueColumn = 'id'): array
     {
         $rows = db_connect()->table($table)
-            ->select(['id', 'external_key'])
+            ->select([$valueColumn, $keyColumn])
             ->where('deleted_at', null)
-            ->where('external_key IS NOT NULL', null, false)
+            ->where("$keyColumn IS NOT NULL", null, false)
             ->get()
             ->getResultArray();
 
         $map = [];
 
         foreach ($rows as $row) {
-            $map[(string) $row['external_key']] = (int) $row['id'];
+            $map[(string) $row[$keyColumn]] = (int) $row[$valueColumn];
         }
 
         return $map;

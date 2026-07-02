@@ -36,7 +36,7 @@ class ImportTaxonomy extends BaseCommand
      */
     protected $options = [
         '--source' => 'Taxonomy source key: indicia. Required.',
-        '--entity' => 'Entity to import: taxa, orders, families, superfamilies, recording_schemes, taxon_groups.',
+        '--entity' => 'Entity to import: recording_schemes, taxon_groups, taxon_ranks, taxa.',
         '--limit' => 'Maximum records to fetch in this run.',
         '--offset' => 'Optional offset override. Defaults to stored offset for the source/entity.',
         '--dry-run' => 'Fetch and validate without writing rows.',

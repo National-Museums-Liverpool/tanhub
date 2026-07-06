@@ -89,3 +89,8 @@ Config\Import.nbnUrl = ''
 # Do not change this after initial installation.
 # import.taxonRanks = 'Order,Superfamily,Family,Genus,Species'
 
+# Uncomment to alter the taxon groups the data will be imported for.
+# Do not change this after initial installation. Use " to enclose any
+# group names that contain commas.
+# import.taxonGroups = 'insect - moth,insect - caddis fly (Trichoptera)'
+

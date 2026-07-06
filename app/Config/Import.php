@@ -81,6 +81,16 @@ class Import extends BaseConfig
     ];
 
     /**
+     * Taxonomic groups we allow reporting at.
+     *
+     * @var array|string
+     */
+    public array|string $taxonGroups = [
+        'insect - moth',
+        'insect - caddis fly (Trichoptera)',
+    ];
+
+    /**
      * Constructor loads array overrides from .env.
      */
     public function __construct()
@@ -92,6 +102,11 @@ class Import extends BaseConfig
             $configuredRanks = preg_replace('/[^a-z,]+/i', '', $configuredRanks);
             $this->taxonRanks = array_map('trim', explode(',', $configuredRanks));
             log_message('info', 'Configured taxon ranks overriden: ' . $configuredRanks);
+        }
+        $configuredTaxonGroups = env('import.taxonGroups');
+        if (is_string($configuredTaxonGroups) && $configuredTaxonGroups !== '') {
+            $this->taxonGroups = array_map('trim', str_getcsv($configuredTaxonGroups));
+            log_message('info', 'Configured taxon groups overriden: ' . $configuredTaxonGroups);
         }
     }
 

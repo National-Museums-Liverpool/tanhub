@@ -36,6 +36,11 @@ class CreateTaxonGroupsTable extends Migration
                 'constraint' => 100,
                 'null'       => true,
             ],
+            'indicia_taxon_group_id' => [
+                'type'       => 'BIGINT',
+                'constraint' => 20,
+                'unsigned'   => true,
+            ],
             'created_at' => [
                 'type'    => 'DATETIME',
                 'null'    => false,
@@ -53,6 +58,7 @@ class CreateTaxonGroupsTable extends Migration
 
         $this->forge->addKey('id', true);
         $this->forge->addUniqueKey('external_key');
+        $this->forge->addUniqueKey('indicia_taxon_group_id');
         $this->forge->createTable('taxon_groups', true);
     }
 

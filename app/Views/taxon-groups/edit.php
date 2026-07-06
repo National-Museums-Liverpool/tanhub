@@ -40,10 +40,17 @@
                         </div>
                         <div class="col-md-4">
                             <label class="form-label" for="external_key">
-                                External Key
+                                External key
                                 <span class="badge bg-secondary ms-2">Read-only</span>
                             </label>
                             <input class="form-control" id="external_key" type="text" value="<?= esc($page['taxonGroup']['external_key']) ?>" disabled>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="indicia_taxon_group_id">
+                                Indicia taxon group ID
+                                <span class="badge bg-secondary ms-2">Read-only</span>
+                            </label>
+                            <input class="form-control" id="indicia_taxon_group_id" type="text" value="<?= esc($page['taxonGroup']['indicia_taxon_group_id']) ?>" disabled>
                         </div>
                         <div class="col-12">
                             <label class="form-label" for="friendly">Friendly</label>

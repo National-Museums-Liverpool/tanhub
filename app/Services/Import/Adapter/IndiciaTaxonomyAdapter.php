@@ -104,7 +104,10 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
             'offset' => $offset,
         ];
         if ($report === 'taxon_ranks' || $report === 'taxa') {
-            $query['taxon_ranks'] = $this->rankCsvParam();
+            $query['taxon_ranks'] = $this->getConfigListAsReportParam('taxonRanks');
+        }
+        if ($report === 'taxon_groups' || $report === 'taxa') {
+            $query['taxon_groups'] = $this->getConfigListAsReportParam('taxonGroups');
         }
 
         $user = (string) ($this->importConfig->indiciaUsername ?? '');
@@ -148,13 +151,13 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
     }
 
     /**
-     * Convert the list of ranks to a CSV style param for an Indicia report.
+     * Convert the list of ranks or taxon groups to a CSV style param for an Indicia report.
      *
      * @return string
      */
-    private function rankCsvParam(): string
+    private function getConfigListAsReportParam(string $configName): string
     {
-        $configured = $this->importConfig->taxonRanks ?? [];
+        $configured = $this->importConfig->$configName ?? [];
 
         $ranks = is_array($configured) ? $configured : explode(',', (string) $configured);
         $normalised = [];
@@ -199,6 +202,7 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
     {
         return [
             'external_key' => trim((string) ($row['taxon_group_external_key'] ?? $row['external_key'] ?? '')),
+            'indicia_taxon_group_id' => (int) $row['id'],
             'title' => trim((string) ($row['taxon_group'] ?? $row['title'] ?? '')),
         ];
     }

@@ -36,6 +36,7 @@ class TaxonGroupModel extends Model
         'title',
         'friendly',
         'external_key',
+        'indicia_taxon_group_id',
     ];
 
     /**

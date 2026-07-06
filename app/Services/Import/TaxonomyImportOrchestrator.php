@@ -63,22 +63,24 @@ class TaxonomyImportOrchestrator
         try {
             $batch = $adapterFactory->make($source)->fetchBatch($entityKey, $limit, $offset);
             $counts = $taxonomyImportService->import($entityKey, $batch->rows, $dryRun);
+            $processed = max(0, min((int) ($counts['processed'] ?? 0), (int) ($counts['fetched'] ?? 0)));
+            $nextOffset = $offset + $processed;
 
-            $status = $counts['errors'] > 0 ? 'partial' : 'success';
+            $status = $counts['errors'] > 0 ? 'failed' : 'success';
 
             if (! $dryRun) {
-                $importOffsetModel->setOffset($sourceEntityKey, $batch->nextOffset);
+                $importOffsetModel->setOffset($sourceEntityKey, $nextOffset);
             }
 
             $importRunModel->update($runId, [
                 'status' => $status,
-                'checkpoint' => (string) $batch->nextOffset,
+                'checkpoint' => (string) $nextOffset,
                 'fetched_count' => $counts['fetched'],
                 'inserted_count' => $counts['inserted'],
                 'updated_count' => $counts['updated'],
                 'skipped_count' => $counts['skipped'],
                 'error_count' => $counts['errors'],
-                'message' => $dryRun ? 'Dry-run execution.' : null,
+                'message' => $dryRun ? 'Dry-run execution.' : ($counts['errors'] > 0 ? 'Import stopped on first row error. Re-run to continue from current offset.' : null),
                 'finished_at' => date('Y-m-d H:i:s'),
             ]);
 
@@ -87,8 +89,8 @@ class TaxonomyImportOrchestrator
                 'entity' => $entityKey,
                 'status' => $status,
                 'offset' => $offset,
-                'next_offset' => $batch->nextOffset,
-                'has_more' => $batch->hasMore,
+                'next_offset' => $nextOffset,
+                'has_more' => $counts['errors'] > 0 ? true : $batch->hasMore,
                 'fetched' => $counts['fetched'],
                 'inserted' => $counts['inserted'],
                 'updated' => $counts['updated'],

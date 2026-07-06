@@ -90,16 +90,22 @@ class ImportOrchestrator
                 $total['skipped'] += $counts['skipped'];
                 $total['errors'] += $counts['errors'];
 
-                $processed += $counts['fetched'];
-                $checkpoint = $page->nextCheckpoint ?? $checkpoint;
-                $hasMore = $page->hasMore && $counts['fetched'] > 0;
+                $processed += (int) ($counts['processed'] ?? 0);
+                $checkpoint = $counts['errors'] > 0
+                    ? ($counts['last_checkpoint'] ?? $checkpoint)
+                    : ($counts['last_checkpoint'] ?? $page->nextCheckpoint ?? $checkpoint);
+                $hasMore = $counts['errors'] > 0 ? true : ($page->hasMore && $counts['fetched'] > 0);
 
                 if ($counts['fetched'] === 0) {
                     break;
                 }
+
+                if ($counts['errors'] > 0) {
+                    break;
+                }
             }
 
-            $status = $total['errors'] > 0 ? 'partial' : 'success';
+            $status = $total['errors'] > 0 ? 'failed' : 'success';
 
             $importRunModel->update($runId, [
                 'status' => $status,
@@ -109,7 +115,7 @@ class ImportOrchestrator
                 'updated_count' => $total['updated'],
                 'skipped_count' => $total['skipped'],
                 'error_count' => $total['errors'],
-                'message' => $dryRun ? 'Dry-run execution.' : null,
+                'message' => $dryRun ? 'Dry-run execution.' : ($total['errors'] > 0 ? 'Import stopped on first row error. Re-run to continue from the last successful checkpoint.' : null),
                 'finished_at' => date('Y-m-d H:i:s'),
             ]);
 

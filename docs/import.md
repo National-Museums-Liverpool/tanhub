@@ -47,7 +47,7 @@ Optional parameters:
 - `--limit n` to override the default limit of 5000 records per fetch.
 - `--offset n` to override the offset
 
-Notes
+## Notes
 
 Taxonomic hierarchy is populated through dynamic `<rank>_id` fields on `taxa`
 and `occurrences`, based on configured import ranks (for example
@@ -56,3 +56,10 @@ and `occurrences`, based on configured import ranks (for example
 For taxa imports, load related lookup data first (`recording_schemes`,
 `taxon_ranks` and `taxon_groups` at minimum), otherwise taxa rows may be
 skipped due to missing foreign key mappings.
+
+Configure the taxon groups that will be imported in your `env` file's
+`import.taxonRanks` setting.
+
+The importer is designed to stop on an error, allowing you to diagnose, fix
+then restart the process from where it left off.
+

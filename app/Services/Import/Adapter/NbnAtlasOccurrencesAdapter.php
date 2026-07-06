@@ -66,11 +66,14 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
                 continue;
             }
 
-            $normalized[] = $this->normalizeRecord($record);
+            $normalizedRecord = $this->normalizeRecord($record);
 
             if (isset($record[$checkpointField]) && is_scalar($record[$checkpointField])) {
                 $lastCheckpointValue = (string) $record[$checkpointField];
+                $normalizedRecord['_checkpoint'] = $lastCheckpointValue;
             }
+
+            $normalized[] = $normalizedRecord;
         }
 
         $hasMore = count($records) >= $limit;

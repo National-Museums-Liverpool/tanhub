@@ -19,10 +19,12 @@ class OccurrenceImportService
     {
         $counts = [
             'fetched' => count($records),
+            'processed' => 0,
             'inserted' => 0,
             'updated' => 0,
             'skipped' => 0,
             'errors' => 0,
+            'last_checkpoint' => null,
         ];
 
         if ($records === []) {
@@ -73,6 +75,8 @@ class OccurrenceImportService
                 // Business rule: skip iRecord records when importing from mixed feeds.
                 if ($sourceName !== '' && stripos($sourceName, 'irecord') !== false) {
                     $counts['skipped']++;
+                    $counts['processed']++;
+                    $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);
                     continue;
                 }
 
@@ -82,6 +86,8 @@ class OccurrenceImportService
 
                 if ($remoteId === '' || $taxonIdentifier === '' || $sciNameIdentifier === '') {
                     $counts['skipped']++;
+                    $counts['processed']++;
+                    $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);
                     continue;
                 }
 
@@ -90,6 +96,8 @@ class OccurrenceImportService
 
                 if ($taxonId === null || $taxonNameId === null) {
                     $counts['skipped']++;
+                    $counts['processed']++;
+                    $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);
                     continue;
                 }
 
@@ -98,6 +106,8 @@ class OccurrenceImportService
 
                 if ($gridRef === '' || $gridRef2km === '') {
                     $counts['skipped']++;
+                    $counts['processed']++;
+                    $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);
                     continue;
                 }
 
@@ -132,6 +142,9 @@ class OccurrenceImportService
                         $occurrenceModel->update((int) $existing['id'], $row);
                     }
 
+                    $counts['processed']++;
+                    $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);
+
                     continue;
                 }
 
@@ -140,8 +153,13 @@ class OccurrenceImportService
                 if (! $dryRun) {
                     $occurrenceModel->insert($row);
                 }
+
+                $counts['processed']++;
+                $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);
             } catch (\Throwable $exception) {
+                log_message('error', $exception->getMessage());
                 $counts['errors']++;
+                break;
             }
         }
 
@@ -200,5 +218,21 @@ class OccurrenceImportService
         $string = trim((string) $value);
 
         return $string === '' ? null : $string;
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     */
+    private function recordCheckpoint(array $record, ?string $fallback): ?string
+    {
+        $checkpoint = $record['_checkpoint'] ?? null;
+
+        if (! is_scalar($checkpoint)) {
+            return $fallback;
+        }
+
+        $checkpoint = trim((string) $checkpoint);
+
+        return $checkpoint !== '' ? $checkpoint : $fallback;
     }
 }

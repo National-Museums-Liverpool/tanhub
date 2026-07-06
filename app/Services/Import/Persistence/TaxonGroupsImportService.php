@@ -15,6 +15,7 @@ class TaxonGroupsImportService implements TaxonomyEntityImportServiceInterface
     {
         $counts = [
             'fetched' => count($rows),
+            'processed' => 0,
             'inserted' => 0,
             'updated' => 0,
             'skipped' => 0,
@@ -28,36 +29,48 @@ class TaxonGroupsImportService implements TaxonomyEntityImportServiceInterface
         $db = db_connect();
 
         foreach ($rows as $row) {
-            $externalKey = trim((string) ($row['external_key'] ?? ''));
-            $title = trim((string) ($row['title'] ?? ''));
+            try {
+                $externalKey = trim((string) ($row['external_key'] ?? ''));
+                $title = trim((string) ($row['title'] ?? ''));
+                $indiciaTaxonGroupId = (int) ($row['indicia_taxon_group_id'] ?? 0);
 
-            if ($externalKey === '' || $title === '') {
-                $counts['skipped']++;
-                continue;
-            }
-
-            $payload = [
-                'title' => substr($title, 0, 200),
-                'external_key' => substr($externalKey, 0, 100),
-                'deleted_at' => null,
-            ];
-
-            $existing = $db->table('taxon_groups')->where('external_key', $externalKey)->get()->getRowArray();
-
-            if ($existing === null) {
-                $counts['inserted']++;
-
-                if (! $dryRun) {
-                    $db->table('taxon_groups')->insert($payload);
+                if ($externalKey === '' || $indiciaTaxonGroupId === 0 || $title === '') {
+                    $counts['skipped']++;
+                    $counts['processed']++;
+                    continue;
                 }
 
-                continue;
-            }
+                $payload = [
+                    'title' => substr($title, 0, 200),
+                    'external_key' => substr($externalKey, 0, 100),
+                    'indicia_taxon_group_id' => $indiciaTaxonGroupId,
+                    'deleted_at' => null,
+                ];
 
-            $counts['updated']++;
+                $existing = $db->table('taxon_groups')->where('external_key', $externalKey)->get()->getRowArray();
 
-            if (! $dryRun) {
-                $db->table('taxon_groups')->where('id', $existing['id'])->update($payload);
+                if ($existing === null) {
+                    $counts['inserted']++;
+
+                    if (! $dryRun) {
+                        $db->table('taxon_groups')->insert($payload);
+                    }
+
+                    $counts['processed']++;
+                    continue;
+                }
+
+                $counts['updated']++;
+
+                if (! $dryRun) {
+                    $db->table('taxon_groups')->where('id', $existing['id'])->update($payload);
+                }
+
+                $counts['processed']++;
+            } catch (\Throwable $exception) {
+                log_message('error', $exception->getMessage());
+                $counts['errors']++;
+                break;
             }
         }
 

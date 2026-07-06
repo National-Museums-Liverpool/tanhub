@@ -15,6 +15,7 @@ class TaxaImportService implements TaxonomyEntityImportServiceInterface
     {
         $counts = [
             'fetched' => count($rows),
+            'processed' => 0,
             'inserted' => 0,
             'updated' => 0,
             'skipped' => 0,
@@ -27,17 +28,20 @@ class TaxaImportService implements TaxonomyEntityImportServiceInterface
 
         $db = db_connect();
 
-        if (! $dryRun) {
-            $db->transStart();
-        }
-
         try {
             $groupMap = $this->prepareLookup('taxon_groups', 'external_key', 'id');
             $schemeMap = $this->prepareLookup('recording_schemes', 'external_key', 'id');
             $taxonRankMap = $this->prepareLookup('taxon_ranks', 'rank', 'id');
             $taxonRanks = config('Import')->taxonRanks;
+        } catch (\Throwable $exception) {
+            log_message('error', $exception->getMessage());
+            $counts['errors']++;
 
-            foreach ($rows as $row) {
+            return $counts;
+        }
+
+        foreach ($rows as $row) {
+            try {
                 $taxonIdentifier = trim((string) ($row['taxon_identifier'] ?? ''));
                 $sciNameIdentifier = trim((string) ($row['scientific_name_identifier'] ?? ''));
                 $scientificName = trim((string) ($row['scientific_name'] ?? ''));
@@ -49,6 +53,7 @@ class TaxaImportService implements TaxonomyEntityImportServiceInterface
                 if ($taxonIdentifier === '' || $sciNameIdentifier === '' || $scientificName === '') {
                     log_message('info', 'Skipping taxa row due to missing required fields: ' . var_export($row, TRUE));
                     $counts['skipped']++;
+                    $counts['processed']++;
                     continue;
                 }
 
@@ -59,6 +64,7 @@ class TaxaImportService implements TaxonomyEntityImportServiceInterface
                 if ($groupId === null) {
                     log_message('info', 'Skipping taxa row due to missing taxon group: ' . var_export($row, TRUE));
                     $counts['skipped']++;
+                    $counts['processed']++;
                     continue;
                 }
 
@@ -92,8 +98,7 @@ class TaxaImportService implements TaxonomyEntityImportServiceInterface
                     if (!empty($higherTaxaInRow[$parentTaxonRank])) {
                         $taxaPayload[$rankColumn] = $this->lookupParentTaxon($higherTaxaInRow[$parentTaxonRank]->organism_key) ?? null;
                     }
-                    else
-                    {
+                    else {
                         $taxaPayload[$rankColumn] = null;
                     }
                 }
@@ -122,21 +127,11 @@ class TaxaImportService implements TaxonomyEntityImportServiceInterface
                 }
                 if ($dryRun) {
                 }
-            }
-
-            if (! $dryRun) {
-                $db->transComplete();
-
-                if (! $db->transStatus()) {
-                    throw new \RuntimeException('Taxa import transaction failed.');
-                }
-            }
-        } catch (\Throwable $exception) {
-            log_message('error', $exception->getMessage());
-            $counts['errors']++;
-
-            if (! $dryRun && $db->transStatus()) {
-                $db->transRollback();
+                $counts['processed']++;
+            } catch (\Throwable $exception) {
+                log_message('error', $exception->getMessage());
+                $counts['errors']++;
+                break;
             }
         }
 

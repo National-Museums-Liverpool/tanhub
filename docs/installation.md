@@ -34,6 +34,23 @@
    # CI_ENVIRONMENT = production
    ```
 
+### Optional API throttling configuration
+
+TanHub API throttling has separate limits for anonymous and authenticated requests.
+If needed, add or override these keys in your `.env` file:
+
+```dotenv
+api.rateLimitAnonymousCapacity = 20
+api.rateLimitAnonymousSeconds = 20
+api.rateLimitAuthenticatedCapacity = 60
+api.rateLimitAuthenticatedSeconds = 20
+```
+
+- `api.rateLimitAnonymousCapacity`: number of anonymous requests allowed per window.
+- `api.rateLimitAnonymousSeconds`: window size in seconds for anonymous requests.
+- `api.rateLimitAuthenticatedCapacity`: number of authenticated requests allowed per window.
+- `api.rateLimitAuthenticatedSeconds`: window size in seconds for authenticated requests.
+
 ## Linking to an Indicia warehouse
 
 1. On the warehouse, select Admin > REST API Clients from the menu.

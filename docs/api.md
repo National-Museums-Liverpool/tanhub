@@ -28,6 +28,8 @@ TanHub should expose conventional JWT lifecycle endpoints under the API base pat
 
 Request and response payload shapes can follow standard OAuth2/JWT-compatible patterns used by the TanHub auth layer.
 
+For `POST /api/v1/auth/token`, the request uses `username` and `password`; `username` should contain the account email address.
+
 ### 2.2 Bearer token usage
 
 Clients send:
@@ -37,14 +39,37 @@ Clients send:
 ## 3. Rate Limiting
 
 - Unauthenticated default limit: `20 requests per 20 seconds` per IP
+- Authenticated default limit: `60 requests per 20 seconds` per authenticated user token identity
 - Limits must be configurable
 - Authenticated request limits must be configurable and can be higher than anonymous limits
 
-Rate-limit headers should be included where feasible, for example:
+Rate-limit headers are returned by the API throttling filter:
 
 - `X-RateLimit-Limit`
-- `X-RateLimit-Remaining`
 - `X-RateLimit-Reset`
+
+When throttled, the API returns HTTP `429 Too Many Requests` with:
+
+- `Retry-After`
+- `application/problem+json` body describing the rate-limit condition
+
+### 3.1 Environment configuration
+
+These environment keys control throttling behavior:
+
+- `api.rateLimitAnonymousCapacity` (default `20`)
+- `api.rateLimitAnonymousSeconds` (default `20`)
+- `api.rateLimitAuthenticatedCapacity` (default `60`)
+- `api.rateLimitAuthenticatedSeconds` (default `20`)
+
+Example:
+
+```dotenv
+api.rateLimitAnonymousCapacity = 30
+api.rateLimitAnonymousSeconds = 60
+api.rateLimitAuthenticatedCapacity = 120
+api.rateLimitAuthenticatedSeconds = 60
+```
 
 ## 4. Resource Model
 

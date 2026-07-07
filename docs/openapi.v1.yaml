@@ -469,6 +469,7 @@ components:
       properties:
         username:
           type: string
+          description: Account email address.
         password:
           type: string
           format: password

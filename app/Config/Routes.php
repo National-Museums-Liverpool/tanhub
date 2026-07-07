@@ -20,7 +20,11 @@ $routes->get('recording-schemes/(:num)', 'RecordingSchemes::show/$1', ['filter' 
 $routes->get('geographic-regions', 'GeographicRegions::index', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('geographic-regions/(:num)', 'GeographicRegions::show/$1', ['filter' => ['session', 'group:admin,manager']]);
 
-$routes->group('api/v1', static function ($routes): void {
+$routes->group('api/v1', ['filter' => 'api-rate-limit'], static function ($routes): void {
+	$routes->post('auth/token', 'Api\\V1\\AuthTokens::token');
+	$routes->post('auth/token/refresh', 'Api\\V1\\AuthTokens::refresh');
+	$routes->post('auth/token/revoke', 'Api\\V1\\AuthTokens::revoke');
+
 	$routes->get('data-sources', 'Api\\V1\\DataSources::index');
 	$routes->get('data-sources/(:segment)', 'Api\\V1\\DataSources::show/$1');
 

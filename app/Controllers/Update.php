@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Database\Seeds\DataSourcesSeeder;
 use CodeIgniter\Database\Exceptions\DatabaseException;
 use CodeIgniter\HTTP\RedirectResponse;
+use Config\Import as ImportConfig;
 
 /**
  * Handles database migrations and seed updates from the web UI.
@@ -44,6 +45,7 @@ class Update extends BaseController
         try {
             $this->runMigrations();
             $this->runSeeders();
+            $this->runInitialGeographicRegionImport();
         } catch (\Throwable $exception) {
             return redirect()->back()->withInput()->with('error', $exception->getMessage());
         }
@@ -79,5 +81,29 @@ class Update extends BaseController
     {
         $seeder = \Config\Database::seeder();
         $seeder->call(DataSourcesSeeder::class);
+    }
+
+    /**
+     * Import configured geographic regions from the Indicia report.
+     */
+    private function runInitialGeographicRegionImport(): void
+    {
+        $config = config(ImportConfig::class);
+        $regions = $config->geographicRegions;
+        $warehouseUrl = trim((string) $config->indiciaWarehouseUrl);
+        $username = trim((string) $config->indiciaUsername);
+        $secret = trim((string) $config->indiciaSecret);
+
+        if (! is_array($regions) || $regions === [] || $warehouseUrl === '' || $username === '' || $secret === '') {
+            return;
+        }
+
+        service('taxonomyImportOrchestrator')->run(
+            'indicia',
+            'geographic_regions',
+            max(1, count($regions)),
+            false,
+            0,
+        );
     }
 }

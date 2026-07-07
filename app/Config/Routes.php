@@ -17,6 +17,8 @@ $routes->get('taxa/(:num)/edit', 'Taxa::edit/$1', ['filter' => ['session', 'grou
 $routes->post('taxa/(:num)/edit', 'Taxa::update/$1', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('recording-schemes', 'RecordingSchemes::index', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('recording-schemes/(:num)', 'RecordingSchemes::show/$1', ['filter' => ['session', 'group:admin,manager']]);
+$routes->get('geographic-regions', 'GeographicRegions::index', ['filter' => ['session', 'group:admin,manager']]);
+$routes->get('geographic-regions/(:num)', 'GeographicRegions::show/$1', ['filter' => ['session', 'group:admin,manager']]);
 
 
 service('auth')->routes($routes);

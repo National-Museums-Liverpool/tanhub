@@ -28,7 +28,7 @@ class Services extends BaseService
             return static::getSharedInstance('occurrenceSourceAdapterFactory');
         }
 
-        return new \App\Services\Import\Adapter\OccurrenceSourceAdapterFactory(config(\Config\Import::class));
+        return new \App\Services\Import\Adapter\OccurrenceSourceAdapterFactory(new \Config\Import());
     }
 
     /**
@@ -41,7 +41,7 @@ class Services extends BaseService
         }
 
         return new \App\Services\Import\ImportOrchestrator(
-            config(\Config\Import::class),
+            new \Config\Import(),
             static::occurrenceSourceAdapterFactory(false),
             new \App\Services\Import\Persistence\OccurrenceImportService(),
             model(\App\Models\ImportRunModel::class),
@@ -58,7 +58,7 @@ class Services extends BaseService
             return static::getSharedInstance('taxonomySourceAdapterFactory');
         }
 
-        return new \App\Services\Import\Adapter\TaxonomySourceAdapterFactory(config(\Config\Import::class));
+        return new \App\Services\Import\Adapter\TaxonomySourceAdapterFactory(new \Config\Import());
     }
 
     /**
@@ -71,7 +71,7 @@ class Services extends BaseService
         }
 
         return new \App\Services\Import\TaxonomyImportOrchestrator(
-            config(\Config\Import::class),
+            new \Config\Import(),
             static::taxonomySourceAdapterFactory(false),
             new \App\Services\Import\Persistence\TaxonomyImportService(),
             model(\App\Models\ImportRunModel::class),

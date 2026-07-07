@@ -21,10 +21,38 @@ feasible.
 
 ```mermaid
 erDiagram
+  data_sources {
+    id BIGINT pk
+  }
+
+  geographic_regions {
+    BIGINT id PK
+  }
+
+  geographic_regions_occurrences {
+    BIGINT geographic_region_id PK
+    BIGINT occurrence_id PK
+  }
+
+  occurrences {
+    BIGINT id PK
+    BIGINT taxon_id FK
+    BIGINT taxon_name_id FK
+    BIGINT data_source_id FK
+  }
+
+  recording_schemes {
+    BIGINT id PK
+  }
+
   taxa {
     BIGINT id PK
     BIGINT taxon_group_id FK
     BIGINT recording_scheme_id FK
+  }
+
+  taxon_groups {
+    BIGINT id PK
   }
 
   taxon_names {
@@ -32,33 +60,19 @@ erDiagram
     BIGINT taxon_id FK
   }
 
-  taxon_groups {
-    BIGINT id PK
-  }
-
-  recording_schemes {
-    BIGINT id PK
-  }
-
-  occurrences {
-    BIGINT id PK
-    BIGINT taxon_id FK
-    BIGINT taxon_name_id FK
-  }
-
   recording_schemes |o--o{ taxa: records
   taxa ||--|{ taxon_names: has
   taxa }o--o| taxa: "rank parent(s)"
   taxa }o--|| taxon_groups: "belongs to"
+  occurrences }o--|| data_sources: "was provided by"
+  occurrences }o--o{ geographic_regions: "Is within or intersects"
   occurrences }o--|| taxa: "is a record of"
   occurrences }o--o| taxa: "rank parent(s)"
   occurrences }o--|| taxon_names: "was recorded as"
 
 ```
 
-## Table details
-
-### Dynamic taxon rank foreign keys
+## Dynamic taxon rank foreign keys
 
 Taxonomic hierarchy is stored using dynamic foreign-key columns on both the
 `taxa` and `occurrences` tables. During installation, a column is added for
@@ -68,6 +82,94 @@ each configured taxon rank using the pattern `<rank>_id` (for example
 Each of these columns is a foreign key to `taxa.id`, so rank relationships are
 modelled as self-references to the `taxa` table rather than separate
 `orders`, `superfamilies`, or `families` tables.
+
+## Table details
+
+### data_sources
+
+Lookup table for names of data sources such as iRecord and the NBN Atlas.
+
+| Column | Type         | Null | Key | Default        | Description                                                           |
+| ------ | ------------ | ---- | --- | -------------- | --------------------------------------------------------------------- |
+| id     | BIGINT       | NO   | PK  | AUTO_INCREMENT | Primary key                                                           |
+| abbr   | VARCHAR(10)  | NO   | UQ  |                | A unique one-word abbreviation for the data source, e..g NBN, iRecord |
+| title  | VARCHAR(100) | NO   | UQ  |                | Name of the source of records, e.g. NBN Atlas or iRecord              |
+| url    | VARCHAR(100) | NO   |     |                | Associated website URL
+
+### geographic_regions
+
+Lists the regions which define the geographical constraint of the data held in
+the system. Populated using the `.env` file's import.locations and
+`import.locationType` configurations from the Indicia database. The `id` field
+is populated with the location code rather than being an auto-increment.
+
+| Column                      | Type         | Null | Key | Default           | Description                                                               |
+| --------------------------- | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------------------- |
+| id                          | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                               |
+| higher_geography_identifier | INT          | NO   | UQ  |                   | Identifier for the geographic region, e.g. a Watsonian Vice-County number |
+| higher_geography            | VARCHAR(100) | NO   |     |                   | Geographic name of the region                                             |
+| location_type               | VARCHAR(100) |      |     |                   | Name of the type of location                                              |
+| data_source_id              | BIGINT       | NO   | FK  |                   | ID of the source of the data (iRecord, NBN Atlas etc)                     |
+| created_at                  | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                             |
+| updated_at                  | DATETIME     | YES  |     |                   | Update date                                                               |
+| deleted_at                  | DATETIME     | YES  |     |                   | Deletion date                                                             |
+
+### geographic_regions_occurrences
+
+Join table linking occurrences to the regions they were recorded in. Typically
+contains a single region per occurrence but may contain multiple if occurrences
+overlap region boundaries.
+
+| Column               | Type   | Null | Key    | Default | Description                                                |
+| -------------------- | ------ | ---- | ------ | ------- | ---------------------------------------------------------- |
+| geographic_region_id | BIGINT | NO   | PK, FK |         | Compound primary key and foreign key to geographic regions |
+| occurrence_id        | BIGINT | NO   | PK, FK |         | Compound primary key and foreign key to occurrences        |
+
+
+### occurrences
+
+Occurrence data stored in the system, imported from a source such as iRecord or
+the NBN Atlas. A reference to the original record is held in the unique_key
+field, constructed from the data_source abbreviation, then a colon, then the
+unique ID of the record as loaded from the remote system.
+
+| Column                             | Type         | Null | Key | Default           | Description                                                                           |
+| ---------------------------------- | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------------------------------- |
+| id                                 | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                                           |
+| unique_key                         | VARCHAR(100) | NO   | UQ  |                   | Unique key for the API                                                                |
+| taxon_id                           | BIGINT       | NO   | FK  |                   | ID of the taxon this is a record of                                                   |
+| <rank>_id                          | BIGINT       | YES  | FK  |                   | Dynamic taxon-rank FK (for each configured rank), references `taxa.id`               |
+| taxon_name_id                      | BIGINT       | NO   | FK  |                   | ID of the name given for this occurrence which may be accepted, synonym or vernacular |
+| from_date                          | DATE         | YES  |     |                   | Start of the date range that covers the record                                        |
+| to_date                            | DATE         | YES  |     |                   | End of the date range that covers the record                                          |
+| grid_ref                           | VARCHAR(20)  | NO   |     |                   | OSGB grid reference                                                                   |
+| grid_ref_2km                       | CHAR(5)      | NO   |     |                   | 2km (DINTY) grid ref that best fits the record                                        |
+| locality                           | VARCHAR(255) | YES  |     |                   | Site name associated with the record                                                  |
+| recorded_by                        | VARCHAR(255) | NO   |     |                   | Name of the person or agent that recorded the occurrence                              |
+| identified_by                      | VARCHAR(255) | YES  |     |                   | Name of person or agent that made the identification                                  |
+| identification_verification_status | VARCHAR(2)   | NO   |     |                   | Verification status code, compatible with iRecord codes                               |
+| sex                                | VARCHAR(20)  | YES  |     |                   | Sex of the organism if known                                                          |
+| life_stage                         | VARCHAR(20)  | YES  |     |                   | Life stage of the organism if known                                                   |
+| organism_quantity                  | VARCHAR(20)  | YES  |     |                   | A number or enumeration value for the quantity of organisms                           |
+| data_source_id                     | BIGINT       | NO   | FK  |                   | ID of the source of the data (iRecord, NBN Atlas etc)                                 |
+| blocked                            | TINYINT(1)   | NO   |     |                   | 1 = occurrence is blocked from reports, 0 otherwise                                   |
+| blocked_reason                     | TEXT         | YES  |     |                   | Reason given for blocking the record                                                  |
+| created_at                         | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                         |
+| updated_at                         | DATETIME     | YES  |     |                   | Update date                                                                           |
+| deleted_at                         | DATETIME     | YES  |     |                   | Deletion date                                                                         |                                              |
+
+### recording_schemes
+
+Recording schemes associated with taxa loaded in the system.
+
+| Column       | Type         | Null | Key | Default           | Description                                                                                                   |
+| ------------ | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------------------------------------------------------- |
+| id           | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                                                                   |
+| external_key | CHAR(16)     | NO   | UQ  |                   | Key for the scheme as assigned from the external database the data were imported from, unique key for the API |
+| title        | VARCHAR(100) | NO   |     |                   | Title of the scheme                                                                                           |
+| created_at   | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                                                 |
+| updated_at   | DATETIME     | YES  |     |                   | Update date                                                                                                   |
+| deleted_at   | DATETIME     | YES  |     |                   | Deletion date                                                                                                 |
 
 ### taxa
 
@@ -106,6 +208,22 @@ following applies:
 - conservation_status will hold the GB Red List designation's abbreviation,
   e.g. LC or VU.
 
+### taxon_groups
+
+Taxon reporting categories. The friendly field allows a local override for
+taxon groups imported from other databases such as UKSI.
+
+| Column                 | Type         | Null | Key | Default           | Description                                                                                                  |
+| ---------------------- | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| id                     | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                                                                  |
+| title                  | VARCHAR(200) | NO   |     |                   | Official taxon group name                                                                                    |
+| friendly               | VARCHAR(200) | YES  |     |                   | Friendly version of the taxon group name                                                                     |
+| external_key           | VARCHAR(100) | YES  | UQ  |                   | Key for the group as assigned from the external database the data were imported from, unique key for the API |
+| indicia_taxon_group_id | BIGINT       | NO   | UQ  |                   | ID of the group from the Indicia database, used to make import from Indicia more efficient and robust        |
+| created_at             | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                                                |
+| updated_at             | DATETIME     | YES  |     |                   | Update date                                                                                                  |
+| deleted_at             | DATETIME     | YES  |     |                   | Deletion date          |
+
 ### taxon_names
 
 Provides a full list of species and other taxon names that are searchable when
@@ -135,75 +253,3 @@ Note that when TanHub is linked to UKSI as its source of taxonomic data, the
 following applies:
 - scientific_name_identifier will contain the unique identifier of this taxon
   name, the `TAXON_VERSION_KEY`.
-
-### taxon_groups
-
-Taxon reporting categories. The friendly field allows a local override for
-taxon groups imported from other databases such as UKSI.
-
-| Column                 | Type         | Null | Key | Default           | Description                                                                                                  |
-| ---------------------- | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------------------------------------------------------ |
-| id                     | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                                                                  |
-| title                  | VARCHAR(200) | NO   |     |                   | Official taxon group name                                                                                    |
-| friendly               | VARCHAR(200) | YES  |     |                   | Friendly version of the taxon group name                                                                     |
-| external_key           | VARCHAR(100) | YES  | UQ  |                   | Key for the group as assigned from the external database the data were imported from, unique key for the API |
-| indicia_taxon_group_id | BIGINT       | NO   | UQ  |                   | ID of the group from the Indicia database, used to make import from Indicia more efficient and robust        |
-| created_at             | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                                                |
-| updated_at             | DATETIME     | YES  |     |                   | Update date                                                                                                  |
-| deleted_at             | DATETIME     | YES  |     |                   | Deletion date                                                                                                |
-
-### recording_schemes
-
-Recording schemes associated with taxa loaded in the system.
-
-| Column       | Type         | Null | Key | Default           | Description                                                                                                   |
-| ------------ | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------------------------------------------------------- |
-| id           | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                                                                   |
-| external_key | CHAR(16)     | NO   | UQ  |                   | Key for the scheme as assigned from the external database the data were imported from, unique key for the API |
-| title        | VARCHAR(100) | NO   |     |                   | Title of the scheme                                                                                           |
-| created_at   | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                                                 |
-| updated_at   | DATETIME     | YES  |     |                   | Update date                                                                                                   |
-| deleted_at   | DATETIME     | YES  |     |                   | Deletion date                                                                                                 |
-
-### occurrences
-
-Occurrence data stored in the system, imported from a source such as iRecord or
-the NBN Atlas. A reference to the original record is held in the unique_key
-field, constructed from the data_source abbreviation, then a colon, then the
-unique ID of the record as loaded from the remote system.
-
-| Column                             | Type         | Null | Key | Default           | Description                                                                           |
-| ---------------------------------- | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------------------------------- |
-| id                                 | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                                           |
-| unique_key                         | VARCHAR(100) | NO   | UQ  |                   | Unique key for the API                                                                |
-| taxon_id                           | BIGINT       | NO   | FK  |                   | ID of the taxon this is a record of                                                   |
-| <rank>_id                          | BIGINT       | YES  | FK  |                   | Dynamic taxon-rank FK (for each configured rank), references `taxa.id`               |
-| taxon_name_id                      | BIGINT       | NO   | FK  |                   | ID of the name given for this occurrence which may be accepted, synonym or vernacular |
-| from_date                          | DATE         | YES  |     |                   | Start of the date range that covers the record                                        |
-| to_date                            | DATE         | YES  |     |                   | End of the date range that covers the record                                          |
-| grid_ref                           | VARCHAR(20)  | NO   |     |                   | OSGB grid reference                                                                   |
-| grid_ref_2km                       | CHAR(5)      | NO   |     |                   | 2km (DINTY) grid ref that best fits the record                                        |
-| locality                           | VARCHAR(255) | YES  |     |                   | Site name associated with the record                                                  |
-| recorded_by                        | VARCHAR(255) | NO   |     |                   | Name of the person or agent that recorded the occurrence                              |
-| identified_by                      | VARCHAR(255) | YES  |     |                   | Name of person or agent that made the identification                                  |
-| identification_verification_status | VARCHAR(2)   | NO   |     |                   | Verification status code, compatible with iRecord codes                               |
-| sex                                | VARCHAR(20)  | YES  |     |                   | Sex of the organism if known                                                          |
-| life_stage                         | VARCHAR(20)  | YES  |     |                   | Life stage of the organism if known                                                   |
-| organism_quantity                  | VARCHAR(20)  | YES  |     |                   | A number or enumeration value for the quantity of organisms                           |
-| data_source_id                     | BIGINT       | NO   | FK  |                   | ID of the source of the data (iRecord, NBN Atlas etc)                                 |
-| blocked                            | TINYINT(1)   | NO   |     |                   | 1 = occurrence is blocked from reports, 0 otherwise                                   |
-| blocked_reason                     | TEXT         | YES  |     |                   | Reason given for blocking the record                                                  |
-| created_at                         | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                         |
-| updated_at                         | DATETIME     | YES  |     |                   | Update date                                                                           |
-| deleted_at                         | DATETIME     | YES  |     |                   | Deletion date                                                                         |
-
-### data_sources
-
-Lookup table for names of data sources such as iRecord and the NBN Atlas.
-
-| Column | Type         | Null | Key | Default        | Description                                                           |
-| ------ | ------------ | ---- | --- | -------------- | --------------------------------------------------------------------- |
-| id     | BIGINT       | NO   | PK  | AUTO_INCREMENT | Primary key                                                           |
-| abbr   | VARCHAR(10)  | NO   | UQ  |                | A unique one-word abbreviation for the data source, e..g NBN, iRecord |
-| title  | VARCHAR(100) | NO   | UQ  |                | Name of the source of records, e.g. NBN Atlas or iRecord              |
-| url    | VARCHAR(100) | NO   |     |                | Associated website URL                                                |

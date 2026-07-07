@@ -24,6 +24,7 @@ class TaxonomyImportService
             'taxon_groups' => new TaxonGroupsImportService(),
             'recording_schemes' => new RecordingSchemesImportService(),
             'taxon_ranks' => new TaxonRanksImportService(),
+            'geographic_regions' => new GeographicRegionsImportService(),
             'taxa' => new TaxaImportService(),
             default => throw new InvalidArgumentException('Unsupported taxonomy entity: ' . $entity),
         };

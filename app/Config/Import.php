@@ -90,6 +90,24 @@ class Import extends BaseConfig
         'insect - caddis fly (Trichoptera)',
     ];
 
+     /**
+     * Taxonomic groups we allow reporting at.
+     *
+     * @var array|string
+     */
+    public array|string $geographicRegions = [
+        'Cheshire',
+        'South Lancashire',
+        'West Lancashire',
+    ];
+
+    /**
+     * Geographic region location type.
+     *
+     * @var string
+     */
+    public string $geographicRegionLocationType = 'Vice County';
+
     /**
      * Constructor loads array overrides from .env.
      */
@@ -107,6 +125,16 @@ class Import extends BaseConfig
         if (is_string($configuredTaxonGroups) && $configuredTaxonGroups !== '') {
             $this->taxonGroups = array_map('trim', str_getcsv($configuredTaxonGroups));
             log_message('info', 'Configured taxon groups overriden: ' . $configuredTaxonGroups);
+        }
+        $configuredGeographicRegions = env('import.geographicRegions');
+        if (is_string($configuredGeographicRegions) && $configuredGeographicRegions !== '') {
+            $this->geographicRegions = array_map('trim', str_getcsv($configuredGeographicRegions));
+            log_message('info', 'Configured geographic regions overriden: ' . $configuredGeographicRegions);
+        }
+        $configuredGeographicRegionLocationType = env('import.geographicRegionLocationType');
+        if (is_string($configuredGeographicRegionLocationType) && $configuredGeographicRegionLocationType !== '') {
+            $this->geographicRegionLocationType = trim($configuredGeographicRegionLocationType);
+            log_message('info', 'Configured geographic region location type overriden: ' . $configuredGeographicRegionLocationType);
         }
     }
 

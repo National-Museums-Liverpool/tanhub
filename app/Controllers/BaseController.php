@@ -81,6 +81,12 @@ abstract class BaseController extends Controller
                   'style' => 'link',
                 ],
                 [
+                  'label' => 'Geographic regions',
+                  'url' => site_url('geographic-regions'),
+                  'path' => 'geographic-regions',
+                  'style' => 'link',
+                ],
+                [
                     'label' => 'Login',
                     'url' => site_url('login'),
                     'path' => 'login',
@@ -124,14 +130,14 @@ abstract class BaseController extends Controller
 
           if (! $isTaxonGroupManager) {
             $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
-              return ! isset($item['path']) || ! in_array($item['path'], ['taxon-groups', 'orders', 'superfamilies', 'families', 'recording-schemes']);
+              return ! isset($item['path']) || ! in_array($item['path'], ['taxon-groups', 'orders', 'superfamilies', 'families', 'recording-schemes', 'geographic-regions']);
             });
           }
         }
         else {
           // Hide logout for guests, since it is not relevant.
           $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
-            return ! isset($item['path']) || ! in_array($item['path'], ['logout', 'taxon-groups', 'orders', 'superfamilies', 'families', 'recording-schemes']);
+            return ! isset($item['path']) || ! in_array($item['path'], ['logout', 'taxon-groups', 'orders', 'superfamilies', 'families', 'recording-schemes', 'geographic-regions']);
           });
         }
 

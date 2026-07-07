@@ -15,11 +15,16 @@
   * Config\Email.fromEmail
   * Config\Email.fromName
   * Settings for database.default
-6. Optionally, uncomment import.taxonRanks in the env file to provide a custom
-   list of ranks which you will be able to report against.
-7. Visit /update to run the database migrations and seed baseline lookup data.
-8. Visit /setup-admin-user to define an admin user.
-9. Uncomment this line in your .env file if this is a production server by
+6. Optionally, uncomment `import.taxonRanks` in the env file to provide a
+   custom list of ranks which you will be able to report against.
+7. Optionally, uncomment `import.geographicRegions` and
+   `import.geographicRegionLocationType` in the env file to provide a custom
+   list of regions which you will be able to report against. These must be
+   present on the Indicia server's locations table with matching names and with
+   the location type matching the configuration setting.
+8. Visit /update to run the database migrations and seed baseline lookup data.
+9. Visit /setup-admin-user to define an admin user.
+10. Uncomment this line in your .env file if this is a production server by
    removing the # at the start:
    ```
    # CI_ENVIRONMENT = production
@@ -34,11 +39,12 @@
 5. Elasticsearch endpoint es.
 6. Click allow reports, and paste the following in:
    ```
-   projects/tanhub/taxon_ranks.xml
-   projects/tanhub/taxon_groups.xml
+   projects/tanhub/geographic_regions.xml
    projects/tanhub/recording_schemes.xml
    projects/tanhub/taxa.xml
+   projects/tanhub/taxon_groups.xml
    projects/tanhub/taxon_names.xml
+   projects/tanhub/taxon_ranks.xml
    ```
 7. Click Save.
 8. Set up the Import section in your .env file.

@@ -94,3 +94,8 @@ Config\Import.nbnUrl = ''
 # group names that contain commas.
 # import.taxonGroups = 'insect - moth,insect - caddis fly (Trichoptera)'
 
+# Uncomment to alter the geographic regions to import data for. They will be
+# loaded from Indicia's locations table.
+# import.geographicRegions = 'Cheshire,South Lancashire,West Lancashire';
+# import.geographicRegionLocationType = 'Vice County';
+

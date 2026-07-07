@@ -31,6 +31,7 @@ until it returns "Has more: no".
 
 ```bash
 $ php spark import:taxonomy --source indicia --entity recording_schemes
+$ php spark import:taxonomy --source indicia --entity geographic_regions
 $ php spark import:taxonomy --source indicia --entity taxon_groups
 $ php spark import:taxonomy --source indicia --entity taxon_ranks
 $ php spark import:taxonomy --source indicia --entity taxa

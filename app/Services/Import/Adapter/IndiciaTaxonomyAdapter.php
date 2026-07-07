@@ -11,7 +11,10 @@ use RuntimeException;
  */
 class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
 {
-    private readonly \Config\Import $importConfig;
+    /**
+     * @var \Config\Import|array<string, mixed>
+     */
+    private readonly mixed $importConfig;
 
     /**
      * @var array<string, mixed>
@@ -29,6 +32,7 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
         'recording_schemes',
         'taxon_groups',
         'taxon_ranks',
+        'geographic_regions',
     ];
 
     /**
@@ -88,6 +92,7 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
             case 'taxon_groups':
             case 'taxa':
             case 'taxon_ranks':
+            case 'geographic_regions':
                 $report = $entity;
                 break;
 
@@ -108,6 +113,10 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
         }
         if ($report === 'taxon_groups' || $report === 'taxa') {
             $query['taxon_groups'] = $this->getConfigListAsReportParam('taxonGroups');
+        }
+        if ($report === 'geographic_regions') {
+            $query['geographic_regions'] = $this->getConfigListAsReportParam('geographicRegions');
+            $query['location_type'] = trim((string) ($this->importConfig->geographicRegionLocationType ?? ''));
         }
 
         $user = (string) ($this->importConfig->indiciaUsername ?? '');
@@ -146,6 +155,7 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
             'recording_schemes' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseRecordingSchemeRow($row), $rows), 'external_key'),
             'taxon_groups' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseTaxonGroupRow($row), $rows), 'external_key'),
             'taxon_ranks' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseTaxonRankRow($row), $rows), 'rank'),
+            'geographic_regions' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseGeographicRegionRow($row), $rows), 'higher_geography_identifier'),
             default => [],
         };
     }
@@ -258,6 +268,22 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
             'conservation_status' => $row['conservation_status'] ?? null,
             'taxon_rank' => (string) ($row['taxon_rank'] ?? ''),
             'higher_taxa' => json_decode((string) ($row['higher_taxa'] ?? '[]')),
+        ];
+    }
+
+    /**
+     * Cleanup a geographic region row read from Indicia.
+     *
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function normaliseGeographicRegionRow(array $row): array
+    {
+        return [
+            'higher_geography_identifier' => (int) ($row['higher_geography_identifier'] ?? $row['location_code'] ?? $row['code'] ?? $row['id'] ?? 0),
+            'higher_geography' => trim((string) ($row['higher_geography'] ?? $row['name'] ?? $row['title'] ?? '')),
+            'location_type' => trim((string) ($row['location_type'] ?? $this->importConfig->geographicRegionLocationType ?? '')),
+            'data_source_abbr' => strtoupper((string) ($this->sourceConfig['abbr'] ?? 'IREC')),
         ];
     }
 

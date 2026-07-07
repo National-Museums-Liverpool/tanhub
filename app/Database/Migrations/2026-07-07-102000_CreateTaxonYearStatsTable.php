@@ -21,6 +21,10 @@ class CreateTaxonYearStatsTable extends Migration
                 'unsigned'       => true,
                 'auto_increment' => true,
             ],
+            'uuid' => [
+                'type'       => 'CHAR',
+                'constraint' => 36,
+            ],
             'taxon_id' => [
                 'type'       => 'BIGINT',
                 'constraint' => 20,
@@ -52,6 +56,8 @@ class CreateTaxonYearStatsTable extends Migration
         ]);
 
         $this->forge->addKey('id', true);
+    $this->forge->addUniqueKey('uuid');
+    $this->forge->addUniqueKey(['taxon_id', 'geographic_region_id', 'year']);
         $this->forge->addKey('taxon_id');
         $this->forge->addKey('geographic_region_id');
         $this->forge->addKey('year');

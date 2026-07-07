@@ -66,6 +66,7 @@ class CreateTaxonNamesTable extends Migration
 
         $this->forge->addKey('id', true);
         $this->forge->addUniqueKey('uuid');
+        $this->forge->addUniqueKey(['taxon_id', 'scientific_name_identifier']);
         $this->forge->addKey('taxon_id');
         $this->forge->addKey('scientific_name_identifier');
 

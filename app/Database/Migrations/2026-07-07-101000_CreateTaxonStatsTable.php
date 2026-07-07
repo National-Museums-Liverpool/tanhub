@@ -21,6 +21,10 @@ class CreateTaxonStatsTable extends Migration
                 'unsigned'       => true,
                 'auto_increment' => true,
             ],
+            'uuid' => [
+                'type'       => 'CHAR',
+                'constraint' => 36,
+            ],
             'taxon_id' => [
                 'type'       => 'BIGINT',
                 'constraint' => 20,
@@ -75,6 +79,8 @@ class CreateTaxonStatsTable extends Migration
         ]);
 
         $this->forge->addKey('id', true);
+    $this->forge->addUniqueKey('uuid');
+    $this->forge->addUniqueKey(['taxon_id', 'geographic_region_id']);
         $this->forge->addKey('taxon_id');
         $this->forge->addKey('geographic_region_id');
         $this->forge->addForeignKey('taxon_id', 'taxa', 'id', 'CASCADE', 'RESTRICT');

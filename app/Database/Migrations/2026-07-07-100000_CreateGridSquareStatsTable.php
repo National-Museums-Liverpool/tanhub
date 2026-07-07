@@ -21,6 +21,10 @@ class CreateGridSquareStatsTable extends Migration
                 'unsigned'       => true,
                 'auto_increment' => true,
             ],
+            'uuid' => [
+                'type'       => 'CHAR',
+                'constraint' => 36,
+            ],
             'square' => [
                 'type'       => 'VARCHAR',
                 'constraint' => 12,
@@ -61,6 +65,7 @@ class CreateGridSquareStatsTable extends Migration
         ]);
 
         $this->forge->addKey('id', true);
+    $this->forge->addUniqueKey('uuid');
         $this->forge->addUniqueKey(['square', 'geographic_region_id']);
         $this->forge->addKey('square');
         $this->forge->addKey('geographic_region_id');

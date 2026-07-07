@@ -5,9 +5,9 @@ namespace App\Services\Import\Persistence;
 use InvalidArgumentException;
 
 /**
- * Routes taxonomy persistence to entity-specific import services.
+ * Routes import persistence to entity-specific import services.
  */
-class TaxonomyImportService
+class EntityImportService
 {
     /**
      * @param array<int, array<string, mixed>> $rows
@@ -18,7 +18,7 @@ class TaxonomyImportService
         return $this->serviceFor($entity)->import($rows, $dryRun);
     }
 
-    private function serviceFor(string $entity): TaxonomyEntityImportServiceInterface
+    private function serviceFor(string $entity): EntityImportServiceInterface
     {
         return match (strtolower($entity)) {
             'taxon_groups' => new TaxonGroupsImportService(),
@@ -26,7 +26,7 @@ class TaxonomyImportService
             'taxon_ranks' => new TaxonRanksImportService(),
             'geographic_regions' => new GeographicRegionsImportService(),
             'taxa' => new TaxaImportService(),
-            default => throw new InvalidArgumentException('Unsupported taxonomy entity: ' . $entity),
+            default => throw new InvalidArgumentException('Unsupported import entity: ' . $entity),
         };
     }
 }

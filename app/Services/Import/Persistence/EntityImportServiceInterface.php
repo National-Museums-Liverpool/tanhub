@@ -3,9 +3,9 @@
 namespace App\Services\Import\Persistence;
 
 /**
- * Contract for taxonomy entity persistence services.
+ * Contract for import entity persistence services.
  */
-interface TaxonomyEntityImportServiceInterface
+interface EntityImportServiceInterface
 {
     /**
      * @param array<int, array<string, mixed>> $rows

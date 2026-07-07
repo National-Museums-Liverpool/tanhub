@@ -7,9 +7,9 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * Fetches normalised taxonomy rows from Indicia report endpoints.
+ * Fetches normalized import rows from Indicia report endpoints.
  */
-class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
+class IndiciaImportAdapter implements ImportSourceAdapterInterface
 {
     /**
      * @var \Config\Import|array<string, mixed>
@@ -48,24 +48,23 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
     }
 
     /**
-     * Fetch one normalised taxonomy batch.
+     * Fetch one normalized import batch.
      */
-    public function fetchBatch(string $entity, int $limit, int $offset): TaxonomyImportBatch
+    public function fetchBatch(string $entity, int $limit, int $offset): ImportBatch
     {
         $entityKey = strtolower($entity);
 
         if (! in_array($entityKey, self::SUPPORTED_ENTITIES, true)) {
-            throw new InvalidArgumentException('Unsupported taxonomy entity: ' . $entity);
+            throw new InvalidArgumentException('Unsupported import entity: ' . $entity);
         }
 
         $batchLimit = max(1, $limit);
         $batchOffset = max(0, $offset);
 
-        // @todo: Fetch correct report depending on $entity.
-        $rawRows = $this->fetchTaxonomyData($entityKey, $batchLimit, $batchOffset);
+        $rawRows = $this->fetchImportData($entityKey, $batchLimit, $batchOffset);
         $normalisedRows = $this->normaliseRows($entityKey, $rawRows);
 
-        return new TaxonomyImportBatch(
+        return new ImportBatch(
             entity: $entityKey,
             offset: $batchOffset,
             rows: $normalisedRows,
@@ -77,16 +76,14 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function fetchTaxonomyData(string $entity, int $limit, int $offset): array
+    private function fetchImportData(string $entity, int $limit, int $offset): array
     {
         $url = rtrim((string) ($this->importConfig->indiciaWarehouseUrl ?? ''), '/');
 
         if ($url === '') {
-            throw new RuntimeException('Indicia taxonomy source URL is not configured.');
+            throw new RuntimeException('Indicia import source URL is not configured.');
         }
 
-        // Fetch correct report depending on $entity. Higher taxa share the
-        // same report.
         switch ($entity) {
             case 'recording_schemes':
             case 'taxon_groups':
@@ -97,12 +94,11 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
                 break;
 
             default:
-                throw new InvalidArgumentException('Unsupported taxonomy entity: ' . $entity);
+                throw new InvalidArgumentException('Unsupported import entity: ' . $entity);
         }
 
         $endpoint = "$url/index.php/services/rest/reports/projects/tanhub/$report.xml";
         $query = [
-            // Fetch indicia.import.proj_id from config, default to empty string if not set.
             'proj_id' => (string) ($this->importConfig->indiciaProjId ?? ''),
             'taxon_list_id' => (int) ($this->importConfig->indiciaTaxonListId ?? 0),
             'limit' => $limit,
@@ -111,8 +107,11 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
         if ($report === 'taxon_ranks' || $report === 'taxa') {
             $query['taxon_ranks'] = $this->getConfigListAsReportParam('taxonRanks');
         }
-        if ($report === 'taxon_groups' || $report === 'taxa') {
+        if ($report === 'taxon_groups') {
             $query['taxon_groups'] = $this->getConfigListAsReportParam('taxonGroups');
+        }
+        if ($report === 'taxa') {
+            $query['taxon_group_ids'] = $this->getTaxonGroupIndiciaIdsAsReportParam();
         }
         if ($report === 'geographic_regions') {
             $query['geographic_regions'] = $this->getConfigListAsReportParam('geographicRegions');
@@ -132,16 +131,34 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
         ]);
 
         if ($response->getStatusCode() >= 400) {
-            throw new RuntimeException('Indicia taxonomy request failed with status ' . $response->getStatusCode() . ' for entity ' . $entity);
+            throw new RuntimeException('Indicia request failed with status ' . $response->getStatusCode() . ' for entity ' . $entity);
         }
 
         $payload = json_decode($response->getBody(), true);
 
         if (! is_array($payload)) {
-            throw new RuntimeException('Indicia taxonomy response was not valid JSON for entity ' . $entity);
+            throw new RuntimeException('Indicia response was not valid JSON for entity ' . $entity);
         }
 
         return $this->extractRecords($payload);
+    }
+
+    /**
+     * Fetch the Indicia IDs of taxon groups for a report filter param.
+     *
+     * @return string
+     */
+    private function getTaxonGroupIndiciaIdsAsReportParam(): string {
+      // Load the taxon groups from the MySQL database and extract the Indicia
+      // IDs for the configured groups.
+      $db = db_connect();
+      $taxonGroups = $db->table('taxon_groups')
+        ->select('indicia_taxon_group_id')
+        ->where('deleted_at', null)
+        ->whereIn('title', $this->importConfig->taxonGroups ?? [])
+        ->get()
+        ->getResultArray();
+      return implode(',', array_column($taxonGroups, 'indicia_taxon_group_id'));
     }
 
     /**
@@ -161,7 +178,7 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
     }
 
     /**
-     * Convert the list of ranks or taxon groups to a CSV style param for an Indicia report.
+     * Convert the list of ranks or groups to a CSV style param for an Indicia report.
      *
      * @return string
      */
@@ -169,15 +186,15 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
     {
         $configured = $this->importConfig->$configName ?? [];
 
-        $ranks = is_array($configured) ? $configured : explode(',', (string) $configured);
+        $values = is_array($configured) ? $configured : explode(',', (string) $configured);
         $normalised = [];
 
-        foreach ($ranks as $rank) {
-            if (! is_scalar($rank)) {
+        foreach ($values as $value) {
+            if (! is_scalar($value)) {
                 continue;
             }
 
-            $name = trim((string) $rank, " \t\n\r\0\x0B\"'");
+            $name = trim((string) $value, " \t\n\r\0\x0B\"'");
 
             if ($name === '') {
                 continue;
@@ -198,9 +215,9 @@ class IndiciaTaxonomyAdapter implements TaxonomySourceAdapterInterface
         if (isset($payload['data']) && is_array($payload['data'])) {
             return array_values(array_filter($payload['data'], 'is_array'));
         }
+
         return [];
     }
-
 
     /**
      * Cleanup a taxon group row read from Indicia.

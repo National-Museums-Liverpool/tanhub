@@ -5,7 +5,7 @@ namespace App\Services\Import\Persistence;
 /**
  * Persists normalized taxon group rows.
  */
-class TaxonGroupsImportService implements TaxonomyEntityImportServiceInterface
+class TaxonGroupsImportService implements EntityImportServiceInterface
 {
     /**
      * @param array<int, array<string, mixed>> $rows

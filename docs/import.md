@@ -3,7 +3,6 @@
 ## Todo
 
 - [] Taxon names
-- [] Taxon group filter on taxon loading
 - [] taxa.id_difficulty
 - [] taxa.rarity_group_name default
 - [] taxa blocking UI
@@ -24,21 +23,21 @@ dataReourceName contains 'iRecord' will be ignored.
 
 ## Running the import
 
-### Initial taxonomy setup
+### Initial Indicia setup
 
-Empty the import_offsets table if refreshing the taxonomy. Repeat each command
+Empty the import_offsets table if refreshing the import. Repeat each command
 until it returns "Has more: no".
 
 ```bash
-$ php spark import:taxonomy --source indicia --entity recording_schemes
-$ php spark import:taxonomy --source indicia --entity geographic_regions
-$ php spark import:taxonomy --source indicia --entity taxon_groups
-$ php spark import:taxonomy --source indicia --entity taxon_ranks
-$ php spark import:taxonomy --source indicia --entity taxa
+$ php spark import:indicia --source indicia --entity recording_schemes
+$ php spark import:indicia --source indicia --entity geographic_regions
+$ php spark import:indicia --source indicia --entity taxon_groups
+$ php spark import:indicia --source indicia --entity taxon_ranks
+$ php spark import:indicia --source indicia --entity taxa
 ```
 
 Mandatory parameters:
-- `--source indicia` to specify the type of server that will provide taxonomy
+- `--source indicia` to specify the type of server that will provide import
   data. Currently only supports indicia.
 - `--entity n` - set to the name of the entity that you want to import, as per
   the examples above.

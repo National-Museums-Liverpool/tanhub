@@ -5,7 +5,7 @@ namespace App\Services\Import\Persistence;
 /**
  * Persists normalized geographic region rows.
  */
-class GeographicRegionsImportService implements TaxonomyEntityImportServiceInterface
+class GeographicRegionsImportService implements EntityImportServiceInterface
 {
     /**
      * @param array<int, array<string, mixed>> $rows

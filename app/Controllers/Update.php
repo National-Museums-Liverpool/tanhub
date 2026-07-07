@@ -98,7 +98,7 @@ class Update extends BaseController
             return;
         }
 
-        service('taxonomyImportOrchestrator')->run(
+        service('importOrchestrator')->run(
             'indicia',
             'geographic_regions',
             max(1, count($regions)),

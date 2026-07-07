@@ -22,10 +22,10 @@ class Services extends BaseService
     /**
      * Occurrence import adapter factory service.
      */
-    public static function occurrenceSourceAdapterFactory(bool $getShared = true): \App\Services\Import\Adapter\OccurrenceSourceAdapterFactory
+    public static function occurrenceImportSourceAdapterFactory(bool $getShared = true): \App\Services\Import\Adapter\OccurrenceSourceAdapterFactory
     {
         if ($getShared) {
-            return static::getSharedInstance('occurrenceSourceAdapterFactory');
+            return static::getSharedInstance('occurrenceImportSourceAdapterFactory');
         }
 
         return new \App\Services\Import\Adapter\OccurrenceSourceAdapterFactory(new \Config\Import());
@@ -34,15 +34,15 @@ class Services extends BaseService
     /**
      * Occurrence import orchestrator service.
      */
-    public static function importOrchestrator(bool $getShared = true): \App\Services\Import\ImportOrchestrator
+    public static function occurrenceImportOrchestrator(bool $getShared = true): \App\Services\Import\ImportOrchestrator
     {
         if ($getShared) {
-            return static::getSharedInstance('importOrchestrator');
+            return static::getSharedInstance('occurrenceImportOrchestrator');
         }
 
         return new \App\Services\Import\ImportOrchestrator(
             new \Config\Import(),
-            static::occurrenceSourceAdapterFactory(false),
+            static::occurrenceImportSourceAdapterFactory(false),
             new \App\Services\Import\Persistence\OccurrenceImportService(),
             model(\App\Models\ImportRunModel::class),
             model(\App\Models\DataSourceModel::class),
@@ -52,28 +52,28 @@ class Services extends BaseService
     /**
      * Taxonomy import adapter factory service.
      */
-    public static function taxonomySourceAdapterFactory(bool $getShared = true): \App\Services\Import\Adapter\TaxonomySourceAdapterFactory
+    public static function importSourceAdapterFactory(bool $getShared = true): \App\Services\Import\Adapter\ImportSourceAdapterFactory
     {
         if ($getShared) {
-            return static::getSharedInstance('taxonomySourceAdapterFactory');
+            return static::getSharedInstance('importSourceAdapterFactory');
         }
 
-        return new \App\Services\Import\Adapter\TaxonomySourceAdapterFactory(new \Config\Import());
+        return new \App\Services\Import\Adapter\ImportSourceAdapterFactory(new \Config\Import());
     }
 
     /**
      * Taxonomy import orchestrator service.
      */
-    public static function taxonomyImportOrchestrator(bool $getShared = true): \App\Services\Import\TaxonomyImportOrchestrator
+    public static function importOrchestrator(bool $getShared = true): \App\Services\Import\EntityImportOrchestrator
     {
         if ($getShared) {
-            return static::getSharedInstance('taxonomyImportOrchestrator');
+            return static::getSharedInstance('importOrchestrator');
         }
 
-        return new \App\Services\Import\TaxonomyImportOrchestrator(
+        return new \App\Services\Import\EntityImportOrchestrator(
             new \Config\Import(),
-            static::taxonomySourceAdapterFactory(false),
-            new \App\Services\Import\Persistence\TaxonomyImportService(),
+            static::importSourceAdapterFactory(false),
+            new \App\Services\Import\Persistence\EntityImportService(),
             model(\App\Models\ImportRunModel::class),
             model(\App\Models\DataSourceModel::class),
             model(\App\Models\ImportOffsetModel::class),

@@ -3,9 +3,9 @@
 namespace App\Services\Import\Adapter;
 
 /**
- * Represents one normalized taxonomy entity batch.
+ * Represents one normalized import batch.
  */
-class TaxonomyImportBatch
+class ImportBatch
 {
     /**
      * @param array<int, array<string, mixed>> $rows

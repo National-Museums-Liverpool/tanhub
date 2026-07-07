@@ -5,21 +5,21 @@ namespace App\Services\Import;
 use App\Models\DataSourceModel;
 use App\Models\ImportOffsetModel;
 use App\Models\ImportRunModel;
-use App\Services\Import\Adapter\TaxonomySourceAdapterFactory;
-use App\Services\Import\Persistence\TaxonomyImportService;
+use App\Services\Import\Adapter\ImportSourceAdapterFactory;
+use App\Services\Import\Persistence\EntityImportService;
 use Config\Import as ImportConfig;
 use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * Orchestrates taxonomy adapter fetch, persistence, and offset tracking.
+ * Orchestrates import adapter fetch, persistence, and offset tracking.
  */
-class TaxonomyImportOrchestrator
+class EntityImportOrchestrator
 {
     public function __construct(
         private readonly ?ImportConfig $config = null,
-        private readonly ?TaxonomySourceAdapterFactory $adapterFactory = null,
-        private readonly ?TaxonomyImportService $taxonomyImportService = null,
+        private readonly ?ImportSourceAdapterFactory $adapterFactory = null,
+        private readonly ?EntityImportService $entityImportService = null,
         private readonly ?ImportRunModel $importRunModel = null,
         private readonly ?DataSourceModel $dataSourceModel = null,
         private readonly ?ImportOffsetModel $importOffsetModel = null,
@@ -32,8 +32,8 @@ class TaxonomyImportOrchestrator
     public function run(string $sourceKey, string $entity, int $limit, bool $dryRun = false, ?int $offsetOverride = null): array
     {
         $config = $this->config ?? config(ImportConfig::class);
-        $adapterFactory = $this->adapterFactory ?? new TaxonomySourceAdapterFactory($config);
-        $taxonomyImportService = $this->taxonomyImportService ?? new TaxonomyImportService();
+        $adapterFactory = $this->adapterFactory ?? new ImportSourceAdapterFactory($config);
+        $entityImportService = $this->entityImportService ?? new EntityImportService();
         $importRunModel = $this->importRunModel ?? model(ImportRunModel::class);
         $dataSourceModel = $this->dataSourceModel ?? model(DataSourceModel::class);
         $importOffsetModel = $this->importOffsetModel ?? model(ImportOffsetModel::class);
@@ -48,9 +48,10 @@ class TaxonomyImportOrchestrator
         if ($dataSource === null) {
             throw new InvalidArgumentException('No data_sources row found for abbr: ' . $sourceAbbr);
         }
+
         log_message('info', 'Offset override: ' . ($offsetOverride === null ? 'null' : (string) $offsetOverride));
-        $offset = $offsetOverride === NULL ? $this->lastSuccessfulOffset($importOffsetModel, $sourceEntityKey) : $offsetOverride;
-        log_message('info', 'Starting taxonomy import for source: ' . $source . ', entity: ' . $entityKey . ', limit: ' . $limit . ', offset: ' . $offset . ', dry-run: ' . ($dryRun ? 'true' : 'false'));
+        $offset = $offsetOverride === null ? $this->lastSuccessfulOffset($importOffsetModel, $sourceEntityKey) : $offsetOverride;
+        log_message('info', 'Starting import for source: ' . $source . ', entity: ' . $entityKey . ', limit: ' . $limit . ', offset: ' . $offset . ', dry-run: ' . ($dryRun ? 'true' : 'false'));
 
         $runId = (int) $importRunModel->insert([
             'source_key' => $sourceEntityKey,
@@ -62,7 +63,7 @@ class TaxonomyImportOrchestrator
 
         try {
             $batch = $adapterFactory->make($source)->fetchBatch($entityKey, $limit, $offset);
-            $counts = $taxonomyImportService->import($entityKey, $batch->rows, $dryRun);
+            $counts = $entityImportService->import($entityKey, $batch->rows, $dryRun);
             $processed = max(0, min((int) ($counts['processed'] ?? 0), (int) ($counts['fetched'] ?? 0)));
             $nextOffset = $offset + $processed;
 
@@ -106,7 +107,7 @@ class TaxonomyImportOrchestrator
                 'finished_at' => date('Y-m-d H:i:s'),
             ]);
 
-            throw new RuntimeException('Taxonomy import failed: ' . $exception->getMessage(), 0, $exception);
+            throw new RuntimeException('Import failed: ' . $exception->getMessage(), 0, $exception);
         }
     }
 

@@ -62,7 +62,7 @@ class ImportOccurrences extends BaseCommand
         $checkpoint = (string) ($params['since'] ?? CLI::getOption('since') ?? '');
         $dryRun = array_key_exists('dry-run', $params) || (bool) CLI::getOption('dry-run');
 
-        $orchestrator = service('importOrchestrator');
+        $orchestrator = service('occurrenceImportOrchestrator');
 
         CLI::write('Starting import for source: ' . $source, 'yellow');
         CLI::write('Limit: ' . $limit . ' | Page size: ' . $pageSize . ($dryRun ? ' | DRY-RUN' : ''), 'yellow');

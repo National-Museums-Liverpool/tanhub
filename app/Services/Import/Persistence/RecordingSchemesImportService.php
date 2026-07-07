@@ -5,7 +5,7 @@ namespace App\Services\Import\Persistence;
 /**
  * Persists normalized recording scheme rows.
  */
-class RecordingSchemesImportService implements TaxonomyEntityImportServiceInterface
+class RecordingSchemesImportService implements EntityImportServiceInterface
 {
     /**
      * @param array<int, array<string, mixed>> $rows

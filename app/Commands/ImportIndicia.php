@@ -7,9 +7,9 @@ use CodeIgniter\CLI\CLI;
 use Throwable;
 
 /**
- * Imports taxonomy records from configured external taxonomy sources.
+ * Imports records from configured external data sources.
  */
-class ImportTaxonomy extends BaseCommand
+class ImportIndicia extends BaseCommand
 {
     /**
      * @var string
@@ -19,23 +19,23 @@ class ImportTaxonomy extends BaseCommand
     /**
      * @var string
      */
-    protected $name = 'import:taxonomy';
+    protected $name = 'import:indicia';
 
     /**
      * @var string
      */
-    protected $description = 'Import taxonomy from Indicia into local lookup/taxa tables.';
+    protected $description = 'Import records from Indicia into local lookup/taxa tables.';
 
     /**
      * @var string
      */
-    protected $usage = 'import:taxonomy [options]';
+    protected $usage = 'import:indicia [options]';
 
     /**
      * @var array<string, string>
      */
     protected $options = [
-        '--source' => 'Taxonomy source key: indicia. Required.',
+        '--source' => 'Source key: indicia. Required.',
         '--entity' => 'Entity to import: recording_schemes, taxon_groups, taxon_ranks, geographic_regions, taxa.',
         '--limit' => 'Maximum records to fetch in this run.',
         '--offset' => 'Optional offset override. Defaults to stored offset for the source/entity.',
@@ -43,7 +43,7 @@ class ImportTaxonomy extends BaseCommand
     ];
 
     /**
-     * Execute the taxonomy import command.
+     * Execute the import command.
      */
     public function run(array $params)
     {
@@ -57,9 +57,9 @@ class ImportTaxonomy extends BaseCommand
         log_message('info', 'Offset: ' . ($offset === null ? 'null' : (string) $offset));
         $dryRun = $this->resolveFlag($params, 'dry-run');
 
-        $orchestrator = service('taxonomyImportOrchestrator');
+        $orchestrator = service('importOrchestrator');
 
-        CLI::write('Starting taxonomy import for source: ' . $source, 'yellow');
+        CLI::write('Starting import for source: ' . $source, 'yellow');
         CLI::write('Entity: ' . $entity . ' | Limit: ' . $limit . ($offset !== null ? ' | OFFSET: ' . $offset : '') . ($dryRun ? ' | DRY-RUN' : ''), 'yellow');
 
         try {
@@ -71,7 +71,7 @@ class ImportTaxonomy extends BaseCommand
                 $offset,
             );
 
-            CLI::write('Taxonomy import completed with status: ' . $result['status'], 'green');
+            CLI::write('Import completed with status: ' . $result['status'], 'green');
             CLI::write('Run ID: ' . $result['run_id'], 'green');
             CLI::write('Entity: ' . $result['entity'], 'green');
             CLI::write('Fetched: ' . $result['fetched'] . ', Inserted: ' . $result['inserted'] . ', Updated: ' . $result['updated'] . ', Skipped: ' . $result['skipped'] . ', Errors: ' . $result['errors']);

@@ -16,15 +16,19 @@
   * Config\Email.fromName
   * Settings for database.default
 6. Optionally, uncomment `import.taxonRanks` in the env file to provide a
-   custom list of ranks which you will be able to report against.
-7. Optionally, uncomment `import.geographicRegions` and
+   custom list of taxonomic ranks which you will be able to report against
+   which should match the ranks used in UKSI.
+7. Optionally, uncomment `import.taxonGroups` in the env file to provide a
+   custom list of groups which you will be able to report against. These
+   should match UKSI output group names.
+8. Optionally, uncomment `import.geographicRegions` and
    `import.geographicRegionLocationType` in the env file to provide a custom
    list of regions which you will be able to report against. These must be
    present on the Indicia server's locations table with matching names and with
    the location type matching the configuration setting.
-8. Visit /update to run the database migrations and seed baseline lookup data.
-9. Visit /setup-admin-user to define an admin user.
-10. Uncomment this line in your .env file if this is a production server by
+9. Visit /update to run the database migrations and seed baseline lookup data.
+10. Visit /setup-admin-user to define an admin user.
+11. Uncomment this line in your .env file if this is a production server by
    removing the # at the start:
    ```
    # CI_ENVIRONMENT = production
@@ -57,3 +61,5 @@
    grant select on recording_scheme_taxa to indicia_report_user;
    grant select on recording_schemes to indicia_report_user;
    ```
+
+Now see (the import documentation)[import.md] for instructions on importing the data.

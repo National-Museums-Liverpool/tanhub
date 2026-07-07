@@ -1,0 +1,500 @@
+openapi: 3.1.0
+info:
+  title: TanHub API
+  version: 1.0.0
+  description: >-
+    Starter OpenAPI specification for the TanHub read-only REST API.
+servers:
+  - url: /api/v1
+    description: API v1
+security:
+  - bearerAuth: []
+tags:
+  - name: data-sources
+  - name: geographic-regions
+  - name: occurrences
+  - name: recording-schemes
+  - name: taxa
+  - name: taxon-groups
+  - name: taxon-names
+  - name: grid-square-stats
+  - name: taxon-stats
+  - name: taxon-year-stats
+paths:
+  /data-sources:
+    get:
+      tags: [data-sources]
+      summary: List data sources
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          $ref: '#/components/responses/ListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /data-sources/{abbr}:
+    get:
+      tags: [data-sources]
+      summary: Get one data source
+      parameters:
+        - name: abbr
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/ItemResponse'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /geographic-regions:
+    get:
+      tags: [geographic-regions]
+      summary: List geographic regions
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          $ref: '#/components/responses/ListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /geographic-regions/{higher_geography_identifier}:
+    get:
+      tags: [geographic-regions]
+      summary: Get one geographic region
+      parameters:
+        - name: higher_geography_identifier
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          $ref: '#/components/responses/ItemResponse'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /occurrences:
+    get:
+      tags: [occurrences]
+      summary: List occurrences
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          $ref: '#/components/responses/ListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /occurrences/{unique_key}:
+    get:
+      tags: [occurrences]
+      summary: Get one occurrence
+      parameters:
+        - name: unique_key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/ItemResponse'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /recording-schemes:
+    get:
+      tags: [recording-schemes]
+      summary: List recording schemes
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          $ref: '#/components/responses/ListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /recording-schemes/{external_key}:
+    get:
+      tags: [recording-schemes]
+      summary: Get one recording scheme
+      parameters:
+        - name: external_key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/ItemResponse'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /taxa:
+    get:
+      tags: [taxa]
+      summary: List taxa
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          $ref: '#/components/responses/ListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /taxa/{taxon_identifier}:
+    get:
+      tags: [taxa]
+      summary: Get one taxon
+      parameters:
+        - name: taxon_identifier
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/ItemResponse'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /taxon-groups:
+    get:
+      tags: [taxon-groups]
+      summary: List taxon groups
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          $ref: '#/components/responses/ListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /taxon-groups/{external_key}:
+    get:
+      tags: [taxon-groups]
+      summary: Get one taxon group
+      parameters:
+        - name: external_key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/ItemResponse'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /taxon-names:
+    get:
+      tags: [taxon-names]
+      summary: List taxon names
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          $ref: '#/components/responses/ListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /taxon-names/{uuid}:
+    get:
+      tags: [taxon-names]
+      summary: Get one taxon name
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/ItemResponse'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /grid-square-stats:
+    get:
+      tags: [grid-square-stats]
+      summary: List grid square stats
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          $ref: '#/components/responses/ListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /grid-square-stats/{uuid}:
+    get:
+      tags: [grid-square-stats]
+      summary: Get one grid square stats row
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/ItemResponse'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /taxon-stats:
+    get:
+      tags: [taxon-stats]
+      summary: List taxon stats
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          $ref: '#/components/responses/ListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /taxon-stats/{uuid}:
+    get:
+      tags: [taxon-stats]
+      summary: Get one taxon stats row
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/ItemResponse'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /taxon-year-stats:
+    get:
+      tags: [taxon-year-stats]
+      summary: List taxon year stats
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          $ref: '#/components/responses/ListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /taxon-year-stats/{uuid}:
+    get:
+      tags: [taxon-year-stats]
+      summary: Get one taxon year stats row
+      parameters:
+        - name: uuid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/ItemResponse'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /auth/token:
+    post:
+      summary: Obtain JWT access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+      responses:
+        '200':
+          description: Token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /auth/token/refresh:
+    post:
+      summary: Refresh JWT access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /auth/token/revoke:
+    post:
+      summary: Revoke JWT token(s)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeTokenRequest'
+      responses:
+        '204':
+          description: Token revoked
+        default:
+          $ref: '#/components/responses/Problem'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      description: Page size, default 1000, max 10000 (configurable).
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 10000
+        default: 1000
+    Offset:
+      name: offset
+      in: query
+      description: Zero-based offset.
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    Sort:
+      name: sort
+      in: query
+      description: Sort fields, e.g. sort=field,-other_field
+      schema:
+        type: string
+  responses:
+    ListResponse:
+      description: Paginated list response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ListEnvelope'
+    ItemResponse:
+      description: Single item response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ResourceItem'
+    Problem:
+      description: RFC 9457 problem response
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    ListEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceItem'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+        links:
+          $ref: '#/components/schemas/PaginationLinks'
+    PaginationMeta:
+      type: object
+      required: [limit, offset, count, total]
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        total:
+          type: integer
+    PaginationLinks:
+      type: object
+      required: [self, next, prev]
+      properties:
+        self:
+          type: string
+        next:
+          type:
+            - string
+            - 'null'
+        prev:
+          type:
+            - string
+            - 'null'
+    ResourceItem:
+      type: object
+      additionalProperties: true
+      description: Generic placeholder resource schema for the starter contract.
+    Problem:
+      type: object
+      required: [title, status]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+    TokenRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+    RefreshTokenRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+    RevokeTokenRequest:
+      type: object
+      properties:
+        refresh_token:
+          type: string
+        access_token:
+          type: string
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+        refresh_token:
+          type: string

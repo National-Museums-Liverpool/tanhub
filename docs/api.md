@@ -208,3 +208,894 @@ Errors use `application/problem+json` based on RFC 9457/7807.
 
 - No write operations (`POST`, `PUT`, `PATCH`, `DELETE`) on core data resources
 - No direct public endpoints for join tables
+
+## 13. Resource Reference
+
+This section provides a practical reference for each resource with:
+
+- unique identifier field
+- exposed fields for response payloads
+- filterable fields
+- example list queries
+
+All list endpoints also support `limit`, `offset`, and `sort`.
+
+Example payloads intentionally reuse a small set of sample identifiers where practical:
+
+- `NHMSYS0021054498` (Bombus terrestris)
+- `NHMSYS0021700001` (Andrena hattorfiana)
+- `NHMSYS0021900211` (Coccinella septempunctata)
+
+### 13.1 data-sources
+
+- Path: `GET /api/v1/data-sources`
+- Item path: `GET /api/v1/data-sources/{abbr}`
+- Unique identifier: `abbr`
+- Exposed fields: `abbr`, `title`, `url`
+- Filterable fields: `abbr`, `title`, `url`
+
+Examples:
+
+- Request: `/api/v1/data-sources?abbr[eq]=NBN`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"abbr": "NBN",
+			"title": "NBN Atlas",
+			"url": "https://nbnatlas.org"
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 1
+	},
+	"links": {
+		"self": "/api/v1/data-sources?abbr[eq]=NBN",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+- Request: `/api/v1/data-sources?title[contains]=atlas&sort=title`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"abbr": "NBN",
+			"title": "NBN Atlas",
+			"url": "https://nbnatlas.org"
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 1
+	},
+	"links": {
+		"self": "/api/v1/data-sources?title[contains]=atlas&sort=title",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+### 13.2 geographic-regions
+
+- Path: `GET /api/v1/geographic-regions`
+- Item path: `GET /api/v1/geographic-regions/{higher_geography_identifier}`
+- Unique identifier: `higher_geography_identifier`
+- Exposed fields: `higher_geography_identifier`, `higher_geography`, `location_type`, `data_source_abbr`
+- Filterable fields: `higher_geography_identifier`, `higher_geography`, `location_type`, `data_source_abbr`
+
+Examples:
+
+- Request: `/api/v1/geographic-regions?higher_geography_identifier[in]=12,13,14`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"higher_geography_identifier": 12,
+			"higher_geography": "South Hampshire",
+			"location_type": "Vice County",
+			"data_source_abbr": "IREC"
+		},
+		{
+			"higher_geography_identifier": 13,
+			"higher_geography": "North Hampshire",
+			"location_type": "Vice County",
+			"data_source_abbr": "IREC"
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 2,
+		"total": 2
+	},
+	"links": {
+		"self": "/api/v1/geographic-regions?higher_geography_identifier[in]=12,13,14",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+- Request: `/api/v1/geographic-regions?higher_geography[contains]=hampshire&sort=higher_geography`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"higher_geography_identifier": 13,
+			"higher_geography": "North Hampshire",
+			"location_type": "Vice County",
+			"data_source_abbr": "IREC"
+		},
+		{
+			"higher_geography_identifier": 12,
+			"higher_geography": "South Hampshire",
+			"location_type": "Vice County",
+			"data_source_abbr": "IREC"
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 2,
+		"total": 2
+	},
+	"links": {
+		"self": "/api/v1/geographic-regions?higher_geography[contains]=hampshire&sort=higher_geography",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+### 13.3 occurrences
+
+- Path: `GET /api/v1/occurrences`
+- Item path: `GET /api/v1/occurrences/{unique_key}`
+- Unique identifier: `unique_key`
+- Exposed fields:
+	- `unique_key`, `taxon_identifier`, `taxon_name_uuid`, `from_date`, `to_date`, `grid_ref`, `grid_ref_2km`
+	- `locality`, `recorded_by`, `identified_by`, `identification_verification_status`
+	- `sex`, `life_stage`, `organism_quantity`, `data_source_abbr`
+	- dynamic taxon rank fields by configured rank identifier (for example `kingdom_taxon_identifier`, `family_taxon_identifier`)
+	- geographic-region helper fields (for example `higher_geography_identifier`) for join-based filtering
+- Filterable fields:
+	- all exposed occurrence fields above
+	- excludes: `blocked`, `blocked_reason`, `created_at`, `updated_at`, `deleted_at`
+
+Examples:
+
+- Request: `/api/v1/occurrences?taxon_identifier[eq]=NHMSYS0021054498`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"unique_key": "NBN:123456789",
+			"taxon_identifier": "NHMSYS0021054498",
+			"taxon_name_uuid": "3d77f8e7-e2e8-4d74-9d4d-cff4d11130e8",
+			"from_date": "2024-05-11",
+			"to_date": "2024-05-11",
+			"grid_ref": "SU123456",
+			"grid_ref_2km": "SU15A",
+			"locality": "Titchfield Haven",
+			"recorded_by": "J. Smith",
+			"identified_by": "A. Brown",
+			"identification_verification_status": "V",
+			"sex": "female",
+			"life_stage": "adult",
+			"organism_quantity": "1",
+			"data_source_abbr": "NBN",
+			"higher_geography_identifier": 13
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 57
+	},
+	"links": {
+		"self": "/api/v1/occurrences?taxon_identifier[eq]=NHMSYS0021054498",
+		"next": "/api/v1/occurrences?taxon_identifier[eq]=NHMSYS0021054498&limit=1000&offset=1000",
+		"prev": null
+	}
+}
+```
+
+- Request: `/api/v1/occurrences?higher_geography_identifier[eq]=13&from_date[gte]=2020-01-01&to_date[lte]=2024-12-31`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"unique_key": "iRecord:998877",
+			"taxon_identifier": "NHMSYS0021700001",
+			"taxon_name_uuid": "e8ac2ca7-5cb8-4b74-9b4e-8fd48b6605d5",
+			"from_date": "2022-07-03",
+			"to_date": "2022-07-03",
+			"grid_ref": "SU441100",
+			"grid_ref_2km": "SU41F",
+			"locality": "Winchester Meadows",
+			"recorded_by": "L. Patel",
+			"identified_by": "L. Patel",
+			"identification_verification_status": "C",
+			"sex": null,
+			"life_stage": "larva",
+			"organism_quantity": "3",
+			"data_source_abbr": "iRecord",
+			"higher_geography_identifier": 13
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 812
+	},
+	"links": {
+		"self": "/api/v1/occurrences?higher_geography_identifier[eq]=13&from_date[gte]=2020-01-01&to_date[lte]=2024-12-31",
+		"next": "/api/v1/occurrences?higher_geography_identifier[eq]=13&from_date[gte]=2020-01-01&to_date[lte]=2024-12-31&limit=1000&offset=1000",
+		"prev": null
+	}
+}
+```
+
+- Request: `/api/v1/occurrences?recorded_by[contains]=smith&sort=-from_date`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"unique_key": "NBN:77001122",
+			"taxon_identifier": "NHMSYS0021900211",
+			"taxon_name_uuid": "afddfae5-743a-4aaf-93f0-b0cbb5941a3a",
+			"from_date": "2025-08-19",
+			"to_date": "2025-08-19",
+			"grid_ref": "SU221870",
+			"grid_ref_2km": "SU28B",
+			"locality": "Romsey Common",
+			"recorded_by": "J. Smith",
+			"identified_by": "P. Clarke",
+			"identification_verification_status": "V",
+			"sex": "male",
+			"life_stage": "adult",
+			"organism_quantity": "2",
+			"data_source_abbr": "NBN",
+			"higher_geography_identifier": 12
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 146
+	},
+	"links": {
+		"self": "/api/v1/occurrences?recorded_by[contains]=smith&sort=-from_date",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+### 13.4 recording-schemes
+
+- Path: `GET /api/v1/recording-schemes`
+- Item path: `GET /api/v1/recording-schemes/{external_key}`
+- Unique identifier: `external_key`
+- Exposed fields: `external_key`, `title`
+- Filterable fields: `external_key`, `title`
+
+Examples:
+
+- Request: `/api/v1/recording-schemes?external_key[eq]=ABCD1234EFGH5678`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"external_key": "ABCD1234EFGH5678",
+			"title": "Hampshire Moth Scheme"
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 1
+	},
+	"links": {
+		"self": "/api/v1/recording-schemes?external_key[eq]=ABCD1234EFGH5678",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+- Request: `/api/v1/recording-schemes?title[contains]=moth&sort=title`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"external_key": "ABCD1234EFGH5678",
+			"title": "Hampshire Moth Scheme"
+		},
+		{
+			"external_key": "MNOP1234QRST5678",
+			"title": "National Moth Recording Scheme"
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 2,
+		"total": 2
+	},
+	"links": {
+		"self": "/api/v1/recording-schemes?title[contains]=moth&sort=title",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+### 13.5 taxa
+
+- Path: `GET /api/v1/taxa`
+- Item path: `GET /api/v1/taxa/{taxon_identifier}`
+- Unique identifier: `taxon_identifier`
+- Exposed fields:
+	- `taxon_identifier`, `scientific_name_identifier`, `scientific_name`, `scientific_name_authorship`, `vernacular_name`
+	- dynamic taxon rank fields by configured rank identifier
+	- `taxon_group_external_key`, `id_difficulty`, `recording_scheme_external_key`, `conservation_status`, `taxon_remarks`, `rarity_group_name`
+- Filterable fields:
+	- all exposed taxa fields above
+	- excludes: `blocked`, `blocked_reason`, `created_at`, `updated_at`, `deleted_at`
+
+Examples:
+
+- Request: `/api/v1/taxa?scientific_name[contains]=bombus`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"taxon_identifier": "NHMSYS0021054498",
+			"scientific_name_identifier": "TVK-001",
+			"scientific_name": "Bombus terrestris",
+			"scientific_name_authorship": "Linnaeus, 1758",
+			"vernacular_name": "Buff-tailed Bumblebee",
+			"taxon_group_external_key": "hymenoptera",
+			"id_difficulty": 2,
+			"recording_scheme_external_key": "ABCD1234EFGH5678",
+			"conservation_status": "LC",
+			"taxon_remarks": "Common and widespread.",
+			"rarity_group_name": "common"
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 24
+	},
+	"links": {
+		"self": "/api/v1/taxa?scientific_name[contains]=bombus",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+- Request: `/api/v1/taxa?conservation_status[in]=VU,EN,CR&sort=scientific_name`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"taxon_identifier": "NHMSYS0021700001",
+			"scientific_name_identifier": "TVK-8821",
+			"scientific_name": "Andrena hattorfiana",
+			"scientific_name_authorship": "Fabricius, 1775",
+			"vernacular_name": "Large Scabious Mining Bee",
+			"taxon_group_external_key": "hymenoptera",
+			"id_difficulty": 4,
+			"recording_scheme_external_key": "ABCD1234EFGH5678",
+			"conservation_status": "EN",
+			"taxon_remarks": "Declining species.",
+			"rarity_group_name": "scarce"
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 63
+	},
+	"links": {
+		"self": "/api/v1/taxa?conservation_status[in]=VU,EN,CR&sort=scientific_name",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+- Request: `/api/v1/taxa?taxon_group_external_key[eq]=beetles`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"taxon_identifier": "NHMSYS0021900211",
+			"scientific_name_identifier": "TVK-12021",
+			"scientific_name": "Coccinella septempunctata",
+			"scientific_name_authorship": "Linnaeus, 1758",
+			"vernacular_name": "Seven-spot Ladybird",
+			"taxon_group_external_key": "beetles",
+			"id_difficulty": 1,
+			"recording_scheme_external_key": "ABCD1234EFGH5678",
+			"conservation_status": "LC",
+			"taxon_remarks": null,
+			"rarity_group_name": "common"
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 425
+	},
+	"links": {
+		"self": "/api/v1/taxa?taxon_group_external_key[eq]=beetles",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+### 13.6 taxon-groups
+
+- Path: `GET /api/v1/taxon-groups`
+- Item path: `GET /api/v1/taxon-groups/{external_key}`
+- Unique identifier: `external_key`
+- Exposed fields: `external_key`, `title`, `friendly`, `indicia_taxon_group_id`
+- Filterable fields: `external_key`, `title`, `friendly`, `indicia_taxon_group_id`
+
+Examples:
+
+- Request: `/api/v1/taxon-groups?friendly[contains]=dragon`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"external_key": "odonata",
+			"title": "Odonata",
+			"friendly": "Dragonflies and Damselflies",
+			"indicia_taxon_group_id": 7
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 1
+	},
+	"links": {
+		"self": "/api/v1/taxon-groups?friendly[contains]=dragon",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+- Request: `/api/v1/taxon-groups?indicia_taxon_group_id[eq]=7`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"external_key": "odonata",
+			"title": "Odonata",
+			"friendly": "Dragonflies and Damselflies",
+			"indicia_taxon_group_id": 7
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 1
+	},
+	"links": {
+		"self": "/api/v1/taxon-groups?indicia_taxon_group_id[eq]=7",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+### 13.7 taxon-names
+
+- Path: `GET /api/v1/taxon-names`
+- Item path: `GET /api/v1/taxon-names/{uuid}`
+- Unique identifier: `uuid`
+- Exposed fields: `uuid`, `taxon_identifier`, `name`, `scientific_name_identifier`, `accepted`, `scientific`
+- Filterable fields: `uuid`, `taxon_identifier`, `name`, `scientific_name_identifier`, `accepted`, `scientific`
+
+Examples:
+
+- Request: `/api/v1/taxon-names?name[contains]=robin`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"uuid": "96fd5b7a-7ed8-4f2f-a84b-aec6fbfa632f",
+			"taxon_identifier": "NHMSYS0022000100",
+			"name": "European Robin",
+			"scientific_name_identifier": "TVK-ROBIN-01",
+			"accepted": 1,
+			"scientific": 0
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 3
+	},
+	"links": {
+		"self": "/api/v1/taxon-names?name[contains]=robin",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+- Request: `/api/v1/taxon-names?accepted[eq]=1&scientific[eq]=0`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"uuid": "96fd5b7a-7ed8-4f2f-a84b-aec6fbfa632f",
+			"taxon_identifier": "NHMSYS0022000100",
+			"name": "European Robin",
+			"scientific_name_identifier": "TVK-ROBIN-01",
+			"accepted": 1,
+			"scientific": 0
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 8124
+	},
+	"links": {
+		"self": "/api/v1/taxon-names?accepted[eq]=1&scientific[eq]=0",
+		"next": "/api/v1/taxon-names?accepted[eq]=1&scientific[eq]=0&limit=1000&offset=1000",
+		"prev": null
+	}
+}
+```
+
+- Request: `/api/v1/taxon-names?taxon_identifier[eq]=NHMSYS0021054498`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"uuid": "3d77f8e7-e2e8-4d74-9d4d-cff4d11130e8",
+			"taxon_identifier": "NHMSYS0021054498",
+			"name": "Bombus terrestris",
+			"scientific_name_identifier": "TVK-001",
+			"accepted": 1,
+			"scientific": 1
+		},
+		{
+			"uuid": "f54da6a0-5f0b-4de2-a10a-2693b193f5f2",
+			"taxon_identifier": "NHMSYS0021054498",
+			"name": "Buff-tailed Bumblebee",
+			"scientific_name_identifier": "TVK-001",
+			"accepted": 1,
+			"scientific": 0
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 2,
+		"total": 2
+	},
+	"links": {
+		"self": "/api/v1/taxon-names?taxon_identifier[eq]=NHMSYS0021054498",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+### 13.8 grid-square-stats
+
+- Path: `GET /api/v1/grid-square-stats`
+- Item path: `GET /api/v1/grid-square-stats/{uuid}`
+- Unique identifier: `uuid`
+- Exposed fields: `uuid`, `square`, `geographic_region_identifier`, `easting`, `northing`, `partial`, `occurrences_count`, `species_count`
+- Filterable fields: `uuid`, `square`, `geographic_region_identifier`, `easting`, `northing`, `partial`, `occurrences_count`, `species_count`
+
+Examples:
+
+- Request: `/api/v1/grid-square-stats?partial[eq]=0`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"uuid": "c5b2d8f0-c8bb-4b03-9be8-f1a6ea02cfd8",
+			"square": "SU41F",
+			"geographic_region_identifier": null,
+			"easting": 441000,
+			"northing": 110000,
+			"partial": 0,
+			"occurrences_count": 122,
+			"species_count": 84
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 628
+	},
+	"links": {
+		"self": "/api/v1/grid-square-stats?partial[eq]=0",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+- Request: `/api/v1/grid-square-stats?geographic_region_identifier[eq]=13&species_count[gte]=50&sort=-species_count`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"uuid": "8f1af0f3-5140-4ee4-bce5-6efe8b33731c",
+			"square": "SU38K",
+			"geographic_region_identifier": 13,
+			"easting": 438000,
+			"northing": 108000,
+			"partial": 1,
+			"occurrences_count": 201,
+			"species_count": 133
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 47
+	},
+	"links": {
+		"self": "/api/v1/grid-square-stats?geographic_region_identifier[eq]=13&species_count[gte]=50&sort=-species_count",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+### 13.9 taxon-stats
+
+- Path: `GET /api/v1/taxon-stats`
+- Item path: `GET /api/v1/taxon-stats/{uuid}`
+- Unique identifier: `uuid`
+- Exposed fields:
+	- `uuid`, `taxon_identifier`, `geographic_region_identifier`
+	- `occurrences_count`, `grid_square_count`
+	- `first_record_date`, `last_record_date`, `first_recorder`, `last_recorder`
+	- `first_verified_record_date`, `last_verified_record_date`, `first_verified_recorder`, `last_verified_recorder`
+- Filterable fields:
+	- all exposed taxon-stats fields above
+	- rows for blocked taxa are always excluded
+
+Examples:
+
+- Request: `/api/v1/taxon-stats?taxon_identifier[eq]=NHMSYS0021054498`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"uuid": "f1b02df6-6db5-4d0d-b277-7e54b08a4f1c",
+			"taxon_identifier": "NHMSYS0021054498",
+			"geographic_region_identifier": null,
+			"occurrences_count": 374,
+			"grid_square_count": 119,
+			"first_record_date": "1987-06-19",
+			"last_record_date": "2025-09-03",
+			"first_recorder": "J. Winter",
+			"last_recorder": "R. Hall",
+			"first_verified_record_date": "1988-05-14",
+			"last_verified_record_date": "2025-09-03",
+			"first_verified_recorder": "J. Winter",
+			"last_verified_recorder": "R. Hall"
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 1
+	},
+	"links": {
+		"self": "/api/v1/taxon-stats?taxon_identifier[eq]=NHMSYS0021054498",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+- Request: `/api/v1/taxon-stats?geographic_region_identifier[eq]=13&occurrences_count[gte]=10&sort=-occurrences_count`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"uuid": "29dd365b-4c63-4f11-ac1f-2d53131d402e",
+			"taxon_identifier": "NHMSYS0021700001",
+			"geographic_region_identifier": 13,
+			"occurrences_count": 118,
+			"grid_square_count": 34,
+			"first_record_date": "1999-04-12",
+			"last_record_date": "2025-08-18",
+			"first_recorder": "D. Evans",
+			"last_recorder": "M. Green",
+			"first_verified_record_date": "2001-06-01",
+			"last_verified_record_date": "2025-08-18",
+			"first_verified_recorder": "D. Evans",
+			"last_verified_recorder": "M. Green"
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 91
+	},
+	"links": {
+		"self": "/api/v1/taxon-stats?geographic_region_identifier[eq]=13&occurrences_count[gte]=10&sort=-occurrences_count",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+### 13.10 taxon-year-stats
+
+- Path: `GET /api/v1/taxon-year-stats`
+- Item path: `GET /api/v1/taxon-year-stats/{uuid}`
+- Unique identifier: `uuid`
+- Exposed fields: `uuid`, `taxon_identifier`, `geographic_region_identifier`, `year`, `occurrences_count`, `grid_square_count`
+- Filterable fields:
+	- `uuid`, `taxon_identifier`, `geographic_region_identifier`, `year`, `occurrences_count`, `grid_square_count`
+	- rows for blocked taxa are always excluded
+
+Examples:
+
+- Request: `/api/v1/taxon-year-stats?taxon_identifier[eq]=NHMSYS0021054498&year[gte]=2016`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"uuid": "f4eecddf-c532-4f66-b1b8-3d4245e3b478",
+			"taxon_identifier": "NHMSYS0021054498",
+			"geographic_region_identifier": null,
+			"year": 2024,
+			"occurrences_count": 42,
+			"grid_square_count": 18
+		},
+		{
+			"uuid": "0d4f09bb-b2b2-4522-a80c-82169f4989c4",
+			"taxon_identifier": "NHMSYS0021054498",
+			"geographic_region_identifier": null,
+			"year": 2025,
+			"occurrences_count": 39,
+			"grid_square_count": 16
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 2,
+		"total": 10
+	},
+	"links": {
+		"self": "/api/v1/taxon-year-stats?taxon_identifier[eq]=NHMSYS0021054498&year[gte]=2016",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+- Request: `/api/v1/taxon-year-stats?geographic_region_identifier[eq]=13&year[eq]=2025&sort=-occurrences_count`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"uuid": "f32f208d-45af-44da-9bb6-5a26f61a95c8",
+			"taxon_identifier": "NHMSYS0021700001",
+			"geographic_region_identifier": 13,
+			"year": 2025,
+			"occurrences_count": 26,
+			"grid_square_count": 12
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 280
+	},
+	"links": {
+		"self": "/api/v1/taxon-year-stats?geographic_region_identifier[eq]=13&year[eq]=2025&sort=-occurrences_count",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+## 14. Implementation Notes for Developers
+
+- Prefer exposing relationship identifiers that are stable API keys (for example `taxon_identifier`, `external_key`, `abbr`) rather than internal numeric IDs.
+- Validate filter fields per resource and return RFC 9457 problem responses for unsupported filters.
+- Apply case-insensitive behavior for all `contains` filters.
+- Ensure blocked-record exclusion is applied consistently before pagination totals are calculated.
+
+## 15. OpenAPI Starter
+
+An OpenAPI 3.1 starter specification is provided in `docs/openapi.v1.yaml`.
+
+- Use it as the implementation contract for endpoint shape, security, and common response envelopes.
+- Expand resource schemas and examples as implementation progresses.

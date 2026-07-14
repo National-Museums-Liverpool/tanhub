@@ -17,13 +17,16 @@ final class ApiV1RateLimitTest extends CIUnitTestCase
     {
         parent::setUp();
 
+        \Config\Services::reset();
+        $_SESSION = [];
+        $_COOKIE = [];
+
         $this->ensureLookupTables();
         $this->seedLookupData();
         $this->ensureAuthTables();
         $this->seedAuthUser();
 
-        $this->clearRateLimitBucket('api/v1/data-sources', 'ip:127.0.0.1');
-        $this->clearRateLimitBucket('api/v1/data-sources', 'user:1');
+        $this->clearRateLimitBuckets('api/v1/data-sources');
     }
 
     public function testAnonymousRequestsAreRateLimited(): void
@@ -64,6 +67,27 @@ final class ApiV1RateLimitTest extends CIUnitTestCase
     private function clearRateLimitBucket(string $path, string $identity): void
     {
         service('throttler')->remove('api_v1_' . sha1($path . '|' . $identity));
+    }
+
+    private function clearRateLimitBuckets(string $path): void
+    {
+        $pathVariants = [
+            ltrim($path, '/'),
+            '/' . ltrim($path, '/'),
+        ];
+
+        $identities = [
+            'ip:127.0.0.1',
+            'ip:::1',
+            'ip:0.0.0.0',
+            'user:1',
+        ];
+
+        foreach ($pathVariants as $pathVariant) {
+            foreach ($identities as $identity) {
+                $this->clearRateLimitBucket($pathVariant, $identity);
+            }
+        }
     }
 
     private function ensureLookupTables(): void

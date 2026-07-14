@@ -88,7 +88,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
         $result->assertSee('Title');
         $result->assertSee('Friendly');
         $result->assertSee('External key');
-        $result->assertSee('Edit');
+        $result->assertSee('Links');
     }
 
     public function testListSortsByTitleAscByDefault(): void

@@ -48,7 +48,7 @@
                     <th scope="col"><a href="<?= esc($sortUrl('title')) ?>">Title<?= esc($sortIndicator('title')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('friendly')) ?>">Friendly<?= esc($sortIndicator('friendly')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('external_key')) ?>">External key<?= esc($sortIndicator('external_key')) ?></a></th>
-                    <th scope="col">Edit</th>
+                    <th scope="col">Links</th>
                 </tr>
                 </thead>
                 <tbody>

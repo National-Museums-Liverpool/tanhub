@@ -4,7 +4,6 @@ namespace App\Controllers;
 
 use App\Models\TaxonRankModel;
 use CodeIgniter\Exceptions\PageNotFoundException;
-use CodeIgniter\HTTP\RedirectResponse;
 
 /**
  * Admin management for taxon ranks.
@@ -44,7 +43,7 @@ class TaxonRanks extends BaseController
     }
 
     /**
-     * Render the edit form for a single taxon rank.
+     * Render read-only details for a single taxon rank.
      */
     public function details(int $id): string
     {
@@ -56,39 +55,10 @@ class TaxonRanks extends BaseController
         }
 
         return $this->renderPage('taxon-ranks/details', [
-            'pageTitle' => 'Edit taxon rank',
-            'metaDescription' => 'Edit taxon rank friendly name.',
+            'pageTitle' => 'Taxon rank details',
+            'metaDescription' => 'Read-only taxon rank details.',
             'bodyClass' => 'app-shell',
             'taxonRank' => $taxonRank,
         ]);
-    }
-
-    /**
-     * Update the editable fields for a taxon rank.
-     */
-    public function update(int $id): RedirectResponse
-    {
-        $rules = [
-            'friendly' => 'permit_empty|max_length[200]',
-        ];
-
-        if (! $this->validate($rules)) {
-            return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
-        }
-
-        $model = model(TaxonRankModel::class);
-        $taxonRank = $model->find($id);
-
-        if ($taxonRank === null) {
-            throw PageNotFoundException::forPageNotFound();
-        }
-
-        $friendly = trim((string) $this->request->getPost('friendly'));
-
-        $model->update($id, [
-            'friendly' => $friendly === '' ? null : $friendly,
-        ]);
-
-        return redirect()->to(site_url('taxon-ranks/' . $id))->with('message', 'Taxon rank updated.');
     }
 }

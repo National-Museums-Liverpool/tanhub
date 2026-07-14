@@ -44,7 +44,7 @@
                     <th scope="col"><a href="<?= esc($sortUrl('rank')) ?>">Rank<?= esc($sortIndicator('rank')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('abbr')) ?>">Abbreviation<?= esc($sortIndicator('abbr')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('sort_order')) ?>">Sort order<?= esc($sortIndicator('sort_order')) ?></a></th>
-                    <th scope="col">Edit</th>
+                    <th scope="col">Links</th>
                 </tr>
                 </thead>
                 <tbody>

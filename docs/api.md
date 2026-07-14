@@ -224,7 +224,7 @@ Errors use `application/problem+json` based on RFC 9457/7807.
 - `GET /api/v1/taxon-names`
 - `GET /api/v1/taxon-names/{uuid}`
 - `GET /api/v1/taxon-ranks`
-- `GET /api/v1/taxon-ranks/{code}`
+- `GET /api/v1/taxon-ranks/{abbr}`
 - `GET /api/v1/grid-square-stats`
 - `GET /api/v1/grid-square-stats/{uuid}`
 - `GET /api/v1/taxon-stats`
@@ -878,8 +878,8 @@ Examples:
 
 ### 13.8 taxon-ranks
 
-- Path: `GET /api/v1/taxon-raks`
-- Item path: `GET /api/v1/taxon-raks/{abbr}`
+- Path: `GET /api/v1/taxon-ranks`
+- Item path: `GET /api/v1/taxon-ranks/{abbr}`
 - Unique identifier: `abbr`
 - Exposed fields: `rank`, `abbr`, `sort_order`
 - Filterable fields: `rank`, `abbr`, `sort_order`

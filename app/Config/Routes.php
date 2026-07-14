@@ -11,7 +11,6 @@ $routes->get('taxon-groups/(:num)', 'TaxonGroups::details/$1', ['filter' => ['se
 $routes->post('taxon-groups/(:num)', 'TaxonGroups::update/$1', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('taxon-ranks', 'TaxonRanks::index', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('taxon-ranks/(:num)', 'TaxonRanks::details/$1', ['filter' => ['session', 'group:admin,manager']]);
-$routes->post('taxon-ranks/(:num)', 'TaxonRanks::update/$1', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('taxa', 'Taxa::index', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('taxa/(:num)', 'Taxa::details/$1', ['filter' => ['session', 'group:admin,manager']]);
 $routes->post('taxa/(:num)', 'Taxa::update/$1', ['filter' => ['session', 'group:admin,manager']]);

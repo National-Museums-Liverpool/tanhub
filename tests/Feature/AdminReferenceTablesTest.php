@@ -101,30 +101,6 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
     }
 
     /**
-     * Validate taxon groups list columns and default sort behavior.
-     */
-    public function testTaxonGroupsListMatchesSpecification(): void
-    {
-        $this->authenticateAs('manager-orders@example.com', 'manager');
-
-        $result = $this->get('taxon-groups');
-
-        $result->assertStatus(200);
-        $result->assertSee('Title');
-        $result->assertSee('Friendly');
-        $result->assertSee('External key');
-        $result->assertSee('Details');
-
-        $body = (string) $result->response()->getBody();
-        $alphaPos = strpos($body, 'Insecta');
-        $betaPos = strpos($body, 'Marine mammals');
-
-        $this->assertIsInt($alphaPos);
-        $this->assertIsInt($betaPos);
-        $this->assertLessThan($betaPos, $alphaPos);
-    }
-
-    /**
      * Validate taxon ranks list columns and default sort behavior.
      */
     public function testTaxonRanksListMatchesSpecification(): void

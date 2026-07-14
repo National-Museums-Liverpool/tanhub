@@ -44,7 +44,7 @@
                     <th scope="col"><a href="<?= esc($sortUrl('external_key')) ?>">External key<?= esc($sortIndicator('external_key')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('title')) ?>">Title<?= esc($sortIndicator('title')) ?></a></th>
                     <th scope="col">Taxa count</th>
-                    <th scope="col">View</th>
+                    <th scope="col">Links</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -59,7 +59,7 @@
                             <td><?= esc($recordingScheme['external_key']) ?></td>
                             <td><?= esc($recordingScheme['title']) ?></td>
                             <td><?= esc((string) $recordingScheme['taxa_count']) ?></td>
-                            <td><a class="btn btn-sm btn-outline-brand" href="<?= esc(site_url('recording-schemes/' . $recordingScheme['id'])) ?>">View</a></td>
+                            <td><a class="btn btn-sm btn-outline-brand" href="<?= esc(site_url('recording-schemes/' . $recordingScheme['id'])) ?>">Details</a></td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

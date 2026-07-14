@@ -240,6 +240,34 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame('3d77f8e7-e2e8-4d74-9d4d-cff4d11130e8', $json['taxon_name_uuid']);
     }
 
+    public function testOccurrencesListSupportsIncludeExtensions(): void
+    {
+        $result = $this->get('api/v1/occurrences?include=taxon,taxon_name,taxon_rank');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $first = $json['data'][0];
+
+        $this->assertArrayHasKey('scientific_name', $first);
+        $this->assertArrayHasKey('vernacular_name', $first);
+        $this->assertArrayHasKey('taxon_rank', $first);
+        $this->assertArrayHasKey('given_name', $first);
+    }
+
+    public function testOccurrencesListRejectsInvalidInclude(): void
+    {
+        $result = $this->get('api/v1/occurrences?include=foo');
+
+        $result->assertStatus(400);
+        $result->assertHeader('Content-Type', 'application/problem+json; charset=UTF-8');
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame(400, $json['status']);
+        $this->assertSame('Invalid include parameter', $json['title']);
+    }
+
     public function testOccurrenceShowReturnsNotFoundForBlockedOccurrence(): void
     {
         $result = $this->get('api/v1/occurrences/NBN:BLOCKED001');
@@ -276,6 +304,30 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame(12, $json['geographic_region_identifier']);
     }
 
+    public function testGridSquareStatsIncludeGeographicRegionAddsFields(): void
+    {
+        $result = $this->get('api/v1/grid-square-stats?include=geographic_region');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $first = $json['data'][0];
+
+        $this->assertArrayHasKey('geographic_region', $first);
+        $this->assertArrayHasKey('geographic_region_location_type', $first);
+    }
+
+    public function testGridSquareStatsRejectsInvalidInclude(): void
+    {
+        $result = $this->get('api/v1/grid-square-stats?include=taxon');
+
+        $result->assertStatus(400);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame('Invalid include parameter', $json['title']);
+    }
+
     public function testTaxonStatsListSupportsTaxonFilterAndExcludesBlockedTaxa(): void
     {
         $result = $this->get('api/v1/taxon-stats?taxon_identifier[eq]=NHMSYS0021054498');
@@ -297,6 +349,31 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $json = json_decode((string) $result->response()->getBody(), true);
 
         $this->assertSame('Resource not found', $json['title']);
+    }
+
+    public function testTaxonStatsIncludeAddsTaxonAndRegionFields(): void
+    {
+        $result = $this->get('api/v1/taxon-stats?include=taxon,geographic_region');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $first = $json['data'][0];
+
+        $this->assertArrayHasKey('taxon_scientific_name', $first);
+        $this->assertArrayHasKey('taxon_vernacular_name', $first);
+        $this->assertArrayHasKey('geographic_region', $first);
+    }
+
+    public function testTaxonStatsRejectsInvalidInclude(): void
+    {
+        $result = $this->get('api/v1/taxon-stats?include=foo');
+
+        $result->assertStatus(400);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame('Invalid include parameter', $json['title']);
     }
 
     public function testTaxonYearStatsListSupportsYearAndRegionFilters(): void
@@ -322,6 +399,31 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
         $this->assertSame('55555555-5555-4555-8555-555555555555', $json['uuid']);
         $this->assertSame('NHMSYS0021054498', $json['taxon_identifier']);
+    }
+
+    public function testTaxonYearStatsIncludeAddsTaxonAndRegionFields(): void
+    {
+        $result = $this->get('api/v1/taxon-year-stats?include=taxon,geographic_region');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $first = $json['data'][0];
+
+        $this->assertArrayHasKey('taxon_scientific_name', $first);
+        $this->assertArrayHasKey('taxon_vernacular_name', $first);
+        $this->assertArrayHasKey('geographic_region', $first);
+    }
+
+    public function testTaxonYearStatsRejectsInvalidInclude(): void
+    {
+        $result = $this->get('api/v1/taxon-year-stats?include=foo');
+
+        $result->assertStatus(400);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame('Invalid include parameter', $json['title']);
     }
 
     public function testInvalidFilterReturnsProblemJson(): void

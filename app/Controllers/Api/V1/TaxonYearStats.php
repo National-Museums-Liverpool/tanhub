@@ -18,32 +18,27 @@ class TaxonYearStats extends ApiController
         if ($pagination instanceof ResponseInterface) {
             return $pagination;
         }
+        $includes = $this->getIncludes();
 
-        $sorts = $this->getSorts([
-            'uuid' => 'uuid',
-            'year' => 'year',
-            'occurrences_count' => 'occurrences_count',
-            'grid_square_count' => 'grid_square_count',
-        ], 'year');
+        if ($includes instanceof ResponseInterface) {
+            return $includes;
+        }
+
+        $sorts = $this->getSorts($this->allowedSorts($includes), 'year');
         if ($sorts instanceof ResponseInterface) {
             return $sorts;
         }
 
-        $filters = $this->getFilters([
-            'uuid' => 'uuid',
-            'taxon_identifier' => '__taxon_identifier__',
-            'geographic_region_identifier' => '__geographic_region_identifier__',
-            'year' => 'year',
-            'occurrences_count' => 'occurrences_count',
-            'grid_square_count' => 'grid_square_count',
-        ]);
+        $filters = $this->getFilters($this->allowedFilters($includes));
         if ($filters instanceof ResponseInterface) {
             return $filters;
         }
 
-        $builder = $db->table('taxon_year_stats')
-            ->select('uuid, (SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id AND deleted_at IS NULL AND blocked = 0) AS taxon_identifier, (SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region_identifier, year, occurrences_count, grid_square_count', false)
-            ->where('taxon_id IN (SELECT id FROM ' . $prefix . 'taxa WHERE deleted_at IS NULL AND blocked = 0)', null, false);
+        $usesIncludedBuilder = $this->usesIncludedBuilder($includes);
+
+        $builder = $usesIncludedBuilder
+            ? $this->buildIncludedBuilder($db, $prefix, $includes)
+            : $this->buildDefaultBuilder($db, $prefix);
 
         $normal = [];
         $custom = [];
@@ -84,11 +79,18 @@ class TaxonYearStats extends ApiController
     {
         $db = db_connect();
         $prefix = $db->getPrefix();
+        $includes = $this->getIncludes();
 
-        $item = $db->table('taxon_year_stats')
-            ->select('uuid, (SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id AND deleted_at IS NULL AND blocked = 0) AS taxon_identifier, (SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region_identifier, year, occurrences_count, grid_square_count', false)
+        if ($includes instanceof ResponseInterface) {
+            return $includes;
+        }
+
+        $usesIncludedBuilder = $this->usesIncludedBuilder($includes);
+
+        $item = ($usesIncludedBuilder
+            ? $this->buildIncludedBuilder($db, $prefix, $includes)
+            : $this->buildDefaultBuilder($db, $prefix))
             ->where('uuid', $uuid)
-            ->where('taxon_id IN (SELECT id FROM ' . $prefix . 'taxa WHERE deleted_at IS NULL AND blocked = 0)', null, false)
             ->get()
             ->getRowArray();
 
@@ -97,6 +99,140 @@ class TaxonYearStats extends ApiController
         }
 
         return $this->respondItem($item);
+    }
+
+    /**
+     * @param array<string, bool> $includes
+     * @return array<string, string>
+     */
+    private function allowedSorts(array $includes): array
+    {
+        $usesIncludedBuilder = $this->usesIncludedBuilder($includes);
+
+        $sorts = [
+            'uuid' => 'uuid',
+            'year' => 'year',
+            'occurrences_count' => 'occurrences_count',
+            'grid_square_count' => 'grid_square_count',
+            'taxon_identifier' => 'taxon_identifier',
+            'geographic_region_identifier' => 'geographic_region_identifier',
+        ];
+
+        if ($this->hasInclude($includes, 'taxon')) {
+            $sorts['taxon_scientific_name'] = 'taxon_scientific_name';
+            $sorts['taxon_vernacular_name'] = 'taxon_vernacular_name';
+        }
+
+        if ($this->hasInclude($includes, 'geographic_region')) {
+            $sorts['geographic_region'] = 'geographic_region';
+        }
+
+        return $sorts;
+    }
+
+    /**
+     * @param array<string, bool> $includes
+     * @return array<string, string>
+     */
+    private function allowedFilters(array $includes): array
+    {
+        $usesIncludedBuilder = $this->usesIncludedBuilder($includes);
+
+        $filters = [
+            'uuid' => 'uuid',
+            'taxon_identifier' => '__taxon_identifier__',
+            'geographic_region_identifier' => '__geographic_region_identifier__',
+            'year' => 'year',
+            'occurrences_count' => 'occurrences_count',
+            'grid_square_count' => 'grid_square_count',
+        ];
+
+        if ($this->hasInclude($includes, 'taxon')) {
+            $filters['taxon_scientific_name'] = 'taxon_scientific_name';
+            $filters['taxon_vernacular_name'] = 'taxon_vernacular_name';
+        }
+
+        if ($this->hasInclude($includes, 'geographic_region')) {
+            $filters['geographic_region'] = 'geographic_region';
+        }
+
+        return $filters;
+    }
+
+    private function buildDefaultBuilder($db, string $prefix)
+    {
+        return $db->table('taxon_year_stats')
+            ->select('uuid, (SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id AND deleted_at IS NULL AND blocked = 0) AS taxon_identifier, (SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region_identifier, year, occurrences_count, grid_square_count', false)
+            ->where('taxon_id IN (SELECT id FROM ' . $prefix . 'taxa WHERE deleted_at IS NULL AND blocked = 0)', null, false);
+    }
+
+    /**
+     * @param array<string, bool> $includes
+     */
+    private function buildIncludedBuilder($db, string $prefix, array $includes)
+    {
+        $builder = $db->table('taxon_year_stats')
+            ->select('uuid, year, occurrences_count, grid_square_count', false)
+            ->where('taxon_id IN (SELECT id FROM ' . $prefix . 'taxa WHERE deleted_at IS NULL AND blocked = 0)', null, false);
+
+        if ($this->hasInclude($includes, 'taxon')) {
+            $builder->select('(SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id AND deleted_at IS NULL AND blocked = 0) AS taxon_identifier', false);
+            $builder->select('(SELECT scientific_name FROM ' . $prefix . 'taxa WHERE id = taxon_id AND deleted_at IS NULL AND blocked = 0) AS taxon_scientific_name', false);
+            $builder->select('(SELECT vernacular_name FROM ' . $prefix . 'taxa WHERE id = taxon_id AND deleted_at IS NULL AND blocked = 0) AS taxon_vernacular_name', false);
+        } else {
+            $builder->select('(SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id AND deleted_at IS NULL AND blocked = 0) AS taxon_identifier', false);
+        }
+
+        if ($this->hasInclude($includes, 'geographic_region')) {
+            $builder->select('(SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region_identifier', false);
+            $builder->select('(SELECT higher_geography FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region', false);
+        } else {
+            $builder->select('(SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region_identifier', false);
+        }
+
+        return $builder;
+    }
+
+    /**
+     * @return array<string, bool>|ResponseInterface
+     */
+    private function getIncludes(): array|ResponseInterface
+    {
+        $raw = (string) ($this->request->getGet('include') ?? '');
+
+        if (trim($raw) === '') {
+            return [];
+        }
+
+        $parts = array_filter(array_map('trim', explode(',', strtolower($raw))), static fn (string $item): bool => $item !== '');
+        $supported = ['taxon', 'geographic_region'];
+        $includes = [];
+
+        foreach ($parts as $part) {
+            if (! in_array($part, $supported, true)) {
+                return $this->respondProblem(400, 'Invalid include parameter', "Unsupported include value '{$part}'.");
+            }
+
+            $includes[$part] = true;
+        }
+
+        return $includes;
+    }
+
+    /**
+     * @param array<string, bool> $includes
+     */
+    private function hasInclude(array $includes, string $name): bool
+    {
+        return isset($includes[$name]) && $includes[$name] === true;
+    }
+
+    /**
+     * @param array<string, bool> $includes
+     */
+    private function usesIncludedBuilder(array $includes): bool
+    {
+        return $includes !== [];
     }
 
     private function applyIdentifierFilter($builder, string $operator, $value, string $localColumn, string $relatedTable, string $relatedField, $db, string $extraWhere = ''): void

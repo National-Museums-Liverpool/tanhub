@@ -152,7 +152,7 @@ abstract class ApiController extends Controller
         $allowedOperators = ['eq', 'in', 'contains', 'gte', 'lte'];
 
         foreach ($query as $field => $value) {
-            if (in_array($field, ['limit', 'offset', 'sort'], true)) {
+            if (in_array($field, ['limit', 'offset', 'sort', 'include'], true)) {
                 continue;
             }
 

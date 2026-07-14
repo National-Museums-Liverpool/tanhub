@@ -83,6 +83,7 @@ paths:
       tags: [occurrences]
       summary: List occurrences
       parameters:
+        - $ref: '#/components/parameters/OccurrencesInclude'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Sort'
@@ -252,6 +253,7 @@ paths:
       tags: [grid-square-stats]
       summary: List grid square stats
       parameters:
+        - $ref: '#/components/parameters/GridSquareStatsInclude'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Sort'
@@ -281,6 +283,7 @@ paths:
       tags: [taxon-stats]
       summary: List taxon stats
       parameters:
+        - $ref: '#/components/parameters/TaxonStatsInclude'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Sort'
@@ -310,6 +313,7 @@ paths:
       tags: [taxon-year-stats]
       summary: List taxon year stats
       parameters:
+        - $ref: '#/components/parameters/TaxonYearStatsInclude'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Sort'
@@ -416,6 +420,34 @@ components:
       description: Sort fields, e.g. sort=field,-other_field
       schema:
         type: string
+    OccurrencesInclude:
+      name: include
+      in: query
+      description: Comma-separated related fields to include. Supported values are taxon, taxon_name, taxon_rank, parent_taxa.
+      schema:
+        type: string
+        example: taxon,taxon_name
+    GridSquareStatsInclude:
+      name: include
+      in: query
+      description: Comma-separated related fields to include. Supported value is geographic_region.
+      schema:
+        type: string
+        example: geographic_region
+    TaxonStatsInclude:
+      name: include
+      in: query
+      description: Comma-separated related fields to include. Supported values are taxon and geographic_region.
+      schema:
+        type: string
+        example: taxon,geographic_region
+    TaxonYearStatsInclude:
+      name: include
+      in: query
+      description: Comma-separated related fields to include. Supported values are taxon and geographic_region.
+      schema:
+        type: string
+        example: taxon,geographic_region
   responses:
     ListResponse:
       description: Paginated list response

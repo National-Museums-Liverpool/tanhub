@@ -406,10 +406,19 @@ Examples:
 - Filterable fields:
 	- all exposed occurrence fields above
 	- excludes: `blocked`, `blocked_reason`, `created_at`, `updated_at`, `deleted_at`
+- Include:
+	- query parameter: `include`
+	- supported values: `taxon`, `taxon_name`, `taxon_rank`, `parent_taxa`
+	- included fields:
+		- `taxon`: `taxon_scientific_name`, `taxon_vernacular_name`
+		- `taxon_name`: `taxon_name`, `taxon_name_accepted`, `taxon_name_scientific`
+		- `taxon_rank`: `taxon_rank`, `taxon_rank_abbr`
+		- `parent_taxa`: parent taxon identifier fields by configured rank
+	- include-only sort/filter fields are available when their include is requested
 
 Examples:
 
-- Request: `/api/v1/occurrences?taxon_identifier[eq]=NHMSYS0021054498`
+- Request: `/api/v1/occurrences?include=taxon,taxon_name,taxon_rank&taxon_identifier[eq]=NHMSYS0021054498`
 	Response:
 
 ```json
@@ -419,6 +428,10 @@ Examples:
 			"unique_key": "NBN:123456789",
 			"taxon_identifier": "NHMSYS0021054498",
 			"taxon_name_uuid": "3d77f8e7-e2e8-4d74-9d4d-cff4d11130e8",
+			"scientific_name": "Bombus terrestris",
+			"vernacular_name": "Buff-tailed Bumblebee",
+			"given_name": "Bombus terrestris",
+			"taxon_rank": "Species",
 			"from_date": "2024-05-11",
 			"to_date": "2024-05-11",
 			"grid_ref": "SU123456",
@@ -441,8 +454,8 @@ Examples:
 		"total": 57
 	},
 	"links": {
-		"self": "/api/v1/occurrences?taxon_identifier[eq]=NHMSYS0021054498",
-		"next": "/api/v1/occurrences?taxon_identifier[eq]=NHMSYS0021054498&limit=1000&offset=1000",
+		"self": "/api/v1/occurrences?include=taxon,taxon_name,taxon_rank&taxon_identifier[eq]=NHMSYS0021054498",
+		"next": "/api/v1/occurrences?include=taxon,taxon_name,taxon_rank&taxon_identifier[eq]=NHMSYS0021054498&limit=1000&offset=1000",
 		"prev": null
 	}
 }
@@ -919,10 +932,15 @@ Examples:
 - Unique identifier: `uuid`
 - Exposed fields: `uuid`, `square`, `geographic_region_identifier`, `easting`, `northing`, `partial`, `occurrences_count`, `species_count`
 - Filterable fields: `uuid`, `square`, `geographic_region_identifier`, `easting`, `northing`, `partial`, `occurrences_count`, `species_count`
+- Include:
+	- query parameter: `include`
+	- supported value: `geographic_region`
+	- included fields: `geographic_region`, `geographic_region_location_type`
+	- include-only sort/filter fields are available when `include=geographic_region`
 
 Examples:
 
-- Request: `/api/v1/grid-square-stats?partial[eq]=0`
+- Request: `/api/v1/grid-square-stats?include=geographic_region&partial[eq]=0`
 	Response:
 
 ```json
@@ -932,6 +950,8 @@ Examples:
 			"uuid": "c5b2d8f0-c8bb-4b03-9be8-f1a6ea02cfd8",
 			"square": "SU41F",
 			"geographic_region_identifier": null,
+			"geographic_region": "South Hampshire",
+			"geographic_region_location_type": "Vice County",
 			"easting": 441000,
 			"northing": 110000,
 			"partial": 0,
@@ -946,7 +966,7 @@ Examples:
 		"total": 628
 	},
 	"links": {
-		"self": "/api/v1/grid-square-stats?partial[eq]=0",
+		"self": "/api/v1/grid-square-stats?include=geographic_region&partial[eq]=0",
 		"next": null,
 		"prev": null
 	}
@@ -997,10 +1017,17 @@ Examples:
 - Filterable fields:
 	- all exposed taxon-stats fields above
 	- rows for blocked taxa are always excluded
+- Include:
+	- query parameter: `include`
+	- supported values: `taxon`, `geographic_region`
+	- included fields:
+		- `taxon`: `taxon_scientific_name`, `taxon_vernacular_name`
+		- `geographic_region`: `geographic_region`
+	- include-only sort/filter fields are available when their include is requested
 
 Examples:
 
-- Request: `/api/v1/taxon-stats?taxon_identifier[eq]=NHMSYS0021054498`
+- Request: `/api/v1/taxon-stats?include=taxon,geographic_region&taxon_identifier[eq]=NHMSYS0021054498`
 	Response:
 
 ```json
@@ -1010,6 +1037,9 @@ Examples:
 			"uuid": "f1b02df6-6db5-4d0d-b277-7e54b08a4f1c",
 			"taxon_identifier": "NHMSYS0021054498",
 			"geographic_region_identifier": null,
+			"taxon_scientific_name": "Bombus terrestris",
+			"taxon_vernacular_name": "Buff-tailed Bumblebee",
+			"geographic_region": "South Hampshire",
 			"occurrences_count": 374,
 			"grid_square_count": 119,
 			"first_record_date": "1987-06-19",
@@ -1029,7 +1059,7 @@ Examples:
 		"total": 1
 	},
 	"links": {
-		"self": "/api/v1/taxon-stats?taxon_identifier[eq]=NHMSYS0021054498",
+		"self": "/api/v1/taxon-stats?include=taxon,geographic_region&taxon_identifier[eq]=NHMSYS0021054498",
 		"next": null,
 		"prev": null
 	}
@@ -1081,10 +1111,17 @@ Examples:
 - Filterable fields:
 	- `uuid`, `taxon_identifier`, `geographic_region_identifier`, `year`, `occurrences_count`, `grid_square_count`
 	- rows for blocked taxa are always excluded
+- Include:
+	- query parameter: `include`
+	- supported values: `taxon`, `geographic_region`
+	- included fields:
+		- `taxon`: `taxon_scientific_name`, `taxon_vernacular_name`
+		- `geographic_region`: `geographic_region`
+	- include-only sort/filter fields are available when their include is requested
 
 Examples:
 
-- Request: `/api/v1/taxon-year-stats?taxon_identifier[eq]=NHMSYS0021054498&year[gte]=2016`
+- Request: `/api/v1/taxon-year-stats?include=taxon,geographic_region&taxon_identifier[eq]=NHMSYS0021054498&year[gte]=2016`
 	Response:
 
 ```json
@@ -1094,6 +1131,9 @@ Examples:
 			"uuid": "f4eecddf-c532-4f66-b1b8-3d4245e3b478",
 			"taxon_identifier": "NHMSYS0021054498",
 			"geographic_region_identifier": null,
+			"taxon_scientific_name": "Bombus terrestris",
+			"taxon_vernacular_name": "Buff-tailed Bumblebee",
+			"geographic_region": "South Hampshire",
 			"year": 2024,
 			"occurrences_count": 42,
 			"grid_square_count": 18
@@ -1102,6 +1142,9 @@ Examples:
 			"uuid": "0d4f09bb-b2b2-4522-a80c-82169f4989c4",
 			"taxon_identifier": "NHMSYS0021054498",
 			"geographic_region_identifier": null,
+			"taxon_scientific_name": "Bombus terrestris",
+			"taxon_vernacular_name": "Buff-tailed Bumblebee",
+			"geographic_region": "South Hampshire",
 			"year": 2025,
 			"occurrences_count": 39,
 			"grid_square_count": 16
@@ -1114,7 +1157,7 @@ Examples:
 		"total": 10
 	},
 	"links": {
-		"self": "/api/v1/taxon-year-stats?taxon_identifier[eq]=NHMSYS0021054498&year[gte]=2016",
+		"self": "/api/v1/taxon-year-stats?include=taxon,geographic_region&taxon_identifier[eq]=NHMSYS0021054498&year[gte]=2016",
 		"next": null,
 		"prev": null
 	}

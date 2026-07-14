@@ -5,7 +5,8 @@ use CodeIgniter\Pager\PagerRenderer;
 /**
  * @var PagerRenderer $pager
  */
-$pager->setSurroundCount(2);
+$isMobile = service('request')->getUserAgent()->isMobile();
+$pager->setSurroundCount($isMobile ? 1 : 2);
 ?>
 
 <nav aria-label="<?= lang('Pager.pageNavigation') ?>">

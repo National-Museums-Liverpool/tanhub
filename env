@@ -82,6 +82,7 @@ Config\Import.indiciaTaxonListId = 1
 Config\Import.indiciaProjId = 'TANHUB'
 Config\Import.indiciaUsername = 'tanhub'
 Config\Import.indiciaSecret = ''
+Config\Import.indiciaOccurrencesEsEndpoint= 'es'
 
 Config\Import.nbnUrl = ''
 

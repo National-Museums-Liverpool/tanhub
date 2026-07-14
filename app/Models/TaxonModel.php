@@ -10,6 +10,14 @@ use CodeIgniter\Model;
 class TaxonModel extends Model
 {
     /**
+     * @var array<int, string>
+     */
+    private const BASE_ALLOWED_FIELDS = [
+        'blocked',
+        'blocked_reason',
+    ];
+
+    /**
      * @var string
      */
     protected $table = 'taxa';
@@ -32,10 +40,7 @@ class TaxonModel extends Model
     /**
      * @var array<int, string>
      */
-    protected $allowedFields = [
-        'blocked',
-        'blocked_reason',
-    ];
+    protected $allowedFields = self::BASE_ALLOWED_FIELDS;
 
     /**
      * @var bool
@@ -56,4 +61,49 @@ class TaxonModel extends Model
      * @var string
      */
     protected $deletedField = 'deleted_at';
+
+    public function __construct(?\CodeIgniter\Database\ConnectionInterface $db = null, ?\CodeIgniter\Validation\ValidationInterface $validation = null)
+    {
+        parent::__construct($db, $validation);
+
+        $this->allowedFields = array_values(array_unique(array_merge(
+            self::BASE_ALLOWED_FIELDS,
+            $this->rankColumnsFromConfig(),
+        )));
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function rankColumnsFromConfig(): array
+    {
+        $importConfig = config('Import');
+        $ranks = $importConfig->taxonRanks ?? [];
+        $ranks = is_array($ranks) ? $ranks : explode(',', (string) $ranks);
+
+        $columns = [];
+
+        foreach ($ranks as $rank) {
+            if (! is_scalar($rank)) {
+                continue;
+            }
+
+            $normalised = strtolower(trim((string) $rank));
+
+            if ($normalised === '') {
+                continue;
+            }
+
+            $normalised = preg_replace('/[^a-z0-9]+/i', '_', $normalised);
+            $normalised = trim((string) $normalised, '_');
+
+            if ($normalised === '') {
+                continue;
+            }
+
+            $columns[] = $normalised . '_id';
+        }
+
+        return $columns;
+    }
 }

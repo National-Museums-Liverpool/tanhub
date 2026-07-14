@@ -4,6 +4,7 @@ namespace App\Commands;
 
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
+use Config\Import as ImportConfig;
 use Throwable;
 
 /**
@@ -36,9 +37,11 @@ class ImportIndicia extends BaseCommand
      */
     protected $options = [
         '--source' => 'Source key: indicia. Required.',
-        '--entity' => 'Entity to import: recording_schemes, taxon_groups, taxon_ranks, geographic_regions, taxa, taxon_names.',
+        '--entity' => 'Entity to import: recording_schemes, taxon_groups, taxon_ranks, geographic_regions, taxa, taxon_names, occurrences.',
         '--limit' => 'Maximum records to fetch in this run.',
         '--offset' => 'Optional offset override. Defaults to stored offset for the source/entity.',
+        '--since' => 'Optional checkpoint override. Applies when --entity=occurrences.',
+        '--page-size' => 'Page size per source request. Applies when --entity=occurrences.',
         '--dry-run' => 'Fetch and validate without writing rows.',
     ];
 
@@ -47,6 +50,7 @@ class ImportIndicia extends BaseCommand
      */
     public function run(array $params)
     {
+        $importConfig = config(ImportConfig::class);
         $source = $params['source'] ?? CLI::getOption('source') ?? 'indicia';
         $entity = strtolower((string) ($params['entity'] ?? CLI::getOption('entity') ?? 'taxa'));
         $entity = str_replace('-', '_', $entity);
@@ -57,6 +61,41 @@ class ImportIndicia extends BaseCommand
         $offset = $offsetOption !== null ? max(0, (int) $offsetOption) : null;
         log_message('info', 'Offset: ' . ($offset === null ? 'null' : (string) $offset));
         $dryRun = $this->resolveFlag($params, 'dry-run');
+
+        if ($entity === 'occurrences') {
+            $checkpoint = (string) ($params['since'] ?? CLI::getOption('since') ?? '');
+
+            // Backward compatibility: allow --offset for occurrences command alias.
+            if ($checkpoint === '' && $offsetOption !== null) {
+                $checkpoint = (string) $offsetOption;
+            }
+
+            $pageSize = (int) ($params['page-size'] ?? CLI::getOption('page-size') ?? $importConfig->defaultPageSize);
+            $orchestrator = service('occurrenceImportOrchestrator');
+
+            CLI::write('Starting occurrence import for source: ' . $source, 'yellow');
+            CLI::write('Limit: ' . $limit . ' | Page size: ' . $pageSize . ($checkpoint !== '' ? ' | SINCE: ' . $checkpoint : '') . ($dryRun ? ' | DRY-RUN' : ''), 'yellow');
+
+            try {
+                $result = $orchestrator->run(
+                    $source,
+                    max(1, $limit),
+                    max(1, $pageSize),
+                    $dryRun,
+                    $checkpoint !== '' ? $checkpoint : null,
+                );
+
+                CLI::write('Import completed with status: ' . $result['status'], 'green');
+                CLI::write('Run ID: ' . $result['run_id'], 'green');
+                CLI::write('Fetched: ' . $result['fetched'] . ', Inserted: ' . $result['inserted'] . ', Updated: ' . $result['updated'] . ', Skipped: ' . $result['skipped'] . ', Errors: ' . $result['errors']);
+                CLI::write('Checkpoint: ' . (string) ($result['checkpoint'] ?? '(none)'));
+            } catch (Throwable $exception) {
+                CLI::error($exception->getMessage());
+                $this->showError($exception);
+            }
+
+            return;
+        }
 
         $orchestrator = service('importOrchestrator');
 

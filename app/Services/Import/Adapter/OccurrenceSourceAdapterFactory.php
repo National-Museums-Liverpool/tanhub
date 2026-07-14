@@ -28,10 +28,26 @@ class OccurrenceSourceAdapterFactory
         }
 
         $client = service('curlrequest');
+        $resolvedConfig = $sourceConfig;
+
+        if ($source === 'indicia') {
+            $resolvedConfig = array_merge($sourceConfig, [
+                'warehouse_url' => $this->config->indiciaWarehouseUrl,
+                'es_endpoint' => $this->config->indiciaOccurrencesEsEndpoint,
+                'project_id' => $this->config->indiciaProjId,
+                'taxon_list_id' => $this->config->indiciaTaxonListId,
+                'username' => $this->config->indiciaUsername,
+                'secret' => $this->config->indiciaSecret,
+                'taxon_groups' => $this->config->taxonGroups,
+                'taxon_ranks' => $this->config->taxonRanks,
+                'geographic_regions' => $this->config->geographicRegions,
+                'geographic_region_location_type' => $this->config->geographicRegionLocationType,
+            ]);
+        }
 
         return match ($source) {
-            'nbn' => new NbnAtlasOccurrencesAdapter($client, $sourceConfig, $this->config->httpTimeout),
-            'indicia' => new IndiciaOccurrencesAdapter($client, $sourceConfig, $this->config->httpTimeout),
+            'nbn' => new NbnAtlasOccurrencesAdapter($client, $resolvedConfig, $this->config->httpTimeout),
+            'indicia' => new IndiciaOccurrencesAdapter($client, $resolvedConfig, $this->config->httpTimeout),
             default => throw new InvalidArgumentException('Unsupported occurrence source: ' . $sourceKey),
         };
     }

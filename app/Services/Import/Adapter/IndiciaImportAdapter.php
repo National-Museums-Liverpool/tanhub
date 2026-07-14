@@ -25,15 +25,12 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
      * @var array<int, string>
      */
     private const SUPPORTED_ENTITIES = [
-        'taxa',
-        'taxon_names',
-        'orders',
-        'families',
-        'superfamilies',
-        'recording_schemes',
-        'taxon_groups',
-        'taxon_ranks',
         'geographic_regions',
+        'recording_schemes',
+        'taxa',
+        'taxon_groups',
+        'taxon_names',
+        'taxon_ranks',
     ];
 
     /**

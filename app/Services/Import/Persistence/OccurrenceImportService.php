@@ -38,42 +38,19 @@ class OccurrenceImportService
         /** @var OccurrenceModel $occurrenceModel */
         $occurrenceModel = model(OccurrenceModel::class);
 
-        $taxonIdentifiers = array_values(array_unique(array_filter(array_map(static function (array $record): string {
-            return (string) ($record['taxon_identifier'] ?? '');
-        }, $records))));
 
-        $taxaRows = $TaxonModel->select(['id', 'taxon_identifier'])
-            ->whereIn('taxon_identifier', $taxonIdentifiers)
-            ->findAll();
-
-        $taxaByIdentifier = [];
-
-        foreach ($taxaRows as $taxaRow) {
-            $taxaByIdentifier[(string) $taxaRow['taxon_identifier']] = (int) $taxaRow['id'];
-        }
-
-        $givenNameIdentifiers = array_values(array_unique(array_filter(array_map(static function (array $record): string {
-            return (string) ($record['given_name_identifier'] ?? '');
-        }, $records))));
-
-        $taxonNameByGivenNameIdentifier = [];
-
-        if ($givenNameIdentifiers !== []) {
-            $taxonNameRows = $taxonNameModel->select(['id', 'given_name_identifier'])
-                ->whereIn('given_name_identifier', $givenNameIdentifiers)
-                ->findAll();
-
-            foreach ($taxonNameRows as $taxonNameRow) {
-                $taxonNameByGivenNameIdentifier[(string) $taxonNameRow['given_name_identifier']] = (int) $taxonNameRow['id'];
-            }
-        }
+        $ranks = config('Import')->taxonRanks;
+        $rankColumns = array_map(fn ($rank) => strtolower($rank) . '_id', $ranks);
+        log_message('debug', 'Rank columns: ' . var_export($rankColumns, true));
 
         foreach ($records as $record) {
             try {
+                log_message('debug', 'Record: ' . var_export($record, true));
                 $sourceName = (string) ($record['source_name'] ?? '');
 
                 // Business rule: skip iRecord records when importing from mixed feeds.
                 if ($sourceName !== '' && stripos($sourceName, 'irecord') !== false) {
+                    log_message('debug', 'Skipping iRecord occurrence record due to mixed feeds: ' . $sourceName);
                     $counts['skipped']++;
                     $counts['processed']++;
                     $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);
@@ -81,25 +58,26 @@ class OccurrenceImportService
                 }
 
                 $remoteId = trim((string) ($record['remote_id'] ?? ''));
-                $taxonIdentifier = trim((string) ($record['taxon_identifier'] ?? ''));
-                $givenNameIdentifier = trim((string) ($record['given_name_identifier'] ?? ''));
+                $tvk = trim((string) ($record['scientific_name_identifier'] ?? ''));
+                $givenNameTvk = trim((string) ($record['given_name_identifier'] ?? ''));
 
-                if ($remoteId === '' || $taxonIdentifier === '' || $givenNameIdentifier === '') {
+                if ($remoteId === '' || $tvk === '' || $givenNameTvk === '') {
                     $counts['skipped']++;
                     $counts['processed']++;
                     $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);
                     continue;
                 }
 
-                $taxonId = $taxaByIdentifier[$taxonIdentifier] ?? null;
-                $taxonNameId = $taxonNameByGivenNameIdentifier[$givenNameIdentifier] ?? null;
+                $linkedTaxon = $TaxonModel->where('scientific_name_identifier', $tvk)->first();
+                $linkedTaxonName = $taxonNameModel->where('given_name_identifier', $givenNameTvk)->first();
 
-                if ($taxonId === null || $taxonNameId === null) {
+                if ($linkedTaxon === null || $linkedTaxonName === null) {
                     $counts['skipped']++;
                     $counts['processed']++;
                     $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);
                     continue;
                 }
+                log_message('debug', 'Linked taxon: ' . var_export($linkedTaxon, true));
 
                 $gridRef = trim((string) ($record['grid_ref'] ?? ''));
                 $gridRef2km = trim((string) ($record['grid_ref_2km'] ?? ''));
@@ -115,8 +93,8 @@ class OccurrenceImportService
 
                 $row = [
                     'unique_key' => $uniqueKey,
-                    'taxon_id' => $taxonId,
-                    'taxon_name_id' => $taxonNameId,
+                    'taxon_id' => $linkedTaxon['id'],
+                    'taxon_name_id' => $linkedTaxonName['id'],
                     'from_date' => $this->nullableDate($record['from_date'] ?? null),
                     'to_date' => $this->nullableDate($record['to_date'] ?? null),
                     'grid_ref' => substr($gridRef, 0, 20),
@@ -129,9 +107,10 @@ class OccurrenceImportService
                     'life_stage' => $this->nullableString($record['life_stage'] ?? null, 20),
                     'organism_quantity' => $this->nullableString($record['organism_quantity'] ?? null, 20),
                     'data_source_id' => $dataSourceId,
-                    'blocked' => ! empty($record['blocked']) ? 1 : 0,
-                    'blocked_reason' => $this->nullableText($record['blocked_reason'] ?? null),
                 ];
+                foreach ($rankColumns as $rankColumn) {
+                    $row[$rankColumn] = $linkedTaxon[$rankColumn] ?? null;
+                }
 
                 $existing = $occurrenceModel->where('unique_key', $uniqueKey)->first();
 

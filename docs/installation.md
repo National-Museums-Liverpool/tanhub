@@ -57,7 +57,7 @@ api.rateLimitAuthenticatedSeconds = 20
 2. Add a new client, title TanHub, username tanhub, select the main website you are fetching records for, and provide a secret.
 3. Save it, then edit the client you just created and select the Connections tab. Click New Client Connection.
 4. Title = TanHub, Proj ID = TANHUB, Sharing mode = Reporting, select a filter if needed.
-5. Elasticsearch endpoint es.
+5. Set the correct Elasticsearch endpoint name which grants access to all records at the required precision.
 6. Click allow reports, and paste the following in:
    ```
    projects/tanhub/geographic_regions.xml
@@ -68,7 +68,7 @@ api.rateLimitAuthenticatedSeconds = 20
    projects/tanhub/taxon_ranks.xml
    ```
 7. Click Save.
-8. Set up the Import section in your .env file.
+8. Set up the Import section in your .env file, including setting Config\Import.indiciaOccurrencesEsEndpoint to the endpoint name given in point 5.
 
 ## Preparing an Indicia warehouse for TanHub
 

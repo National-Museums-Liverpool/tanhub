@@ -17,6 +17,31 @@
 
 ### NBN Atlas
 
+### Indicia occurrences API
+
+Occurrence imports from Indicia are fetched from a warehouse REST API endpoint
+that proxies Elasticsearch occurrence documents. This importer does not use
+Indicia report XML endpoints.
+
+The importer uses these settings from `Config\\Import`:
+
+- `indiciaWarehouseUrl`
+- `indiciaOccurrencesEsEndpoint`
+- `indiciaProjId`
+- `indiciaUsername`
+- `indiciaSecret`
+
+Configured taxonomic and geographic filters are applied to occurrence requests
+using the same configuration used elsewhere in import:
+
+- `taxonGroups`
+- `taxonRanks`
+- `geographicRegions`
+- `geographicRegionLocationType`
+
+By default, the Indicia occurrence checkpoint uses `metadata.tracking` so
+incremental loads can resume deterministically.
+
 Note that data from iRecord should not be imported, as it will be a duplicate
 and the iRecord copy should be more recent. So, any records with
 dataReourceName contains 'iRecord' will be ignored.
@@ -47,6 +72,20 @@ Optional parameters:
 - `--dry-run` to fetch data but not load it into TanHub.
 - `--limit n` to override the default limit of 5000 records per fetch.
 - `--offset n` to override the offset
+
+### Occurrence imports
+
+Import occurrences from either source:
+
+```bash
+$ php spark import:occurrences --source indicia --page-size 500 --limit 5000
+$ php spark import:occurrences --source nbn --page-size 500 --limit 5000
+```
+
+Optional parameters:
+
+- `--dry-run` fetch and validate records without writing to `occurrences`.
+- `--since` override source checkpoint for a run.
 
 ## Notes
 

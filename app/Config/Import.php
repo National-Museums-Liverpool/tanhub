@@ -35,6 +35,15 @@ class Import extends BaseConfig
     public string $indiciaSecret = '';
 
     /**
+     * Endpoint used for connection to ES service for occurrence data.
+     *
+     * Endpoint must be configured in Indicia's REST API.
+     *
+     * @var string
+     */
+    public string $indiciaOccurrencesEsEndpoint = 'es';
+
+    /**
      * @var array<string, array<string, mixed>>
      */
     public array $occurrenceSources = [
@@ -48,9 +57,10 @@ class Import extends BaseConfig
         ],
         'indicia' => [
             'abbr' => 'IREC',
+            'records_key' => 'data',
             'endpoint' => '',
             'checkpoint_param' => 'since',
-            'checkpoint_field' => 'lastModified',
+            'checkpoint_field' => 'metadata.tracking',
             'query' => [],
         ],
     ];

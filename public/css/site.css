@@ -220,6 +220,35 @@ a:focus {
     padding: 1.5rem 0 2.5rem;
 }
 
+.pagination .page-link {
+    border-radius: 0.65rem;
+    border-color: rgba(29, 39, 51, 0.18);
+    color: var(--th-ink);
+    background: rgba(255, 255, 255, 0.75);
+    min-width: 2.5rem;
+    text-align: center;
+}
+
+.pagination .page-link:hover,
+.pagination .page-link:focus {
+    color: var(--th-ink);
+    background: rgba(29, 39, 51, 0.08);
+    border-color: rgba(29, 39, 51, 0.28);
+    box-shadow: none;
+}
+
+.pagination .page-item.active .page-link {
+    color: #fff;
+    background: var(--th-ink);
+    border-color: var(--th-ink);
+}
+
+.pagination .page-item.disabled .page-link {
+    color: rgba(29, 39, 51, 0.45);
+    background: rgba(255, 255, 255, 0.6);
+    border-color: rgba(29, 39, 51, 0.12);
+}
+
 @media (max-width: 767.98px) {
     .hero,
     .page-section {

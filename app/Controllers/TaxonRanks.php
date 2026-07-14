@@ -19,7 +19,7 @@ class TaxonRanks extends BaseController
         $sort = strtolower((string) $this->request->getGet('sort'));
         $direction = strtolower((string) $this->request->getGet('direction'));
 
-        $allowedSortColumns = ['id', 'rank', 'code', 'sort_order'];
+        $allowedSortColumns = ['id', 'rank', 'abbr', 'sort_order'];
 
         if (! in_array($sort, $allowedSortColumns, true)) {
             $sort = 'sort_order';
@@ -46,7 +46,7 @@ class TaxonRanks extends BaseController
     /**
      * Render the edit form for a single taxon rank.
      */
-    public function edit(int $id): string
+    public function details(int $id): string
     {
         $model = model(TaxonRankModel::class);
         $taxonRank = $model->find($id);
@@ -55,7 +55,7 @@ class TaxonRanks extends BaseController
             throw PageNotFoundException::forPageNotFound();
         }
 
-        return $this->renderPage('taxon-ranks/edit', [
+        return $this->renderPage('taxon-ranks/details', [
             'pageTitle' => 'Edit taxon rank',
             'metaDescription' => 'Edit taxon rank friendly name.',
             'bodyClass' => 'app-shell',
@@ -89,6 +89,6 @@ class TaxonRanks extends BaseController
             'friendly' => $friendly === '' ? null : $friendly,
         ]);
 
-        return redirect()->to(site_url('taxon-ranks/' . $id . '/edit'))->with('message', 'Taxon rank updated.');
+        return redirect()->to(site_url('taxon-ranks/' . $id))->with('message', 'Taxon rank updated.');
     }
 }

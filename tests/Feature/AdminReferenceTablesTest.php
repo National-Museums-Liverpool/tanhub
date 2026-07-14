@@ -24,6 +24,23 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
     {
         parent::setUp();
 
+        // Isolate this test class from shared service singletons mutated by earlier tests.
+        \Config\Services::reset();
+
+        // Ensure starting point is a guest: clear session and any persisted auth cookie state.
+        $_SESSION = [];
+        $_COOKIE = [];
+        $this->withSession([]);
+
+        // Feature tests can leak in-memory auth state across classes in a single PHPUnit process.
+        if (function_exists('auth')) {
+            try {
+                auth()->logout();
+            } catch (\Throwable) {
+                // Ignore; some test contexts may not have a fully booted auth service.
+            }
+        }
+
         config(Auth::class)->actions['register'] = null;
 
         $migrate = service('migrations');
@@ -38,7 +55,7 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
      */
     public function testListPagesRequireLogin(): void
     {
-        foreach (['orders', 'families', 'superfamilies', 'recording-schemes'] as $path) {
+        foreach (['taxon-groups', 'taxon-ranks', 'geographic-regions', 'recording-schemes'] as $path) {
             $result = $this->get($path);
             $result->assertStatus(302);
             $result->assertRedirect();
@@ -52,7 +69,7 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
     {
         $this->authenticateAs('general-user@example.com', 'user');
 
-        foreach (['orders', 'families', 'superfamilies', 'recording-schemes'] as $path) {
+        foreach (['taxon-groups', 'taxon-ranks', 'geographic-regions', 'recording-schemes'] as $path) {
             $result = $this->get($path);
             $result->assertStatus(302);
             $result->assertRedirect();
@@ -60,23 +77,23 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
     }
 
     /**
-     * Ensure managers can access all three list pages.
+     * Ensure managers can access all list pages.
      */
     public function testListPagesAllowManagerRole(): void
     {
         $this->authenticateAs('manager-lists@example.com', 'manager');
 
-        $orders = $this->get('orders');
-        $orders->assertStatus(200);
-        $orders->assertSee('Orders');
+        $taxonGroups = $this->get('taxon-groups');
+        $taxonGroups->assertStatus(200);
+        $taxonGroups->assertSee('Taxon groups');
 
-        $families = $this->get('families');
-        $families->assertStatus(200);
-        $families->assertSee('Families');
+        $taxonRanks = $this->get('taxon-ranks');
+        $taxonRanks->assertStatus(200);
+        $taxonRanks->assertSee('Taxon ranks');
 
-        $superfamilies = $this->get('superfamilies');
-        $superfamilies->assertStatus(200);
-        $superfamilies->assertSee('Superfamilies');
+        $geographicRegions = $this->get('geographic-regions');
+        $geographicRegions->assertStatus(200);
+        $geographicRegions->assertSee('Geographic regions');
 
         $recordingSchemes = $this->get('recording-schemes');
         $recordingSchemes->assertStatus(200);
@@ -84,24 +101,23 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
     }
 
     /**
-     * Validate orders list columns and default sort behavior.
+     * Validate taxon groups list columns and default sort behavior.
      */
-    public function testOrdersListMatchesSpecification(): void
+    public function testTaxonGroupsListMatchesSpecification(): void
     {
         $this->authenticateAs('manager-orders@example.com', 'manager');
 
-        $result = $this->get('orders');
+        $result = $this->get('taxon-groups');
 
         $result->assertStatus(200);
-        $result->assertSee('Taxon identifier');
-        $result->assertSee('Scientific name');
-        $result->assertSee('Vernacular name');
-        $result->assertSee('Taxa count');
-        $result->assertSee('View');
+        $result->assertSee('Title');
+        $result->assertSee('Friendly');
+        $result->assertSee('External key');
+        $result->assertSee('Details');
 
         $body = (string) $result->response()->getBody();
-        $alphaPos = strpos($body, 'Alpha order');
-        $betaPos = strpos($body, 'Beta order');
+        $alphaPos = strpos($body, 'Insecta');
+        $betaPos = strpos($body, 'Marine mammals');
 
         $this->assertIsInt($alphaPos);
         $this->assertIsInt($betaPos);
@@ -109,24 +125,23 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
     }
 
     /**
-     * Validate superfamilies list columns and default sort behavior.
+     * Validate taxon ranks list columns and default sort behavior.
      */
-    public function testSuperfamiliesListMatchesSpecification(): void
+    public function testTaxonRanksListMatchesSpecification(): void
     {
         $this->authenticateAs('manager-super@example.com', 'manager');
 
-        $result = $this->get('superfamilies');
+        $result = $this->get('taxon-ranks');
 
         $result->assertStatus(200);
-        $result->assertSee('Taxon identifier');
-        $result->assertSee('Scientific name');
-        $result->assertSee('Vernacular name');
-        $result->assertSee('Taxa count');
-        $result->assertSee('View');
+        $result->assertSee('Rank');
+        $result->assertSee('Abbreviation');
+        $result->assertSee('Sort order');
+        $result->assertSee('Details');
 
         $body = (string) $result->response()->getBody();
-        $alphaPos = strpos($body, 'Alpha superfamily');
-        $betaPos = strpos($body, 'Beta superfamily');
+        $alphaPos = strpos($body, 'Family');
+        $betaPos = strpos($body, 'Species');
 
         $this->assertIsInt($alphaPos);
         $this->assertIsInt($betaPos);
@@ -134,28 +149,19 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
     }
 
     /**
-     * Validate families list columns and default sort behavior.
+     * Validate geographic regions list columns and default sort behavior.
      */
-    public function testFamiliesListMatchesSpecification(): void
+    public function testGeographicRegionsMatchesSpecification(): void
     {
         $this->authenticateAs('manager-families@example.com', 'manager');
 
-        $result = $this->get('families');
+        $result = $this->get('geographic-regions');
 
         $result->assertStatus(200);
-        $result->assertSee('Taxon identifier');
-        $result->assertSee('Scientific name');
-        $result->assertSee('Vernacular name');
-        $result->assertSee('Taxa count');
-        $result->assertSee('View');
-
-        $body = (string) $result->response()->getBody();
-        $alphaPos = strpos($body, 'Alpha family');
-        $betaPos = strpos($body, 'Beta family');
-
-        $this->assertIsInt($alphaPos);
-        $this->assertIsInt($betaPos);
-        $this->assertLessThan($betaPos, $alphaPos);
+        $result->assertSee('Identifier');
+        $result->assertSee('Region');
+        $result->assertSee('Location type');
+        $result->assertSee('Occurrences');
     }
 
     /**
@@ -183,50 +189,20 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
     }
 
     /**
-     * Validate read-only order detail and related taxa count.
+     * Validate the taxon rank details page is read-only.
      */
-    public function testOrderDetailShowsReadOnlyFieldsAndTaxaCount(): void
+    public function testTaxonRankDetailShowsReadOnlyFields(): void
     {
-        $this->authenticateAs('manager-order-detail@example.com', 'manager');
+        $this->authenticateAs('manager-rank-detail@example.com', 'manager');
 
-        $result = $this->get('orders/1');
+        $result = $this->get('taxon-ranks/2');
 
         $result->assertStatus(200);
         $result->assertSee('Read-only');
-        $result->assertSee('Taxa count');
-        $this->assertStringContainsString('value="2"', (string) $result->response()->getBody());
-        $result->assertSee('Back to list');
-    }
-
-    /**
-     * Validate read-only superfamily detail and related taxa count.
-     */
-    public function testSuperfamilyDetailShowsReadOnlyFieldsAndTaxaCount(): void
-    {
-        $this->authenticateAs('manager-super-detail@example.com', 'manager');
-
-        $result = $this->get('superfamilies/1');
-
-        $result->assertStatus(200);
-        $result->assertSee('Read-only');
-        $result->assertSee('Taxa count');
-        $this->assertStringContainsString('value="2"', (string) $result->response()->getBody());
-        $result->assertSee('Back to list');
-    }
-
-    /**
-     * Validate read-only family detail and related taxa count.
-     */
-    public function testFamilyDetailShowsReadOnlyFieldsAndTaxaCount(): void
-    {
-        $this->authenticateAs('manager-family-detail@example.com', 'manager');
-
-        $result = $this->get('families/1');
-
-        $result->assertStatus(200);
-        $result->assertSee('Read-only');
-        $result->assertSee('Taxa count');
-        $this->assertStringContainsString('value="2"', (string) $result->response()->getBody());
+        $result->assertSee('Rank');
+        $result->assertSee('Abbreviation');
+        $this->assertStringContainsString('value="Family"', (string) $result->response()->getBody());
+        $this->assertStringContainsString('value="fam"', (string) $result->response()->getBody());
         $result->assertSee('Back to list');
     }
 
@@ -253,7 +229,7 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
     {
         $this->authenticateAs('manager-missing@example.com', 'manager');
 
-        foreach (['orders/9999', 'families/9999', 'superfamilies/9999', 'recording-schemes/9999'] as $path) {
+        foreach (['taxon-ranks/9999', 'recording-schemes/9999'] as $path) {
             try {
                 $this->get($path);
                 $this->fail('Expected PageNotFoundException for path: ' . $path);
@@ -280,10 +256,8 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
         $db = db_connect();
 
         $db->table('taxa')->emptyTable();
-        $db->table('orders')->emptyTable();
-        $db->table('superfamilies')->emptyTable();
-        $db->table('families')->emptyTable();
         $db->table('taxon_groups')->emptyTable();
+        $db->table('taxon_ranks')->emptyTable();
         $db->table('recording_schemes')->emptyTable();
 
         $db->table('taxon_groups')->insert([
@@ -291,6 +265,36 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
             'title' => 'Insecta',
             'friendly' => 'Insects',
             'external_key' => 'TANHUB-TG-1',
+            'indicia_taxon_group_id' => 1,
+        ]);
+
+        $db->table('taxon_groups')->insert([
+            'id' => 2,
+            'title' => 'Marine mammals',
+            'friendly' => 'Whales & dolphins',
+            'external_key' => 'TANHUB-TG-2',
+            'indicia_taxon_group_id' => 2,
+        ]);
+
+        $db->table('taxon_ranks')->insert([
+            'id' => 1,
+            'rank' => 'Order',
+            'abbr' => 'ord',
+            'sort_order' => 1,
+        ]);
+
+        $db->table('taxon_ranks')->insert([
+            'id' => 2,
+            'rank' => 'Family',
+            'abbr' => 'fam',
+            'sort_order' => 2,
+        ]);
+
+        $db->table('taxon_ranks')->insert([
+            'id' => 3,
+            'rank' => 'Species',
+            'abbr' => 'sp',
+            'sort_order' => 3,
         ]);
 
         $db->table('recording_schemes')->insert([
@@ -305,63 +309,6 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
             'title' => 'Beta scheme',
         ]);
 
-        $db->table('orders')->insertBatch([
-            [
-                'id' => 1,
-                'taxon_identifier' => 'ORD-ALPHA',
-                'scientific_name_identifier' => 'ORD-SCI-ALPHA',
-                'scientific_name' => 'Alpha order',
-                'scientific_name_authorship' => 'Auth A',
-                'vernacular_name' => 'Order Alpha',
-            ],
-            [
-                'id' => 2,
-                'taxon_identifier' => 'ORD-BETA',
-                'scientific_name_identifier' => 'ORD-SCI-BETA',
-                'scientific_name' => 'Beta order',
-                'scientific_name_authorship' => 'Auth B',
-                'vernacular_name' => 'Order Beta',
-            ],
-        ]);
-
-        $db->table('superfamilies')->insertBatch([
-            [
-                'id' => 1,
-                'taxon_identifier' => 'SUP-ALPHA',
-                'scientific_name_identifier' => 'SUP-SCI-ALPHA',
-                'scientific_name' => 'Alpha superfamily',
-                'scientific_name_authorship' => 'Auth A',
-                'vernacular_name' => 'Superfamily Alpha',
-            ],
-            [
-                'id' => 2,
-                'taxon_identifier' => 'SUP-BETA',
-                'scientific_name_identifier' => 'SUP-SCI-BETA',
-                'scientific_name' => 'Beta superfamily',
-                'scientific_name_authorship' => 'Auth B',
-                'vernacular_name' => 'Superfamily Beta',
-            ],
-        ]);
-
-        $db->table('families')->insertBatch([
-            [
-                'id' => 1,
-                'taxon_identifier' => 'FAM-ALPHA',
-                'scientific_name_identifier' => 'FAM-SCI-ALPHA',
-                'scientific_name' => 'Alpha family',
-                'scientific_name_authorship' => 'Auth A',
-                'vernacular_name' => 'Family Alpha',
-            ],
-            [
-                'id' => 2,
-                'taxon_identifier' => 'FAM-BETA',
-                'scientific_name_identifier' => 'FAM-SCI-BETA',
-                'scientific_name' => 'Beta family',
-                'scientific_name_authorship' => 'Auth B',
-                'vernacular_name' => 'Family Beta',
-            ],
-        ]);
-
         $db->table('taxa')->insertBatch([
             [
                 'id' => 1,
@@ -370,9 +317,12 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
                 'scientific_name' => 'Taxon one',
                 'scientific_name_authorship' => null,
                 'vernacular_name' => 'Taxon One',
+                'taxon_rank_id' => 1,
                 'order_id' => 1,
-                'superfamily_id' => 1,
-                'family_id' => 1,
+                'superfamily_id' => null,
+                'family_id' => null,
+                'genus_id' => null,
+                'species_id' => null,
                 'taxon_group_id' => 1,
                 'id_difficulty' => null,
                 'recording_scheme_id' => 2,
@@ -389,9 +339,12 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
                 'scientific_name' => 'Taxon two',
                 'scientific_name_authorship' => null,
                 'vernacular_name' => 'Taxon Two',
+                'taxon_rank_id' => 2,
                 'order_id' => 1,
-                'superfamily_id' => 1,
-                'family_id' => 1,
+                'superfamily_id' => 2,
+                'family_id' => null,
+                'genus_id' => null,
+                'species_id' => null,
                 'taxon_group_id' => 1,
                 'id_difficulty' => null,
                 'recording_scheme_id' => 1,
@@ -408,9 +361,12 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
                 'scientific_name' => 'Taxon three',
                 'scientific_name_authorship' => null,
                 'vernacular_name' => 'Taxon Three',
-                'order_id' => 2,
+                'taxon_rank_id' => 3,
+                'order_id' => 1,
                 'superfamily_id' => 2,
-                'family_id' => 2,
+                'family_id' => 3,
+                'genus_id' => null,
+                'species_id' => 3,
                 'taxon_group_id' => 1,
                 'id_difficulty' => null,
                 'recording_scheme_id' => 1,

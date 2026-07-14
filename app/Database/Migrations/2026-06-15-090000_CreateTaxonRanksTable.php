@@ -26,9 +26,9 @@ class CreateTaxonRanksTable extends Migration
                 'type'       => 'VARCHAR',
                 'constraint' => 50,
             ],
-            'code' => [
+            'abbr' => [
                 'type'       => 'VARCHAR',
-                'constraint' => 50,
+                'constraint' => 10,
             ],
             'sort_order' => [
                 'type'       => 'INT',
@@ -53,7 +53,7 @@ class CreateTaxonRanksTable extends Migration
 
         $this->forge->addKey('id', true);
         $this->forge->addUniqueKey('rank');
-        $this->forge->addUniqueKey('code');
+        $this->forge->addUniqueKey('abbr');
         $this->forge->addKey('sort_order');
         $this->forge->createTable('taxon_ranks', true);
     }

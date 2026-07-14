@@ -145,17 +145,11 @@ class CreateOccurrencesTable extends Migration
         $this->forge->addForeignKey('taxon_id', 'taxa', 'id', 'CASCADE', 'RESTRICT');
         $this->forge->addForeignKey('taxon_name_id', 'taxon_names', 'id', 'CASCADE', 'RESTRICT');
         $this->forge->addForeignKey('data_source_id', 'data_sources', 'id', 'CASCADE', 'RESTRICT');
-        $this->forge->createTable('occurrences', true);
-
-        // Add self-referential rank foreign keys after table creation.
-        $db = db_connect();
-
+        // Define self-referential rank FKs as part of CREATE TABLE (works with SQLite).
         foreach ($rankColumns as $rankColumn) {
-            $constraint = substr('fk_occurrences_' . $rankColumn . '_taxa_id', 0, 64);
-            $db->query(
-                'ALTER TABLE `taxa` ADD CONSTRAINT `' . $constraint . '` FOREIGN KEY (`' . $rankColumn . '`) REFERENCES `taxa`(`id`) ON UPDATE CASCADE ON DELETE SET NULL'
-            );
+            $this->forge->addForeignKey($rankColumn, 'taxa', 'id', 'CASCADE', 'SET NULL');
         }
+        $this->forge->createTable('occurrences', true);
     }
 
     /**

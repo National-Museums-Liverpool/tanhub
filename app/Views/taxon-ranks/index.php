@@ -42,9 +42,9 @@
                 <tr>
                     <th scope="col"><a href="<?= esc($sortUrl('id')) ?>">ID<?= esc($sortIndicator('id')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('rank')) ?>">Rank<?= esc($sortIndicator('rank')) ?></a></th>
-                    <th scope="col"><a href="<?= esc($sortUrl('code')) ?>">Code<?= esc($sortIndicator('code')) ?></a></th>
+                    <th scope="col"><a href="<?= esc($sortUrl('abbr')) ?>">Abbreviation<?= esc($sortIndicator('abbr')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('sort_order')) ?>">Sort order<?= esc($sortIndicator('sort_order')) ?></a></th>
-                    <th scope="col">View</th>
+                    <th scope="col">Edit</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -57,9 +57,9 @@
                         <tr>
                             <td><?= esc((string) $taxonRank['id']) ?></td>
                             <td><?= esc($taxonRank['rank']) ?></td>
-                            <td><?= esc($taxonRank['code']) ?></td>
+                            <td><?= esc($taxonRank['abbr']) ?></td>
                             <td><?= esc((string) $taxonRank['sort_order']) ?></td>
-                            <td><a class="btn btn-sm btn-outline-brand" href="<?= esc(site_url('taxon-ranks/' . $taxonRank['id'])) ?>">View</a></td>
+                            <td><a class="btn btn-sm btn-outline-brand" href="<?= esc(site_url('taxon-ranks/' . $taxonRank['id'])) ?>">Details</a></td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

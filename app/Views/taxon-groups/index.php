@@ -47,7 +47,7 @@
                     <th scope="col"><a href="<?= esc($sortUrl('id')) ?>">ID<?= esc($sortIndicator('id')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('title')) ?>">Title<?= esc($sortIndicator('title')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('friendly')) ?>">Friendly<?= esc($sortIndicator('friendly')) ?></a></th>
-                    <th scope="col"><a href="<?= esc($sortUrl('external_key')) ?>">External Key<?= esc($sortIndicator('external_key')) ?></a></th>
+                    <th scope="col"><a href="<?= esc($sortUrl('external_key')) ?>">External key<?= esc($sortIndicator('external_key')) ?></a></th>
                     <th scope="col">Edit</th>
                 </tr>
                 </thead>
@@ -63,7 +63,7 @@
                             <td><?= esc($taxonGroup['title']) ?></td>
                             <td><?= esc((string) ($taxonGroup['friendly'] ?? '')) ?></td>
                             <td><?= esc($taxonGroup['external_key']) ?></td>
-                            <td><a class="btn btn-sm btn-outline-brand" href="<?= esc(site_url('taxon-groups/' . $taxonGroup['id'] . '/edit')) ?>">Edit</a></td>
+                            <td><a class="btn btn-sm btn-outline-brand" href="<?= esc(site_url('taxon-groups/' . $taxonGroup['id'] . '')) ?>">Details</a></td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

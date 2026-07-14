@@ -54,7 +54,7 @@ class GeographicRegions extends BaseController
     /**
      * Show read-only details for a single geographic region.
      */
-    public function show(int $id): string
+    public function details(int $id): string
     {
         /** @var GeographicRegionModel $model */
         $model = model(GeographicRegionModel::class);
@@ -73,7 +73,7 @@ class GeographicRegions extends BaseController
 
         $occurrenceCount = $this->getOccurrenceCountForRegionId($id);
 
-        return $this->renderPage('geographic-regions/show', [
+        return $this->renderPage('geographic-regions/details', [
             'pageTitle' => 'Geographic region details',
             'metaDescription' => 'Read-only geographic region details.',
             'bodyClass' => 'app-shell',

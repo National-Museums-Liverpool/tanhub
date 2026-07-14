@@ -21,6 +21,23 @@ final class TaxonGroupsTest extends CIUnitTestCase
     {
         parent::setUp();
 
+        // Isolate this test class from shared service singletons mutated by earlier tests.
+        \Config\Services::reset();
+
+        // Ensure starting point is a guest: clear session and any persisted auth cookie state.
+        $_SESSION = [];
+        $_COOKIE = [];
+        $this->withSession([]);
+
+        // Feature tests can leak in-memory auth state across classes in a single PHPUnit process.
+        if (function_exists('auth')) {
+            try {
+                auth()->logout();
+            } catch (\Throwable) {
+                // Ignore; some test contexts may not have a fully booted auth service.
+            }
+        }
+
         // Disable registration action during tests to avoid activation flow redirects.
         config(Auth::class)->actions['register'] = null;
 
@@ -33,6 +50,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
 
     public function testListRequiresLogin(): void
     {
+        $this->withSession([]);
         $result = $this->get('taxon-groups');
 
         $result->assertStatus(302);
@@ -69,7 +87,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
         $result->assertSee('ID');
         $result->assertSee('Title');
         $result->assertSee('Friendly');
-        $result->assertSee('External Key');
+        $result->assertSee('External key');
         $result->assertSee('Edit');
     }
 
@@ -89,7 +107,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
     {
         $this->authenticateAs('user2@example.com', 'user');
 
-        $result = $this->get('taxon-groups/1/edit');
+        $result = $this->get('taxon-groups/1');
 
         $result->assertStatus(302);
         $result->assertRedirect();
@@ -99,11 +117,11 @@ final class TaxonGroupsTest extends CIUnitTestCase
     {
         $this->authenticateAs('manager2@example.com', 'manager');
 
-        $result = $this->get('taxon-groups/1/edit');
+        $result = $this->get('taxon-groups/1');
 
         $result->assertStatus(200);
         $result->assertSee('Read-only');
-        $result->assertSee('External Key');
+        $result->assertSee('External key');
         $result->assertSeeInField('friendly', 'Insects');
     }
 
@@ -113,7 +131,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
 
         $before = model(TaxonGroupModel::class)->find(1);
 
-        $result = $this->post('taxon-groups/1/edit', [
+        $result = $this->post('taxon-groups/1', [
             'friendly' => 'Invertebrates',
         ]);
 
@@ -131,7 +149,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
     {
         $this->authenticateAs('admin4@example.com', 'admin');
 
-        $result = $this->post('taxon-groups/1/edit', [
+        $result = $this->post('taxon-groups/1', [
             'friendly' => str_repeat('x', 201),
         ]);
 
@@ -144,7 +162,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
     {
         $this->authenticateAs('manager3@example.com', 'manager');
 
-        $result = $this->post('taxon-groups/1/edit', [
+        $result = $this->post('taxon-groups/1', [
             'friendly' => '',
         ]);
 
@@ -165,6 +183,11 @@ final class TaxonGroupsTest extends CIUnitTestCase
     {
         $model = model(TaxonGroupModel::class);
 
+        $model->db->table('occurrences')->truncate();
+        $model->db->table('taxon_names')->truncate();
+        $model->db->table('taxon_stats')->truncate();
+        $model->db->table('taxon_year_stats')->truncate();
+        $model->db->table('taxa')->truncate();
         $model->db->table('taxon_groups')->truncate();
         $now = date('Y-m-d H:i:s');
 
@@ -174,6 +197,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
                 'title' => 'Insecta',
                 'friendly' => 'Insects',
                 'external_key' => 'TANHUB0000000001',
+                'indicia_taxon_group_id' => 1,
                 'created_at' => $now,
                 'updated_at' => $now,
             ],
@@ -182,6 +206,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
                 'title' => 'Mammals',
                 'friendly' => null,
                 'external_key' => 'TANHUB0000000002',
+                'indicia_taxon_group_id' => 2,
                 'created_at' => $now,
                 'updated_at' => $now,
             ],
@@ -190,6 +215,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
                 'title' => 'Aves',
                 'friendly' => 'Birds',
                 'external_key' => 'TANHUB0000000003',
+                'indicia_taxon_group_id' => 3,
                 'created_at' => $now,
                 'updated_at' => $now,
             ],

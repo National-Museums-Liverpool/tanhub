@@ -87,6 +87,7 @@ Each resource supports:
 - `taxa`: `taxon_identifier`
 - `taxon-groups`: `external_key`
 - `taxon-names`: `uuid`
+- `taxon-ranks`: `abbr`
 - `grid-square-stats`: `uuid`
 - `taxon-stats`: `uuid`
 - `taxon-year-stats`: `uuid`
@@ -222,6 +223,8 @@ Errors use `application/problem+json` based on RFC 9457/7807.
 - `GET /api/v1/taxon-groups/{external_key}`
 - `GET /api/v1/taxon-names`
 - `GET /api/v1/taxon-names/{uuid}`
+- `GET /api/v1/taxon-ranks`
+- `GET /api/v1/taxon-ranks/{code}`
 - `GET /api/v1/grid-square-stats`
 - `GET /api/v1/grid-square-stats/{uuid}`
 - `GET /api/v1/taxon-stats`
@@ -873,7 +876,43 @@ Examples:
 }
 ```
 
-### 13.8 grid-square-stats
+### 13.8 taxon-ranks
+
+- Path: `GET /api/v1/taxon-raks`
+- Item path: `GET /api/v1/taxon-raks/{abbr}`
+- Unique identifier: `abbr`
+- Exposed fields: `rank`, `abbr`, `sort_order`
+- Filterable fields: `rank`, `abbr`, `sort_order`
+
+Examples:
+
+- Request: `/api/v1/taxon-ranks?abbr[contains]=sp`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"rank": "Species",
+			"abbr": "sp",
+			"sort_order": 300
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 1
+	},
+	"links": {
+		"self": "/api/v1/taxon-ranks?abbr[contains]=sp",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
+### 13.9 grid-square-stats
 
 - Path: `GET /api/v1/grid-square-stats`
 - Item path: `GET /api/v1/grid-square-stats/{uuid}`
@@ -945,7 +984,7 @@ Examples:
 }
 ```
 
-### 13.9 taxon-stats
+### 13.10 taxon-stats
 
 - Path: `GET /api/v1/taxon-stats`
 - Item path: `GET /api/v1/taxon-stats/{uuid}`
@@ -1033,7 +1072,7 @@ Examples:
 }
 ```
 
-### 13.10 taxon-year-stats
+### 13.11 taxon-year-stats
 
 - Path: `GET /api/v1/taxon-year-stats`
 - Item path: `GET /api/v1/taxon-year-stats/{uuid}`

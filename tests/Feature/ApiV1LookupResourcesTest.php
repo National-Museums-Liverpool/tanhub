@@ -63,6 +63,32 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame('Bees', $json['title']);
     }
 
+    public function testTaxonRanksListSupportsSortFilterAndPagination(): void
+    {
+        $result = $this->get('api/v1/taxon-ranks?abbr[contains]=sp&sort=-rank&limit=1&offset=0');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame(1, $json['meta']['limit']);
+        $this->assertSame(0, $json['meta']['offset']);
+        $this->assertSame(1, $json['meta']['count']);
+        $this->assertSame('Species', $json['data'][0]['rank']);
+    }
+
+    public function testTaxonRankShowReturnsSingleObject(): void
+    {
+        $result = $this->get('api/v1/taxon-ranks/sp');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame('sp', $json['abbr']);
+        $this->assertSame('Species', $json['rank']);
+    }
+
     public function testRecordingSchemesListSupportsFilterSortAndPagination(): void
     {
         $result = $this->get('api/v1/recording-schemes?title[contains]=scheme&sort=-title&limit=1&offset=0');
@@ -324,7 +350,8 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
     {
         $db = db_connect();
 
-        $db->table('data_sources')->emptyTable();
+        $db->table('taxon_stats')->emptyTable();
+        $db->table('taxon_year_stats')->emptyTable();
         $db->table('geographic_regions')->emptyTable();
         $db->table('geographic_regions_occurrences')->emptyTable();
         $db->table('grid_square_stats')->emptyTable();
@@ -333,8 +360,8 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $db->table('taxon_names')->emptyTable();
         $db->table('taxa')->emptyTable();
         $db->table('taxon_groups')->emptyTable();
-        $db->table('taxon_stats')->emptyTable();
-        $db->table('taxon_year_stats')->emptyTable();
+        $db->table('taxon_ranks')->emptyTable();
+        $db->table('data_sources')->emptyTable();
 
         $now = date('Y-m-d H:i:s');
 
@@ -418,6 +445,27 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             ],
         ]);
 
+        $db->table('taxon_ranks')->insertBatch([
+            [
+                'id' => 1,
+                'rank' => 'Genus',
+                'abbr' => 'gen',
+                'sort_order' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ],
+            [
+                'id' => 2,
+                'rank' => 'Species',
+                'abbr' => 'sp',
+                'sort_order' => 2,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ],
+        ]);
+
         $db->table('taxa')->insertBatch([
             [
                 'id' => 1,
@@ -427,6 +475,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'scientific_name_authorship' => 'Linnaeus, 1758',
                 'vernacular_name' => 'Buff-tailed Bumblebee',
                 'taxon_group_id' => 1,
+                'taxon_rank_id' => 2,
                 'id_difficulty' => 2,
                 'recording_scheme_id' => 1,
                 'conservation_status' => 'LC',
@@ -446,6 +495,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'scientific_name_authorship' => null,
                 'vernacular_name' => 'Blocked Bee',
                 'taxon_group_id' => 1,
+                'taxon_rank_id' => 2,
                 'id_difficulty' => 3,
                 'recording_scheme_id' => 1,
                 'conservation_status' => 'EN',
@@ -465,7 +515,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'uuid' => '3d77f8e7-e2e8-4d74-9d4d-cff4d11130e8',
                 'taxon_id' => 1,
                 'name' => 'Bombus terrestris',
-                'scientific_name_identifier' => 'TVK-001',
+                'given_name_identifier' => 'TVK-001',
                 'accepted' => 1,
                 'scientific' => 1,
                 'created_at' => $now,
@@ -477,7 +527,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'uuid' => 'f54da6a0-5f0b-4de2-a10a-2693b193f5f2',
                 'taxon_id' => 1,
                 'name' => 'Buff-tailed Bumblebee',
-                'scientific_name_identifier' => 'TVK-001',
+                'given_name_identifier' => 'TVK-002',
                 'accepted' => 1,
                 'scientific' => 0,
                 'created_at' => $now,
@@ -489,7 +539,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'uuid' => '82cbf7f8-3f42-42ff-82e3-ac39a9402fd0',
                 'taxon_id' => 2,
                 'name' => 'Bombus blockedus',
-                'scientific_name_identifier' => 'TVK-BLOCKED-1',
+                'given_name_identifier' => 'TVK-BLOCKED-1',
                 'accepted' => 1,
                 'scientific' => 1,
                 'created_at' => $now,
@@ -663,6 +713,16 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             deleted_at DATETIME NULL
         )');
 
+        $db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'taxon_ranks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rank VARCHAR(100) NOT NULL,
+            abbr VARCHAR(10) NULL,
+            sort_order INTEGER NOT NULL,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NULL,
+            deleted_at DATETIME NULL
+        )');
+
         $db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'recording_schemes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             external_key VARCHAR(16) NOT NULL,
@@ -690,6 +750,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             scientific_name VARCHAR(200) NOT NULL,
             scientific_name_authorship VARCHAR(100) NULL,
             vernacular_name VARCHAR(200) NOT NULL,
+            taxon_rank_id INTEGER NOT NULL,
             taxon_group_id INTEGER NOT NULL,
             id_difficulty INTEGER NULL,
             recording_scheme_id INTEGER NULL,
@@ -708,7 +769,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             uuid VARCHAR(36) NOT NULL,
             taxon_id INTEGER NOT NULL,
             name VARCHAR(200) NOT NULL,
-            scientific_name_identifier VARCHAR(100) NOT NULL,
+            given_name_identifier VARCHAR(100) NOT NULL,
             accepted INTEGER NOT NULL DEFAULT 0,
             scientific INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME NOT NULL,

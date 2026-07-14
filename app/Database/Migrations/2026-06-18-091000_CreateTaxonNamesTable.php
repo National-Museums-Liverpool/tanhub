@@ -35,7 +35,7 @@ class CreateTaxonNamesTable extends Migration
                 'type'       => 'VARCHAR',
                 'constraint' => 200,
             ],
-            'scientific_name_identifier' => [
+            'given_name_identifier' => [
                 'type'       => 'VARCHAR',
                 'constraint' => 100,
             ],
@@ -66,9 +66,9 @@ class CreateTaxonNamesTable extends Migration
 
         $this->forge->addKey('id', true);
         $this->forge->addUniqueKey('uuid');
-        $this->forge->addUniqueKey(['taxon_id', 'scientific_name_identifier']);
+        $this->forge->addUniqueKey(['taxon_id', 'given_name_identifier']);
         $this->forge->addKey('taxon_id');
-        $this->forge->addKey('scientific_name_identifier');
+        $this->forge->addKey('given_name_identifier');
 
         $this->forge->addForeignKey('taxon_id', 'taxa', 'id', 'CASCADE', 'RESTRICT');
         $this->forge->createTable('taxon_names', true);

@@ -53,7 +53,7 @@ class RecordingSchemes extends BaseController
     /**
      * Show read-only details for a single recording scheme.
      */
-    public function show(int $id): string
+    public function details(int $id): string
     {
         /** @var RecordingSchemeModel $model */
         $model = model(RecordingSchemeModel::class);
@@ -65,7 +65,7 @@ class RecordingSchemes extends BaseController
 
         $taxaCount = $this->getTaxaCountForForeignKey('recording_scheme_id', $id);
 
-        return $this->renderPage('recording-schemes/show', [
+        return $this->renderPage('recording-schemes/details', [
             'pageTitle' => 'Recording scheme details',
             'metaDescription' => 'Read-only recording scheme details.',
             'bodyClass' => 'app-shell',

@@ -52,19 +52,19 @@ class OccurrenceImportService
             $taxaByIdentifier[(string) $taxaRow['taxon_identifier']] = (int) $taxaRow['id'];
         }
 
-        $sciNameIdentifiers = array_values(array_unique(array_filter(array_map(static function (array $record): string {
-            return (string) ($record['scientific_name_identifier'] ?? '');
+        $givenNameIdentifiers = array_values(array_unique(array_filter(array_map(static function (array $record): string {
+            return (string) ($record['given_name_identifier'] ?? '');
         }, $records))));
 
-        $taxonNameBySciNameIdentifier = [];
+        $taxonNameByGivenNameIdentifier = [];
 
-        if ($sciNameIdentifiers !== []) {
-            $taxonNameRows = $taxonNameModel->select(['id', 'scientific_name_identifier'])
-                ->whereIn('scientific_name_identifier', $sciNameIdentifiers)
+        if ($givenNameIdentifiers !== []) {
+            $taxonNameRows = $taxonNameModel->select(['id', 'given_name_identifier'])
+                ->whereIn('given_name_identifier', $givenNameIdentifiers)
                 ->findAll();
 
             foreach ($taxonNameRows as $taxonNameRow) {
-                $taxonNameBySciNameIdentifier[(string) $taxonNameRow['scientific_name_identifier']] = (int) $taxonNameRow['id'];
+                $taxonNameByGivenNameIdentifier[(string) $taxonNameRow['given_name_identifier']] = (int) $taxonNameRow['id'];
             }
         }
 
@@ -82,9 +82,9 @@ class OccurrenceImportService
 
                 $remoteId = trim((string) ($record['remote_id'] ?? ''));
                 $taxonIdentifier = trim((string) ($record['taxon_identifier'] ?? ''));
-                $sciNameIdentifier = trim((string) ($record['scientific_name_identifier'] ?? ''));
+                $givenNameIdentifier = trim((string) ($record['given_name_identifier'] ?? ''));
 
-                if ($remoteId === '' || $taxonIdentifier === '' || $sciNameIdentifier === '') {
+                if ($remoteId === '' || $taxonIdentifier === '' || $givenNameIdentifier === '') {
                     $counts['skipped']++;
                     $counts['processed']++;
                     $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);
@@ -92,7 +92,7 @@ class OccurrenceImportService
                 }
 
                 $taxonId = $taxaByIdentifier[$taxonIdentifier] ?? null;
-                $taxonNameId = $taxonNameBySciNameIdentifier[$sciNameIdentifier] ?? null;
+                $taxonNameId = $taxonNameByGivenNameIdentifier[$givenNameIdentifier] ?? null;
 
                 if ($taxonId === null || $taxonNameId === null) {
                     $counts['skipped']++;

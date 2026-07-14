@@ -259,7 +259,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
     {
         return [
             'rank' => trim((string) ($row['rank'] ?? $row['name'] ?? $row['title'] ?? '')),
-            'code' => trim((string) ($row['code'] ?? $row['external_key'] ?? $row['slug'] ?? '')),
+            'abbr' => trim((string) ($row['abbr'] ?? $row['external_key'] ?? $row['slug'] ?? '')),
             'sort_order' => (int) ($row['sort_order'] ?? $row['sort'] ?? $row['weight'] ?? 0),
         ];
     }

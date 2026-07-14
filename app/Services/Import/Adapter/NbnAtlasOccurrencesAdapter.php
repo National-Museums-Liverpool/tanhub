@@ -125,7 +125,7 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             'remote_id' => (string) ($record['id'] ?? $record['occurrence_id'] ?? ''),
             'source_name' => (string) ($record['dataResourceName'] ?? $record['source_name'] ?? 'NBN Atlas'),
             'taxon_identifier' => (string) ($record['taxon_identifier'] ?? $record['taxonID'] ?? ''),
-            'scientific_name_identifier' => (string) ($record['scientific_name_identifier'] ?? $record['scientificNameID'] ?? ''),
+            'given_name_identifier' => (string) ($record['given_name_identifier'] ?? $record['scientificNameID'] ?? ''),
             'from_date' => $record['from_date'] ?? $record['eventDate'] ?? null,
             'to_date' => $record['to_date'] ?? null,
             'grid_ref' => $gridRef,

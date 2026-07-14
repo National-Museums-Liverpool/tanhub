@@ -38,12 +38,12 @@ class TaxonRanksImportService implements EntityImportServiceInterface
                     continue;
                 }
 
-                $code = trim((string) ($row['code'] ?? ''));
+                $abbr = trim((string) ($row['abbr'] ?? ''));
                 $sortOrder = max(0, (int) ($row['sort_order'] ?? 0));
 
                 $payload = [
                     'rank' => substr($rank, 0, 50),
-                    'code' => substr($code !== '' ? $code : strtolower(preg_replace('/[^a-z0-9]+/i', '_', $rank) ?? ''), 0, 50),
+                    'abbr' => substr($abbr !== '' ? $abbr : strtolower(preg_replace('/[^a-z0-9]+/i', '_', $rank) ?? ''), 0, 50),
                     'sort_order' => $sortOrder,
                 ];
 

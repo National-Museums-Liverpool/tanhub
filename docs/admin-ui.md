@@ -30,9 +30,8 @@ Top-level sections are:
 
 - Users
 - Taxon groups
-- Orders
-- Superfamilies
-- Families
+- Taxon ranks
+- Geographic regions
 - Recording schemes
 - Taxa
 - Taxon names
@@ -49,7 +48,7 @@ All list pages should follow the same interaction model:
 - Optional search and filters where useful.
 - Empty-state message when no records match.
 
-All detail/edit pages should follow the same interaction model:
+All detail pages should follow the same interaction model:
 
 - Display immutable fields as disabled inputs with a "Read-only" badge.
 - Show validation messages inline and at top-level summary.
@@ -92,7 +91,7 @@ Edit page:
 - Read-only: id, title, external_key.
 - Editable: friendly.
 
-### Orders
+### Taxon ranks
 
 Access:
 
@@ -100,16 +99,14 @@ Access:
 
 List page:
 
-- Columns: id, taxon_identifier, scientific_name, vernacular_name, taxa_count,
-  actions.
-- Default sort: scientific_name asc.
+- Columns: id, rank, abbr, sort_order, actions.
+- Default sort: sort_order asc.
 
 Detail page (read-only):
 
-- Shows all order fields.
-- Shows count of related taxa records.
+- Shows id, rank, abbr, and sort_order.
 
-### Superfamilies
+### Geographic regions
 
 Access:
 
@@ -117,31 +114,14 @@ Access:
 
 List page:
 
-- Columns: id, taxon_identifier, scientific_name, vernacular_name, taxa_count,
-  actions.
-- Default sort: scientific_name asc.
+- Columns: id, geographic_region_identifier, region,
+  location_type, occurrences, links.
+- Default sort: geographic_region_identifier asc.
 
 Detail page (read-only):
 
-- Shows all superfamily fields.
-- Shows count of related taxa records.
-
-### Families
-
-Access:
-
-- List/view: Admin and Manager.
-
-List page:
-
-- Columns: id, taxon_identifier, scientific_name, vernacular_name, taxa_count,
-  actions.
-- Default sort: scientific_name asc.
-
-Detail page (read-only):
-
-- Shows all family fields.
-- Shows count of related taxa records.
+- Shows all geographic_region fields.
+- Shows count of related occurrence records.
 
 ### Recording schemes
 
@@ -151,7 +131,7 @@ Access:
 
 List page:
 
-- Columns: id, external_key, title, taxa_count, actions.
+- Columns: id, external_key, title, taxa_count, view.
 - Default sort: title asc.
 
 Detail page (read-only):
@@ -170,13 +150,16 @@ List page:
 
 - Columns: id, taxon_identifier, scientific_name, vernacular_name,
   conservation_status, blocked, actions.
-- Filters: taxon_group, order, superfamily, family, recording_scheme, blocked.
+- Filters: taxon_group, taxon_rank, recording_scheme, blocked.
 - Default sort: scientific_name asc.
 
 Detail/edit page:
 
 - Read-only: taxon_identifier, scientific_name_identifier, scientific_name,
   vernacular_name, classification FKs.
+- Classification FKs are dynamic self-references on taxa (for example
+  order_id, family_id, species_id) rather than separate order, family, or
+  superfamily tables.
 - Editable: taxon_remarks, conservation_status, blocked, blocked_reason,
   rarity_group_name, id_difficulty.
 
@@ -249,12 +232,8 @@ Use consistent plural nouns and id-based edit/view paths:
 - /users/{id}/edit
 - /taxon-groups
 - /taxon-groups/{id}/edit
-- /orders
-- /orders/{id}
-- /superfamilies
-- /superfamilies/{id}
-- /families
-- /families/{id}
+- /taxon-ranks
+- /taxon-ranks/{id}
 - /recording-schemes
 - /recording-schemes/{id}
 - /taxa

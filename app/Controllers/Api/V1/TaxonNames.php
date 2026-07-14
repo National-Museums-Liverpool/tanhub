@@ -26,7 +26,7 @@ class TaxonNames extends ApiController
         $sorts = $this->getSorts([
             'uuid' => 'uuid',
             'name' => 'name',
-            'scientific_name_identifier' => 'scientific_name_identifier',
+            'given_name_identifier' => 'given_name_identifier',
             'accepted' => 'accepted',
             'scientific' => 'scientific',
         ], 'name');
@@ -39,7 +39,7 @@ class TaxonNames extends ApiController
             'uuid' => 'uuid',
             'taxon_identifier' => '__taxon_identifier__',
             'name' => 'name',
-            'scientific_name_identifier' => 'scientific_name_identifier',
+            'given_name_identifier' => 'given_name_identifier',
             'accepted' => 'accepted',
             'scientific' => 'scientific',
         ]);
@@ -61,7 +61,7 @@ class TaxonNames extends ApiController
         }
 
         $builder = $db->table('taxon_names')
-            ->select('uuid, (SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id) AS taxon_identifier, name, scientific_name_identifier, accepted, scientific', false)
+            ->select('uuid, (SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id) AS taxon_identifier, name, given_name_identifier, accepted, scientific', false)
             ->where('deleted_at', null)
             ->where('taxon_id IN (SELECT id FROM ' . $prefix . 'taxa WHERE deleted_at IS NULL AND blocked = 0)', null, false);
 
@@ -116,7 +116,7 @@ class TaxonNames extends ApiController
         $prefix = $db->getPrefix();
 
         $item = $db->table('taxon_names')
-            ->select('uuid, (SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id) AS taxon_identifier, name, scientific_name_identifier, accepted, scientific', false)
+            ->select('uuid, (SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id) AS taxon_identifier, name, given_name_identifier, accepted, scientific', false)
             ->where('uuid', $uuid)
             ->where('deleted_at', null)
             ->where('taxon_id IN (SELECT id FROM ' . $prefix . 'taxa WHERE deleted_at IS NULL AND blocked = 0)', null, false)

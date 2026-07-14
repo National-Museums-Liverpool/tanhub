@@ -125,7 +125,7 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             'remote_id' => (string) ($record['id'] ?? $record['occurrence_id'] ?? ''),
             'source_name' => (string) ($record['source_name'] ?? 'Indicia'),
             'taxon_identifier' => (string) ($record['taxon_identifier'] ?? ''),
-            'scientific_name_identifier' => (string) ($record['scientific_name_identifier'] ?? ''),
+            'given_name_identifier' => (string) ($record['given_name_identifier'] ?? ''),
             'from_date' => $record['from_date'] ?? $record['event_date'] ?? null,
             'to_date' => $record['to_date'] ?? null,
             'grid_ref' => $gridRef,

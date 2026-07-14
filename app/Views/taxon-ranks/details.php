@@ -17,7 +17,7 @@
                     $fields = [
                         'id' => 'ID',
                         'rank' => 'Rank',
-                        'code' => 'Code',
+                        'abbr' => 'Abbreviation',
                         'sort_order' => 'Sort order',
                     ];
                     ?>

@@ -46,7 +46,7 @@ class TaxonGroups extends BaseController
     /**
      * Render the edit form for a single taxon group.
      */
-    public function edit(int $id): string
+    public function details(int $id): string
     {
         $model = model(TaxonGroupModel::class);
         $taxonGroup = $model->find($id);
@@ -55,7 +55,7 @@ class TaxonGroups extends BaseController
             throw PageNotFoundException::forPageNotFound();
         }
 
-        return $this->renderPage('taxon-groups/edit', [
+        return $this->renderPage('taxon-groups/details', [
             'pageTitle' => 'Edit taxon group',
             'metaDescription' => 'Edit taxon group friendly name.',
             'bodyClass' => 'app-shell',
@@ -89,6 +89,6 @@ class TaxonGroups extends BaseController
             'friendly' => $friendly === '' ? null : $friendly,
         ]);
 
-        return redirect()->to(site_url('taxon-groups/' . $id . '/edit'))->with('message', 'Taxon group updated.');
+        return redirect()->to(site_url('taxon-groups/' . $id))->with('message', 'Taxon group updated.');
     }
 }

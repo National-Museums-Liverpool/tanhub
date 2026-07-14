@@ -5,12 +5,12 @@ namespace App\Controllers\Api\V1;
 use CodeIgniter\HTTP\ResponseInterface;
 
 /**
- * API endpoints for data sources.
+ * API endpoints for taxon ranks.
  */
-class DataSources extends ApiController
+class TaxonRanks extends ApiController
 {
     /**
-     * List data sources.
+     * List taxon ranks.
      */
     public function index(): ResponseInterface
     {
@@ -21,27 +21,28 @@ class DataSources extends ApiController
         }
 
         $sorts = $this->getSorts([
+            'rank' => 'rank',
             'abbr' => 'abbr',
-            'title' => 'title',
-            'url' => 'url',
-        ], 'abbr');
+            'sort_order' => 'sort_order',
+        ], 'rank');
 
         if ($sorts instanceof ResponseInterface) {
             return $sorts;
         }
 
         $filters = $this->getFilters([
+            'rank' => 'rank',
             'abbr' => 'abbr',
-            'title' => 'title',
-            'url' => 'url',
+            'sort_order' => 'sort_order',
         ]);
 
         if ($filters instanceof ResponseInterface) {
             return $filters;
         }
 
-        $builder = db_connect()->table('data_sources')
-            ->select('abbr, title, url');
+        $builder = db_connect()->table('taxon_ranks')
+            ->select('rank, abbr, sort_order')
+            ->where('deleted_at', null);
 
         $this->applyFilters($builder, $filters);
         $this->applySorts($builder, $sorts);
@@ -57,18 +58,19 @@ class DataSources extends ApiController
     }
 
     /**
-     * Return a single data source by abbreviation.
+     * Return a single taxon rank by abbreviation.
      */
     public function show(string $abbr): ResponseInterface
     {
-        $item = db_connect()->table('data_sources')
-            ->select('abbr, title, url')
+        $item = db_connect()->table('taxon_ranks')
+            ->select('rank, abbr, sort_order')
             ->where('abbr', $abbr)
+            ->where('deleted_at', null)
             ->get()
             ->getRowArray();
 
         if ($item === null) {
-            return $this->respondProblem(404, 'Resource not found', "No data source exists for abbreviation '{$abbr}'.");
+            return $this->respondProblem(404, 'Resource not found', "No taxon rank exists for abbreviation '{$abbr}'.");
         }
 
         return $this->respondItem($item);

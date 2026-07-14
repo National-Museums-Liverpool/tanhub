@@ -34,7 +34,7 @@ class TaxonRankModel extends Model
      */
     protected $allowedFields = [
         'rank',
-        'code',
+        'abbr',
         'sort_order',
     ];
 

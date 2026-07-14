@@ -17,6 +17,7 @@ tags:
   - name: taxa
   - name: taxon-groups
   - name: taxon-names
+  - name: taxon-ranks
   - name: grid-square-stats
   - name: taxon-stats
   - name: taxon-year-stats
@@ -213,6 +214,34 @@ paths:
           schema:
             type: string
             format: uuid
+      responses:
+        '200':
+          $ref: '#/components/responses/ItemResponse'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /taxon-ranks:
+    get:
+      tags: [taxon-ranks]
+      summary: List taxon ranks
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          $ref: '#/components/responses/ListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /taxon-ranks/{abbr}:
+    get:
+      tags: [taxon-ranks]
+      summary: Get one taxon rank
+      parameters:
+        - name: abbr
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
         '200':
           $ref: '#/components/responses/ItemResponse'

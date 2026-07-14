@@ -45,7 +45,7 @@
                     <th scope="col"><a href="<?= esc($sortUrl('higher_geography')) ?>">Region<?= esc($sortIndicator('higher_geography')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('location_type')) ?>">Location type<?= esc($sortIndicator('location_type')) ?></a></th>
                     <th scope="col">Occurrences</th>
-                    <th scope="col">View</th>
+                    <th scope="col">Links</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -61,7 +61,7 @@
                             <td><?= esc($geographicRegion['higher_geography']) ?></td>
                             <td><?= esc($geographicRegion['location_type']) ?></td>
                             <td><?= esc((string) $geographicRegion['occurrence_count']) ?></td>
-                            <td><a class="btn btn-sm btn-outline-brand" href="<?= esc(site_url('geographic-regions/' . $geographicRegion['id'])) ?>">View</a></td>
+                            <td><a class="btn btn-sm btn-outline-brand" href="<?= esc(site_url('geographic-regions/' . $geographicRegion['id'])) ?>">Details</a></td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

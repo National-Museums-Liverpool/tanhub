@@ -83,14 +83,18 @@ final class ApiV1RateLimitTest extends CIUnitTestCase
     {
         $db = db_connect();
 
-        $db->table('data_sources')->emptyTable();
+        $exists = $db->table('data_sources')
+            ->where('abbr', 'NBN')
+            ->countAllResults() > 0;
+        if (!$exists) {
+            $db->table('data_sources')->insert([
+                'id' => 1,
+                'abbr' => 'NBN',
+                'title' => 'NBN Atlas',
+                'url' => 'https://nbnatlas.org',
+            ]);
+        }
 
-        $db->table('data_sources')->insert([
-            'id' => 1,
-            'abbr' => 'NBN',
-            'title' => 'NBN Atlas',
-            'url' => 'https://nbnatlas.org',
-        ]);
     }
 
     private function ensureAuthTables(): void

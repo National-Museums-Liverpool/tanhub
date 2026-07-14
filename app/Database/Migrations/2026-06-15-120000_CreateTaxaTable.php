@@ -131,17 +131,11 @@ class CreateTaxaTable extends Migration
         $this->forge->addForeignKey('taxon_rank_id', 'taxon_ranks', 'id', 'CASCADE', 'RESTRICT');
         $this->forge->addForeignKey('taxon_group_id', 'taxon_groups', 'id', 'CASCADE', 'RESTRICT');
         $this->forge->addForeignKey('recording_scheme_id', 'recording_schemes', 'id', 'CASCADE', 'SET NULL');
-        $this->forge->createTable('taxa', true);
-
-        // Add self-referential rank foreign keys after table creation.
-        $db = db_connect();
-
+        // Define self-referential rank FKs as part of CREATE TABLE (works with SQLite).
         foreach ($rankColumns as $rankColumn) {
-            $constraint = substr('fk_taxa_' . $rankColumn . '_taxa_id', 0, 64);
-            $db->query(
-                'ALTER TABLE `taxa` ADD CONSTRAINT `' . $constraint . '` FOREIGN KEY (`' . $rankColumn . '`) REFERENCES `taxa`(`id`) ON UPDATE CASCADE ON DELETE SET NULL'
-            );
+            $this->forge->addForeignKey($rankColumn, 'taxa', 'id', 'CASCADE', 'SET NULL');
         }
+        $this->forge->createTable('taxa', true);
     }
 
     /**

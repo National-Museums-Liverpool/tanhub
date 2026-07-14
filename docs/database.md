@@ -212,7 +212,8 @@ following applies:
 ### taxon_groups
 
 Taxon reporting categories. The friendly field allows a local override for
-taxon groups imported from other databases such as UKSI.
+taxon groups imported from other databases such as UKSI. Groups covered by
+this installation of TanHub are defined in configuration.
 
 | Column                 | Type         | Null | Key | Default           | Description                                                                                                  |
 | ---------------------- | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------------------------------------------------------ |
@@ -223,7 +224,22 @@ taxon groups imported from other databases such as UKSI.
 | indicia_taxon_group_id | BIGINT       | NO   | UQ  |                   | ID of the group from the Indicia database, used to make import from Indicia more efficient and robust        |
 | created_at             | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                                                |
 | updated_at             | DATETIME     | YES  |     |                   | Update date                                                                                                  |
-| deleted_at             | DATETIME     | YES  |     |                   | Deletion date          |
+| deleted_at             | DATETIME     | YES  |     |                   | Deletion date                                                                                                |
+
+### taxon_ranks
+
+Taxonomic ranks such as Species, Family, Order. Ranks covered by this
+installation of TanHub are defined in configuration.
+
+| Column     | Type        | Null | Key | Default           | Description                              |
+| ---------- | ----------- | ---- | --- | ----------------- | ---------------------------------------- |
+| id         | BIGINT      | NO   | PK  | AUTO_INCREMENT    | Primary key                              |
+| rank       | VARCHAR(50) | NO   | UQ  |                   | Taxon rank name                          |
+| abbr       | VARCHAR(10) | NO   | UQ  |                   | Abbreviation, e.g. sp, fam, ord.         |
+| sort_order | INT         | NO   |     |                   | Sort ranks by taxonomic hierarchy level. |
+| created_at | DATETIME    | NO   |     | CURRENT_TIMESTAMP | Creation date                            |
+| updated_at | DATETIME    | YES  |     |                   | Update date                              |
+| deleted_at | DATETIME    | YES  |     |                   | Deletion date                            |
 
 ### taxon_names
 

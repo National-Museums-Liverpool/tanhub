@@ -18,6 +18,7 @@ class Taxa extends BaseController
     {
         $sort = strtolower((string) $this->request->getGet('sort'));
         $direction = strtolower((string) $this->request->getGet('direction'));
+        $q = trim((string) $this->request->getGet('q'));
 
         $allowedSortColumns = [
             'id',
@@ -38,6 +39,16 @@ class Taxa extends BaseController
 
         /** @var TaxonModel $model */
         $model = model(TaxonModel::class);
+
+        if ($q !== '') {
+            $model->groupStart()
+                ->like('taxon_identifier', $q)
+                ->orLike('scientific_name', $q)
+                ->orLike('vernacular_name', $q)
+                ->orLike('conservation_status', $q)
+                ->groupEnd();
+        }
+
         $taxa = $model->orderBy($sort, $direction)->paginate(20);
 
         return $this->renderPage('taxa/index', [
@@ -48,6 +59,7 @@ class Taxa extends BaseController
             'pager' => $model->pager,
             'sort' => $sort,
             'direction' => $direction,
+            'q' => $q,
         ]);
     }
 

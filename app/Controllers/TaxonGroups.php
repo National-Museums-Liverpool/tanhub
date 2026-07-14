@@ -18,6 +18,7 @@ class TaxonGroups extends BaseController
     {
         $sort = strtolower((string) $this->request->getGet('sort'));
         $direction = strtolower((string) $this->request->getGet('direction'));
+        $q = trim((string) $this->request->getGet('q'));
 
         $allowedSortColumns = ['id', 'title', 'friendly', 'external_key', 'implied'];
 
@@ -30,6 +31,16 @@ class TaxonGroups extends BaseController
         }
 
         $model = model(TaxonGroupModel::class);
+
+        if ($q !== '') {
+            $model->groupStart()
+                ->like('title', $q)
+                ->orLike('friendly', $q)
+                ->orLike('external_key', $q)
+                ->orLike('indicia_taxon_group_id', $q)
+                ->groupEnd();
+        }
+
         $taxonGroups = $model->orderBy($sort, $direction)->paginate(20);
 
         return $this->renderPage('taxon-groups/index', [
@@ -40,6 +51,7 @@ class TaxonGroups extends BaseController
             'pager' => $model->pager,
             'sort' => $sort,
             'direction' => $direction,
+            'q' => $q,
         ]);
     }
 

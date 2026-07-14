@@ -104,6 +104,17 @@ final class TaxonGroupsTest extends CIUnitTestCase
         $result->assertSee('Mammals');
     }
 
+    public function testListSearchFiltersResults(): void
+    {
+        $this->authenticateAs('admin2b@example.com', 'admin');
+
+        $result = $this->get('taxon-groups?q=av');
+
+        $result->assertStatus(200);
+        $result->assertSee('Aves');
+        $result->assertDontSee('Insecta');
+    }
+
     public function testEditRequiresManagerOrAdmin(): void
     {
         $this->authenticateAs('user2@example.com', 'user');

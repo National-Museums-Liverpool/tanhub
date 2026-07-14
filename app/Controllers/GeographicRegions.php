@@ -17,6 +17,7 @@ class GeographicRegions extends BaseController
     {
         $sort = strtolower((string) $this->request->getGet('sort'));
         $direction = strtolower((string) $this->request->getGet('direction'));
+        $q = trim((string) $this->request->getGet('q'));
 
         $allowedSortColumns = ['id', 'higher_geography_identifier', 'higher_geography', 'location_type'];
 
@@ -30,6 +31,15 @@ class GeographicRegions extends BaseController
 
         /** @var GeographicRegionModel $model */
         $model = model(GeographicRegionModel::class);
+
+        if ($q !== '') {
+            $model->groupStart()
+                ->like('higher_geography_identifier', $q)
+                ->orLike('higher_geography', $q)
+                ->orLike('location_type', $q)
+                ->groupEnd();
+        }
+
         $regions = $model->orderBy($sort, $direction)->paginate(20);
 
         $regionIds = array_map(static fn (array $region): int => (int) $region['id'], $regions);
@@ -48,6 +58,7 @@ class GeographicRegions extends BaseController
             'pager' => $model->pager,
             'sort' => $sort,
             'direction' => $direction,
+            'q' => $q,
         ]);
     }
 

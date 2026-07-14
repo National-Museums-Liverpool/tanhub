@@ -62,6 +62,17 @@ final class TaxaPagesTest extends CIUnitTestCase
         $result->assertSee('Blocked');
     }
 
+    public function testListSearchFiltersResults(): void
+    {
+        $this->authenticateAs('taxa-manager-search@example.com', 'manager');
+
+        $result = $this->get('taxa?q=lucorum');
+
+        $result->assertStatus(200);
+        $result->assertSee('Bombus lucorum');
+        $result->assertDontSee('Bombus terrestris');
+    }
+
     public function testDetailsShowsAssociatedTaxonNamesTable(): void
     {
         $this->authenticateAs('taxa-detail@example.com', 'manager');

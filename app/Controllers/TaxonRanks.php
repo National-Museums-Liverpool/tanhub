@@ -17,6 +17,7 @@ class TaxonRanks extends BaseController
     {
         $sort = strtolower((string) $this->request->getGet('sort'));
         $direction = strtolower((string) $this->request->getGet('direction'));
+        $q = trim((string) $this->request->getGet('q'));
 
         $allowedSortColumns = ['id', 'rank', 'abbr', 'sort_order'];
 
@@ -29,6 +30,15 @@ class TaxonRanks extends BaseController
         }
 
         $model = model(TaxonRankModel::class);
+
+        if ($q !== '') {
+            $model->groupStart()
+                ->like('rank', $q)
+                ->orLike('abbr', $q)
+                ->orLike('sort_order', $q)
+                ->groupEnd();
+        }
+
         $taxonRanks = $model->orderBy($sort, $direction)->paginate(20);
 
         return $this->renderPage('taxon-ranks/index', [
@@ -39,6 +49,7 @@ class TaxonRanks extends BaseController
             'pager' => $model->pager,
             'sort' => $sort,
             'direction' => $direction,
+            'q' => $q,
         ]);
     }
 

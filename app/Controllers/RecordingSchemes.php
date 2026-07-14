@@ -17,6 +17,7 @@ class RecordingSchemes extends BaseController
     {
         $sort = strtolower((string) $this->request->getGet('sort'));
         $direction = strtolower((string) $this->request->getGet('direction'));
+        $q = trim((string) $this->request->getGet('q'));
 
         $allowedSortColumns = ['id', 'external_key', 'title'];
 
@@ -30,6 +31,14 @@ class RecordingSchemes extends BaseController
 
         /** @var RecordingSchemeModel $model */
         $model = model(RecordingSchemeModel::class);
+
+        if ($q !== '') {
+            $model->groupStart()
+                ->like('external_key', $q)
+                ->orLike('title', $q)
+                ->groupEnd();
+        }
+
         $schemes = $model->orderBy($sort, $direction)->paginate(20);
 
         $countsBySchemeId = $this->getTaxaCountsByForeignKey('recording_scheme_id', array_column($schemes, 'id'));
@@ -47,6 +56,7 @@ class RecordingSchemes extends BaseController
             'pager' => $model->pager,
             'sort' => $sort,
             'direction' => $direction,
+            'q' => $q,
         ]);
     }
 

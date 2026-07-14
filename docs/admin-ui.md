@@ -84,6 +84,7 @@ Access:
 List page:
 
 - Columns: id, title, friendly, external_key, implied, actions.
+- Generic search: `q` across title, friendly, external_key, and indicia_taxon_group_id.
 - Default sort: title asc.
 
 Edit page:
@@ -100,6 +101,7 @@ Access:
 List page:
 
 - Columns: id, rank, abbr, sort_order, actions.
+- Generic search: `q` across rank, abbr, and sort_order.
 - Default sort: sort_order asc.
 
 Detail page (read-only):
@@ -116,6 +118,7 @@ List page:
 
 - Columns: id, geographic_region_identifier, region,
   location_type, occurrences, links.
+- Generic search: `q` across geographic_region_identifier, region, and location_type.
 - Default sort: geographic_region_identifier asc.
 
 Detail page (read-only):
@@ -132,6 +135,7 @@ Access:
 List page:
 
 - Columns: id, external_key, title, taxa_count, view.
+- Generic search: `q` across external_key and title.
 - Default sort: title asc.
 
 Detail page (read-only):
@@ -150,6 +154,8 @@ List page:
 
 - Columns: id, taxon_identifier, scientific_name, vernacular_name,
   conservation_status, blocked, actions.
+- Generic search: `q` across taxon_identifier, scientific_name,
+  vernacular_name, and conservation_status.
 - Filters: taxon_group, taxon_rank, recording_scheme, blocked.
 - Default sort: scientific_name asc.
 

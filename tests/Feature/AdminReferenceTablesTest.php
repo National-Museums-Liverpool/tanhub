@@ -169,6 +169,24 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
     }
 
     /**
+     * Validate list-page q search on key reference tables.
+     */
+    public function testListPagesApplySearchQuery(): void
+    {
+        $this->authenticateAs('manager-search@example.com', 'manager');
+
+        $ranks = $this->get('taxon-ranks?q=fam');
+        $ranks->assertStatus(200);
+        $ranks->assertSee('Family');
+        $ranks->assertDontSee('Species');
+
+        $schemes = $this->get('recording-schemes?q=beta');
+        $schemes->assertStatus(200);
+        $schemes->assertSee('Beta scheme');
+        $schemes->assertDontSee('Alpha scheme');
+    }
+
+    /**
      * Validate the taxon rank details page is read-only.
      */
     public function testTaxonRankDetailShowsReadOnlyFields(): void

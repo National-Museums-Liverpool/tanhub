@@ -144,7 +144,7 @@ Detail page (read-only):
 Access:
 
 - List/view: Admin and Manager.
-- Edit moderation fields: Admin and Manager.
+- Edit moderation fields: Admin only.
 
 List page:
 
@@ -160,25 +160,13 @@ Detail/edit page:
 - Classification FKs are dynamic self-references on taxa (for example
   order_id, family_id, species_id) rather than separate order, family, or
   superfamily tables.
-- Editable: taxon_remarks, conservation_status, blocked, blocked_reason,
-  rarity_group_name, id_difficulty.
+- Read-only table: associated taxon names (name, given_name_identifier,
+  accepted, scientific).
+- Editable: blocked, blocked_reason (admin only).
 
 ### Taxon names
 
-Access:
-
-- List/view: Admin and Manager.
-
-List page:
-
-- Columns: id, uuid, taxon_id, name, scientific_name_identifier, accepted,
-  scientific.
-- Filters: accepted, scientific, taxon_id.
-- Default sort: name asc.
-
-Detail page:
-
-- Read-only display only.
+- Taxon names are shown as a read-only table on the taxa detail page.
 
 ### Occurrences
 

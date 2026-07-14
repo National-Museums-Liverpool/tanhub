@@ -30,6 +30,14 @@ class TaxonModel extends Model
     protected $useSoftDeletes = true;
 
     /**
+     * @var array<int, string>
+     */
+    protected $allowedFields = [
+        'blocked',
+        'blocked_reason',
+    ];
+
+    /**
      * @var bool
      */
     protected $useTimestamps = true;

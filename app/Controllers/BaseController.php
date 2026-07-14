@@ -75,6 +75,12 @@ abstract class BaseController extends Controller
                   'style' => 'link',
                 ],
                 [
+                  'label' => 'Taxa',
+                  'url' => site_url('taxa'),
+                  'path' => 'taxa',
+                  'style' => 'link',
+                ],
+                [
                   'label' => 'Recording schemes',
                   'url' => site_url('recording-schemes'),
                   'path' => 'recording-schemes',

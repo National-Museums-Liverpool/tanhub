@@ -55,7 +55,7 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
      */
     public function testListPagesRequireLogin(): void
     {
-        foreach (['taxon-groups', 'taxon-ranks', 'geographic-regions', 'recording-schemes'] as $path) {
+        foreach (['taxon-groups', 'taxon-ranks', 'taxa', 'geographic-regions', 'recording-schemes'] as $path) {
             $result = $this->get($path);
             $result->assertStatus(302);
             $result->assertRedirect();
@@ -69,7 +69,7 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
     {
         $this->authenticateAs('general-user@example.com', 'user');
 
-        foreach (['taxon-groups', 'taxon-ranks', 'geographic-regions', 'recording-schemes'] as $path) {
+        foreach (['taxon-groups', 'taxon-ranks', 'taxa', 'geographic-regions', 'recording-schemes'] as $path) {
             $result = $this->get($path);
             $result->assertStatus(302);
             $result->assertRedirect();
@@ -90,6 +90,10 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
         $taxonRanks = $this->get('taxon-ranks');
         $taxonRanks->assertStatus(200);
         $taxonRanks->assertSee('Taxon ranks');
+
+        $taxa = $this->get('taxa');
+        $taxa->assertStatus(200);
+        $taxa->assertSee('Taxa');
 
         $geographicRegions = $this->get('geographic-regions');
         $geographicRegions->assertStatus(200);

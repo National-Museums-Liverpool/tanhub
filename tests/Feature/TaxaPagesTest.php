@@ -1,0 +1,291 @@
+<?php
+
+namespace Tests;
+
+use App\Models\TaxonModel;
+use Config\Auth;
+use CodeIgniter\Shield\Models\UserModel;
+use CodeIgniter\Shield\Test\AuthenticationTesting;
+use CodeIgniter\Test\CIUnitTestCase;
+use CodeIgniter\Test\FeatureTestTrait;
+
+/**
+ * @internal
+ */
+final class TaxaPagesTest extends CIUnitTestCase
+{
+    use FeatureTestTrait;
+    use AuthenticationTesting;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        \Config\Services::reset();
+        $_SESSION = [];
+        $_COOKIE = [];
+        $this->withSession([]);
+
+        if (function_exists('auth')) {
+            try {
+                auth()->logout();
+            } catch (\Throwable) {
+            }
+        }
+
+        config(Auth::class)->actions['register'] = null;
+
+        $migrate = service('migrations');
+        $migrate->setNamespace(null);
+        $migrate->latest();
+
+        $this->seedTaxa();
+    }
+
+    public function testListRequiresLogin(): void
+    {
+        $result = $this->get('taxa');
+
+        $result->assertStatus(302);
+        $result->assertRedirect();
+    }
+
+    public function testListAllowsManagerRole(): void
+    {
+        $this->authenticateAs('taxa-manager@example.com', 'manager');
+
+        $result = $this->get('taxa');
+
+        $result->assertStatus(200);
+        $result->assertSee('Taxa');
+        $result->assertSee('Taxon identifier');
+        $result->assertSee('Blocked');
+    }
+
+    public function testDetailsShowsAssociatedTaxonNamesTable(): void
+    {
+        $this->authenticateAs('taxa-detail@example.com', 'manager');
+
+        $result = $this->get('taxa/1');
+
+        $result->assertStatus(200);
+        $result->assertSee('Associated taxon names');
+        $result->assertSee('Bombus terrestris');
+        $result->assertSee('TVK-001');
+        $result->assertSee('Buff-tailed Bumblebee');
+        $result->assertSee('Species');
+        $result->assertSee('Bees');
+        $result->assertSee('Alpha scheme');
+    }
+
+    public function testManagerCannotUpdateModerationFields(): void
+    {
+        $this->authenticateAs('taxa-manager-update@example.com', 'manager');
+
+        $result = $this->post('taxa/1', [
+            'blocked' => '1',
+            'blocked_reason' => 'Sensitive record',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirect();
+
+        $taxon = model(TaxonModel::class)->find(1);
+
+        $this->assertSame(0, (int) $taxon['blocked']);
+        $this->assertNull($taxon['blocked_reason']);
+    }
+
+    public function testAdminCanUpdateBlockedFields(): void
+    {
+        $this->authenticateAs('taxa-admin@example.com', 'admin');
+
+        $result = $this->post('taxa/1', [
+            'blocked' => '1',
+            'blocked_reason' => 'Sensitive record',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirect();
+
+        $taxon = model(TaxonModel::class)->find(1);
+
+        $this->assertSame(1, (int) $taxon['blocked']);
+        $this->assertSame('Sensitive record', $taxon['blocked_reason']);
+    }
+
+    public function testAdminUnblockClearsReason(): void
+    {
+        $this->authenticateAs('taxa-admin-unblock@example.com', 'admin');
+
+        $result = $this->post('taxa/2', [
+            'blocked' => '0',
+            'blocked_reason' => 'Should be cleared',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirect();
+
+        $taxon = model(TaxonModel::class)->find(2);
+
+        $this->assertSame(0, (int) $taxon['blocked']);
+        $this->assertNull($taxon['blocked_reason']);
+    }
+
+    private function authenticateAs(string $email, string $group): void
+    {
+        $this->actingAs($this->makeUser($email, $group));
+        $this->withSession($_SESSION);
+    }
+
+    private function seedTaxa(): void
+    {
+        $db = db_connect();
+        $now = date('Y-m-d H:i:s');
+
+        $db->table('geographic_regions_occurrences')->emptyTable();
+        $db->table('occurrences')->emptyTable();
+        $db->table('taxon_stats')->emptyTable();
+        $db->table('taxon_year_stats')->emptyTable();
+        $db->table('taxon_names')->emptyTable();
+        $db->table('taxa')->emptyTable();
+        $db->table('taxon_groups')->emptyTable();
+        $db->table('taxon_ranks')->emptyTable();
+        $db->table('recording_schemes')->emptyTable();
+
+        $db->table('taxon_groups')->insert([
+            'id' => 1,
+            'title' => 'Bees',
+            'friendly' => 'Bee species',
+            'external_key' => 'bees',
+            'indicia_taxon_group_id' => 10,
+            'implied' => 0,
+            'created_at' => $now,
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ]);
+
+        $db->table('taxon_ranks')->insert([
+            'id' => 1,
+            'rank' => 'Species',
+            'abbr' => 'sp',
+            'sort_order' => 1,
+            'created_at' => $now,
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ]);
+
+        $db->table('recording_schemes')->insert([
+            'id' => 1,
+            'external_key' => 'SCHEME-0001',
+            'title' => 'Alpha scheme',
+            'created_at' => $now,
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ]);
+
+        $db->table('taxa')->insertBatch([
+            [
+                'id' => 1,
+                'taxon_identifier' => 'NHMSYS0021054498',
+                'scientific_name_identifier' => 'TVK-001',
+                'scientific_name' => 'Bombus terrestris',
+                'scientific_name_authorship' => 'Linnaeus, 1758',
+                'vernacular_name' => 'Buff-tailed Bumblebee',
+                'taxon_rank_id' => 1,
+                'order_id' => null,
+                'superfamily_id' => null,
+                'family_id' => null,
+                'genus_id' => null,
+                'species_id' => null,
+                'taxon_group_id' => 1,
+                'id_difficulty' => 2,
+                'recording_scheme_id' => 1,
+                'conservation_status' => 'LC',
+                'taxon_remarks' => null,
+                'rarity_group_name' => 'common',
+                'blocked' => 0,
+                'blocked_reason' => null,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ],
+            [
+                'id' => 2,
+                'taxon_identifier' => 'NHMSYS0021054499',
+                'scientific_name_identifier' => 'TVK-002',
+                'scientific_name' => 'Bombus lucorum',
+                'scientific_name_authorship' => null,
+                'vernacular_name' => 'White-tailed Bumblebee',
+                'taxon_rank_id' => 1,
+                'order_id' => null,
+                'superfamily_id' => null,
+                'family_id' => null,
+                'genus_id' => null,
+                'species_id' => null,
+                'taxon_group_id' => 1,
+                'id_difficulty' => 2,
+                'recording_scheme_id' => 1,
+                'conservation_status' => 'LC',
+                'taxon_remarks' => null,
+                'rarity_group_name' => 'common',
+                'blocked' => 1,
+                'blocked_reason' => 'Existing reason',
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ],
+        ]);
+
+        $db->table('taxon_names')->insertBatch([
+            [
+                'id' => 1,
+                'uuid' => '3d77f8e7-e2e8-4d74-9d4d-cff4d11130e8',
+                'taxon_id' => 1,
+                'name' => 'Bombus terrestris',
+                'given_name_identifier' => 'TVK-001',
+                'accepted' => 1,
+                'scientific' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ],
+            [
+                'id' => 2,
+                'uuid' => 'f54da6a0-5f0b-4de2-a10a-2693b193f5f2',
+                'taxon_id' => 1,
+                'name' => 'Buff-tailed Bumblebee',
+                'given_name_identifier' => 'TVK-002',
+                'accepted' => 1,
+                'scientific' => 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ],
+        ]);
+    }
+
+    private function makeUser(string $email, string $group)
+    {
+        /** @var UserModel $users */
+        $users = model(setting('Auth.userProvider'));
+
+        $user = $users->createNewUser([
+            'username' => strstr($email, '@', true),
+            'email' => $email,
+            'password' => 'Password123!',
+        ]);
+
+        $users->save($user);
+
+        $saved = $users->findById($users->getInsertID());
+        $saved->activate();
+        $users->save($saved);
+
+        if ($group !== 'user') {
+            $saved->addGroup($group);
+        }
+
+        return $saved;
+    }
+}

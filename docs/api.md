@@ -712,8 +712,8 @@ Examples:
 - Path: `GET /api/v1/taxon-groups`
 - Item path: `GET /api/v1/taxon-groups/{external_key}`
 - Unique identifier: `external_key`
-- Exposed fields: `external_key`, `title`, `friendly`, `indicia_taxon_group_id`
-- Filterable fields: `external_key`, `title`, `friendly`, `indicia_taxon_group_id`
+- Exposed fields: `external_key`, `title`, `friendly`, `indicia_taxon_group_id`, `implied`
+- Filterable fields: `external_key`, `title`, `friendly`, `indicia_taxon_group_id`, `implied`
 
 Examples:
 

@@ -36,7 +36,7 @@ class ImportIndicia extends BaseCommand
      */
     protected $options = [
         '--source' => 'Source key: indicia. Required.',
-        '--entity' => 'Entity to import: recording_schemes, taxon_groups, taxon_ranks, geographic_regions, taxa.',
+        '--entity' => 'Entity to import: recording_schemes, taxon_groups, taxon_ranks, geographic_regions, taxa, taxon_names.',
         '--limit' => 'Maximum records to fetch in this run.',
         '--offset' => 'Optional offset override. Defaults to stored offset for the source/entity.',
         '--dry-run' => 'Fetch and validate without writing rows.',
@@ -49,6 +49,7 @@ class ImportIndicia extends BaseCommand
     {
         $source = $params['source'] ?? CLI::getOption('source') ?? 'indicia';
         $entity = strtolower((string) ($params['entity'] ?? CLI::getOption('entity') ?? 'taxa'));
+        $entity = str_replace('-', '_', $entity);
 
         $limit = (int) ($params['limit'] ?? CLI::getOption('limit') ?? 5000);
         $offsetOption = $params['offset'] ?? CLI::getOption('offset');

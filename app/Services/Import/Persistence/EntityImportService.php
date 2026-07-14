@@ -26,6 +26,7 @@ class EntityImportService
             'taxon_ranks' => new TaxonRanksImportService(),
             'geographic_regions' => new GeographicRegionsImportService(),
             'taxa' => new TaxaImportService(),
+            'taxon_names' => new TaxonNamesImportService(),
             default => throw new InvalidArgumentException('Unsupported import entity: ' . $entity),
         };
     }

@@ -19,7 +19,7 @@ class TaxonGroups extends BaseController
         $sort = strtolower((string) $this->request->getGet('sort'));
         $direction = strtolower((string) $this->request->getGet('direction'));
 
-        $allowedSortColumns = ['id', 'title', 'friendly', 'external_key'];
+        $allowedSortColumns = ['id', 'title', 'friendly', 'external_key', 'implied'];
 
         if (! in_array($sort, $allowedSortColumns, true)) {
             $sort = 'title';

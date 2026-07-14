@@ -49,6 +49,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame(0, $json['meta']['offset']);
         $this->assertSame(1, $json['meta']['count']);
         $this->assertSame('Bees', $json['data'][0]['title']);
+        $this->assertSame(1, $json['data'][0]['implied']);
     }
 
     public function testTaxonGroupShowReturnsSingleObject(): void
@@ -61,6 +62,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
         $this->assertSame('bees', $json['external_key']);
         $this->assertSame('Bees', $json['title']);
+        $this->assertSame(1, $json['implied']);
     }
 
     public function testTaxonRanksListSupportsSortFilterAndPagination(): void
@@ -387,6 +389,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'friendly' => 'Bee species',
                 'external_key' => 'bees',
                 'indicia_taxon_group_id' => 10,
+                'implied' => 1,
                 'created_at' => $now,
                 'updated_at' => $now,
                 'deleted_at' => null,
@@ -397,6 +400,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'friendly' => 'Bird species',
                 'external_key' => 'birds',
                 'indicia_taxon_group_id' => 11,
+                'implied' => 0,
                 'created_at' => $now,
                 'updated_at' => $now,
                 'deleted_at' => null,
@@ -708,6 +712,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             friendly VARCHAR(200) NULL,
             external_key VARCHAR(100) NULL,
             indicia_taxon_group_id INTEGER NOT NULL,
+            implied INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME NOT NULL,
             updated_at DATETIME NULL,
             deleted_at DATETIME NULL

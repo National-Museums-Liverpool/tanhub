@@ -41,6 +41,11 @@ class CreateTaxonGroupsTable extends Migration
                 'constraint' => 20,
                 'unsigned'   => true,
             ],
+            'implied' => [
+                'type'       => 'TINYINT',
+                'constraint' => 1,
+                'default'    => 0,
+            ],
             'created_at' => [
                 'type'    => 'DATETIME',
                 'null'    => false,

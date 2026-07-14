@@ -52,6 +52,13 @@
                             </label>
                             <input class="form-control" id="indicia_taxon_group_id" type="text" value="<?= esc($page['taxonGroup']['indicia_taxon_group_id']) ?>" disabled>
                         </div>
+                        <div class="col-md-4">
+                            <label class="form-label" for="implied">
+                                Implied
+                                <span class="badge bg-secondary ms-2">Read-only</span>
+                            </label>
+                            <input class="form-control" id="implied" type="text" value="<?= ! empty($page['taxonGroup']['implied']) ? 'Yes' : 'No' ?>" disabled>
+                        </div>
                         <div class="col-12">
                             <label class="form-label" for="friendly">Friendly</label>
                             <input class="form-control<?= isset($errors['friendly']) ? ' is-invalid' : '' ?>" id="friendly" name="friendly" type="text" maxlength="200" value="<?= esc(old('friendly', (string) ($page['taxonGroup']['friendly'] ?? ''))) ?>">

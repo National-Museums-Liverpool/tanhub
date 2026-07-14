@@ -48,13 +48,14 @@
                     <th scope="col"><a href="<?= esc($sortUrl('title')) ?>">Title<?= esc($sortIndicator('title')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('friendly')) ?>">Friendly<?= esc($sortIndicator('friendly')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('external_key')) ?>">External key<?= esc($sortIndicator('external_key')) ?></a></th>
+                    <th scope="col"><a href="<?= esc($sortUrl('implied')) ?>">Implied<?= esc($sortIndicator('implied')) ?></a></th>
                     <th scope="col">Links</th>
                 </tr>
                 </thead>
                 <tbody>
                 <?php if ($page['taxonGroups'] === []): ?>
                     <tr>
-                        <td colspan="5" class="text-muted">No taxon groups found.</td>
+                        <td colspan="6" class="text-muted">No taxon groups found.</td>
                     </tr>
                 <?php else: ?>
                     <?php foreach ($page['taxonGroups'] as $taxonGroup): ?>
@@ -63,6 +64,7 @@
                             <td><?= esc($taxonGroup['title']) ?></td>
                             <td><?= esc((string) ($taxonGroup['friendly'] ?? '')) ?></td>
                             <td><?= esc($taxonGroup['external_key']) ?></td>
+                            <td><?= ! empty($taxonGroup['implied']) ? 'Yes' : 'No' ?></td>
                             <td><a class="btn btn-sm btn-outline-brand" href="<?= esc(site_url('taxon-groups/' . $taxonGroup['id'] . '')) ?>">Details</a></td>
                         </tr>
                     <?php endforeach; ?>

@@ -222,6 +222,7 @@ this installation of TanHub are defined in configuration.
 | friendly               | VARCHAR(200) | YES  |     |                   | Friendly version of the taxon group name                                                                     |
 | external_key           | VARCHAR(100) | YES  | UQ  |                   | Key for the group as assigned from the external database the data were imported from, unique key for the API |
 | indicia_taxon_group_id | BIGINT       | NO   | UQ  |                   | ID of the group from the Indicia database, used to make import from Indicia more efficient and robust        |
+| implied                | TINYINT(1)   | NO   |     | 0                 | Boolean flag supplied by import source to indicate the group is implied                                       |
 | created_at             | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                                                |
 | updated_at             | DATETIME     | YES  |     |                   | Update date                                                                                                  |
 | deleted_at             | DATETIME     | YES  |     |                   | Deletion date                                                                                                |

@@ -2,7 +2,7 @@
 
 ## Todo
 
-- [] Taxon names
+- [x] Taxon names
 - [] taxa.id_difficulty
 - [] taxa.rarity_group_name default
 - [] taxa blocking UI
@@ -34,6 +34,7 @@ $ php spark import:indicia --source indicia --entity geographic_regions
 $ php spark import:indicia --source indicia --entity taxon_groups
 $ php spark import:indicia --source indicia --entity taxon_ranks
 $ php spark import:indicia --source indicia --entity taxa
+$ php spark import:indicia --source indicia --entity taxon_names
 ```
 
 Mandatory parameters:
@@ -56,6 +57,9 @@ and `occurrences`, based on configured import ranks (for example
 For taxa imports, load related lookup data first (`recording_schemes`,
 `taxon_ranks` and `taxon_groups` at minimum), otherwise taxa rows may be
 skipped due to missing foreign key mappings.
+
+For taxon group imports, the `implied` column from `taxon_groups.xml` is
+persisted as a boolean flag on `taxon_groups.implied`.
 
 Configure the taxon groups that will be imported in your `env` file's
 `import.taxonRanks` setting.

@@ -83,12 +83,12 @@ Access:
 
 List page:
 
-- Columns: id, title, friendly, external_key, actions.
+- Columns: id, title, friendly, external_key, implied, actions.
 - Default sort: title asc.
 
 Edit page:
 
-- Read-only: id, title, external_key.
+- Read-only: id, title, external_key, implied.
 - Editable: friendly.
 
 ### Taxon ranks

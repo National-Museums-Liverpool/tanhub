@@ -33,6 +33,7 @@ class TaxonGroupsImportService implements EntityImportServiceInterface
                 $externalKey = trim((string) ($row['external_key'] ?? ''));
                 $title = trim((string) ($row['title'] ?? ''));
                 $indiciaTaxonGroupId = (int) ($row['indicia_taxon_group_id'] ?? 0);
+                $implied = $this->toFlag($row['implied'] ?? 0);
 
                 if ($externalKey === '' || $indiciaTaxonGroupId === 0 || $title === '') {
                     $counts['skipped']++;
@@ -44,6 +45,7 @@ class TaxonGroupsImportService implements EntityImportServiceInterface
                     'title' => substr($title, 0, 200),
                     'external_key' => substr($externalKey, 0, 100),
                     'indicia_taxon_group_id' => $indiciaTaxonGroupId,
+                    'implied' => $implied,
                     'deleted_at' => null,
                 ];
 
@@ -75,5 +77,29 @@ class TaxonGroupsImportService implements EntityImportServiceInterface
         }
 
         return $counts;
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function toFlag($value): int
+    {
+        if (is_bool($value)) {
+            return $value ? 1 : 0;
+        }
+
+        if (is_numeric($value)) {
+            return ((int) $value) > 0 ? 1 : 0;
+        }
+
+        if (is_string($value)) {
+            $normalised = strtolower(trim($value));
+
+            if (in_array($normalised, ['1', 'true', 't', 'yes', 'y'], true)) {
+                return 1;
+            }
+        }
+
+        return 0;
     }
 }

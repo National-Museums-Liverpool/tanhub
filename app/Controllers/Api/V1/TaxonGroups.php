@@ -25,6 +25,7 @@ class TaxonGroups extends ApiController
             'title' => 'title',
             'friendly' => 'friendly',
             'indicia_taxon_group_id' => 'indicia_taxon_group_id',
+            'implied' => 'implied',
         ], 'title');
 
         if ($sorts instanceof ResponseInterface) {
@@ -36,6 +37,7 @@ class TaxonGroups extends ApiController
             'title' => 'title',
             'friendly' => 'friendly',
             'indicia_taxon_group_id' => 'indicia_taxon_group_id',
+            'implied' => 'implied',
         ]);
 
         if ($filters instanceof ResponseInterface) {
@@ -43,7 +45,7 @@ class TaxonGroups extends ApiController
         }
 
         $builder = db_connect()->table('taxon_groups')
-            ->select('external_key, title, friendly, indicia_taxon_group_id')
+            ->select('external_key, title, friendly, indicia_taxon_group_id, implied')
             ->where('deleted_at', null);
 
         $this->applyFilters($builder, $filters);
@@ -65,7 +67,7 @@ class TaxonGroups extends ApiController
     public function show(string $externalKey): ResponseInterface
     {
         $item = db_connect()->table('taxon_groups')
-            ->select('external_key, title, friendly, indicia_taxon_group_id')
+            ->select('external_key, title, friendly, indicia_taxon_group_id, implied')
             ->where('external_key', $externalKey)
             ->where('deleted_at', null)
             ->get()

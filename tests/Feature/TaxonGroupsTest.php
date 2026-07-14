@@ -88,6 +88,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
         $result->assertSee('Title');
         $result->assertSee('Friendly');
         $result->assertSee('External key');
+        $result->assertSee('Implied');
         $result->assertSee('Links');
     }
 
@@ -122,6 +123,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
         $result->assertStatus(200);
         $result->assertSee('Read-only');
         $result->assertSee('External key');
+        $result->assertSee('Implied');
         $result->assertSeeInField('friendly', 'Insects');
     }
 
@@ -143,6 +145,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
         $this->assertSame('Invertebrates', $after['friendly']);
         $this->assertSame($before['title'], $after['title']);
         $this->assertSame($before['external_key'], $after['external_key']);
+        $this->assertSame($before['implied'], $after['implied']);
     }
 
     public function testUpdateValidatesFriendlyMaxLength(): void
@@ -198,6 +201,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
                 'friendly' => 'Insects',
                 'external_key' => 'TANHUB0000000001',
                 'indicia_taxon_group_id' => 1,
+                'implied' => 1,
                 'created_at' => $now,
                 'updated_at' => $now,
             ],
@@ -207,6 +211,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
                 'friendly' => null,
                 'external_key' => 'TANHUB0000000002',
                 'indicia_taxon_group_id' => 2,
+                'implied' => 0,
                 'created_at' => $now,
                 'updated_at' => $now,
             ],
@@ -216,6 +221,7 @@ final class TaxonGroupsTest extends CIUnitTestCase
                 'friendly' => 'Birds',
                 'external_key' => 'TANHUB0000000003',
                 'indicia_taxon_group_id' => 3,
+                'implied' => 0,
                 'created_at' => $now,
                 'updated_at' => $now,
             ],

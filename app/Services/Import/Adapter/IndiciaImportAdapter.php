@@ -26,6 +26,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
      */
     private const SUPPORTED_ENTITIES = [
         'taxa',
+        'taxon_names',
         'orders',
         'families',
         'superfamilies',
@@ -90,6 +91,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
             case 'taxa':
             case 'taxon_ranks':
             case 'geographic_regions':
+            case 'taxon_names':
                 $report = $entity;
                 break;
 
@@ -104,13 +106,13 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
             'limit' => $limit,
             'offset' => $offset,
         ];
-        if ($report === 'taxon_ranks' || $report === 'taxa') {
+        if (in_array($report, ['taxon_ranks', 'taxa', 'taxon_names'])) {
             $query['taxon_ranks'] = $this->getConfigListAsReportParam('taxonRanks');
         }
         if ($report === 'taxon_groups') {
             $query['taxon_groups'] = $this->getConfigListAsReportParam('taxonGroups');
         }
-        if ($report === 'taxa') {
+        if (in_array($report, ['taxa', 'taxon_names'])) {
             $query['taxon_group_ids'] = $this->getTaxonGroupIndiciaIdsAsReportParam();
         }
         if ($report === 'geographic_regions') {
@@ -155,6 +157,9 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
       $taxonGroups = $db->table('taxon_groups')
         ->select('indicia_taxon_group_id')
         ->where('deleted_at', null)
+        // Exclude groups only included to allow a complete taxonomic hierarchy
+        // to be imported, but not intended for use in the app.
+        ->where('implied', 0)
         ->whereIn('title', $this->importConfig->taxonGroups ?? [])
         ->get()
         ->getResultArray();
@@ -169,6 +174,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
     {
         return match ($entity) {
             'taxa' => array_map(fn (array $row): array => $this->normaliseTaxaRow($row), $rows),
+            'taxon_names' => $this->uniqueTaxonNameRows(array_map(fn (array $row): array => $this->normaliseTaxonNameRow($row), $rows)),
             'recording_schemes' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseRecordingSchemeRow($row), $rows), 'external_key'),
             'taxon_groups' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseTaxonGroupRow($row), $rows), 'external_key'),
             'taxon_ranks' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseTaxonRankRow($row), $rows), 'rank'),
@@ -231,6 +237,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
             'external_key' => trim((string) ($row['taxon_group_external_key'] ?? $row['external_key'] ?? '')),
             'indicia_taxon_group_id' => (int) $row['id'],
             'title' => trim((string) ($row['taxon_group'] ?? $row['title'] ?? '')),
+            'implied' => $row['implied'] ?? 0,
         ];
     }
 
@@ -289,6 +296,23 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
     }
 
     /**
+     * Cleanup a taxon name row read from Indicia.
+     *
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function normaliseTaxonNameRow(array $row): array
+    {
+        return [
+            'taxon_identifier' => trim((string) ($row['taxon_identifier'] ?? $row['organism_key'] ?? '')),
+            'given_name_identifier' => trim((string) ($row['given_name_identifier'] ?? $row['scientific_name_identifier'] ?? $row['name_identifier'] ?? '')),
+            'name' => trim((string) ($row['name'] ?? $row['taxon_name'] ?? $row['scientific_name'] ?? $row['vernacular_name'] ?? '')),
+            'accepted' => $row['accepted'] ?? $row['is_accepted'] ?? 0,
+            'scientific' => $row['scientific'] ?? $row['is_scientific'] ?? 0,
+        ];
+    }
+
+    /**
      * Cleanup a geographic region row read from Indicia.
      *
      * @param array<string, mixed> $row
@@ -320,6 +344,28 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
             }
 
             $deduplicated[$identifier] = $row;
+        }
+
+        return array_values($deduplicated);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     * @return array<int, array<string, mixed>>
+     */
+    private function uniqueTaxonNameRows(array $rows): array
+    {
+        $deduplicated = [];
+
+        foreach ($rows as $row) {
+            $taxonIdentifier = trim((string) ($row['taxon_identifier'] ?? ''));
+            $givenNameIdentifier = trim((string) ($row['given_name_identifier'] ?? ''));
+
+            if ($taxonIdentifier === '' || $givenNameIdentifier === '') {
+                continue;
+            }
+
+            $deduplicated[$taxonIdentifier . '|' . $givenNameIdentifier] = $row;
         }
 
         return array_values($deduplicated);

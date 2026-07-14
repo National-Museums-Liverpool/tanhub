@@ -242,6 +242,7 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
             'friendly' => 'Insects',
             'external_key' => 'TANHUB-TG-1',
             'indicia_taxon_group_id' => 1,
+            'implied' => 1,
         ]);
 
         $db->table('taxon_groups')->insert([
@@ -250,6 +251,7 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
             'friendly' => 'Whales & dolphins',
             'external_key' => 'TANHUB-TG-2',
             'indicia_taxon_group_id' => 2,
+            'implied' => 0,
         ]);
 
         $db->table('taxon_ranks')->insert([

@@ -144,8 +144,6 @@ class Taxa extends BaseController
             $columns[] = $column;
         }
 
-        sort($columns);
-
         return $columns;
     }
 

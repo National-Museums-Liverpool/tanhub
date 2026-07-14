@@ -408,17 +408,18 @@ Examples:
 	- excludes: `blocked`, `blocked_reason`, `created_at`, `updated_at`, `deleted_at`
 - Include:
 	- query parameter: `include`
-	- supported values: `taxon`, `taxon_name`, `taxon_rank`, `parent_taxa`
+	- supported values: `taxon`, `taxon_name`, `taxon_rank`, `taxon_group`, `parent_taxa`
 	- included fields:
-		- `taxon`: `taxon_scientific_name`, `taxon_vernacular_name`
-		- `taxon_name`: `taxon_name`, `taxon_name_accepted`, `taxon_name_scientific`
-		- `taxon_rank`: `taxon_rank`, `taxon_rank_abbr`
-		- `parent_taxa`: parent taxon identifier fields by configured rank
+		- `taxon`: `scientific_name`, `scientific_name_authorship`, `scientific_name_identifier`, `vernacular_name`
+		- `taxon_name`: `given_name`, `taxon_name_uuid`
+		- `taxon_rank`: `taxon_rank`
+		- `taxon_group`: `taxon_group_external_key`
+		- `parent_taxa`: parent taxon scientific/vernacular fields by configured rank (for example `family_scientific_name`, `family_vernacular_name`)
 	- include-only sort/filter fields are available when their include is requested
 
 Examples:
 
-- Request: `/api/v1/occurrences?include=taxon,taxon_name,taxon_rank&taxon_identifier[eq]=NHMSYS0021054498`
+- Request: `/api/v1/occurrences?include=taxon,taxon_name,taxon_rank,taxon_group&taxon_identifier[eq]=NHMSYS0021054498`
 	Response:
 
 ```json
@@ -432,6 +433,7 @@ Examples:
 			"vernacular_name": "Buff-tailed Bumblebee",
 			"given_name": "Bombus terrestris",
 			"taxon_rank": "Species",
+			"taxon_group_external_key": "bees",
 			"from_date": "2024-05-11",
 			"to_date": "2024-05-11",
 			"grid_ref": "SU123456",
@@ -454,8 +456,8 @@ Examples:
 		"total": 57
 	},
 	"links": {
-		"self": "/api/v1/occurrences?include=taxon,taxon_name,taxon_rank&taxon_identifier[eq]=NHMSYS0021054498",
-		"next": "/api/v1/occurrences?include=taxon,taxon_name,taxon_rank&taxon_identifier[eq]=NHMSYS0021054498&limit=1000&offset=1000",
+		"self": "/api/v1/occurrences?include=taxon,taxon_name,taxon_rank,taxon_group&taxon_identifier[eq]=NHMSYS0021054498",
+		"next": "/api/v1/occurrences?include=taxon,taxon_name,taxon_rank,taxon_group&taxon_identifier[eq]=NHMSYS0021054498&limit=1000&offset=1000",
 		"prev": null
 	}
 }
@@ -1019,15 +1021,18 @@ Examples:
 	- rows for blocked taxa are always excluded
 - Include:
 	- query parameter: `include`
-	- supported values: `taxon`, `geographic_region`
+	- supported values: `taxon`, `taxon_rank`, `taxon_group`, `parent_taxa`, `geographic_region`
 	- included fields:
 		- `taxon`: `taxon_scientific_name`, `taxon_vernacular_name`
+		- `taxon_rank`: `taxon_rank`
+		- `taxon_group`: `taxon_group_external_key`
+		- `parent_taxa`: parent taxon scientific/vernacular fields by configured rank (for example `family_scientific_name`, `family_vernacular_name`)
 		- `geographic_region`: `geographic_region`
 	- include-only sort/filter fields are available when their include is requested
 
 Examples:
 
-- Request: `/api/v1/taxon-stats?include=taxon,geographic_region&taxon_identifier[eq]=NHMSYS0021054498`
+- Request: `/api/v1/taxon-stats?include=taxon,taxon_rank,taxon_group,geographic_region&taxon_identifier[eq]=NHMSYS0021054498`
 	Response:
 
 ```json
@@ -1039,6 +1044,8 @@ Examples:
 			"geographic_region_identifier": null,
 			"taxon_scientific_name": "Bombus terrestris",
 			"taxon_vernacular_name": "Buff-tailed Bumblebee",
+			"taxon_rank": "Species",
+			"taxon_group_external_key": "bees",
 			"geographic_region": "South Hampshire",
 			"occurrences_count": 374,
 			"grid_square_count": 119,
@@ -1059,7 +1066,7 @@ Examples:
 		"total": 1
 	},
 	"links": {
-		"self": "/api/v1/taxon-stats?include=taxon,geographic_region&taxon_identifier[eq]=NHMSYS0021054498",
+		"self": "/api/v1/taxon-stats?include=taxon,taxon_rank,taxon_group,geographic_region&taxon_identifier[eq]=NHMSYS0021054498",
 		"next": null,
 		"prev": null
 	}
@@ -1113,15 +1120,18 @@ Examples:
 	- rows for blocked taxa are always excluded
 - Include:
 	- query parameter: `include`
-	- supported values: `taxon`, `geographic_region`
+	- supported values: `taxon`, `taxon_rank`, `taxon_group`, `parent_taxa`, `geographic_region`
 	- included fields:
 		- `taxon`: `taxon_scientific_name`, `taxon_vernacular_name`
+		- `taxon_rank`: `taxon_rank`
+		- `taxon_group`: `taxon_group_external_key`
+		- `parent_taxa`: parent taxon scientific/vernacular fields by configured rank (for example `family_scientific_name`, `family_vernacular_name`)
 		- `geographic_region`: `geographic_region`
 	- include-only sort/filter fields are available when their include is requested
 
 Examples:
 
-- Request: `/api/v1/taxon-year-stats?include=taxon,geographic_region&taxon_identifier[eq]=NHMSYS0021054498&year[gte]=2016`
+- Request: `/api/v1/taxon-year-stats?include=taxon,taxon_rank,taxon_group,geographic_region&taxon_identifier[eq]=NHMSYS0021054498&year[gte]=2016`
 	Response:
 
 ```json
@@ -1133,6 +1143,8 @@ Examples:
 			"geographic_region_identifier": null,
 			"taxon_scientific_name": "Bombus terrestris",
 			"taxon_vernacular_name": "Buff-tailed Bumblebee",
+			"taxon_rank": "Species",
+			"taxon_group_external_key": "bees",
 			"geographic_region": "South Hampshire",
 			"year": 2024,
 			"occurrences_count": 42,
@@ -1144,6 +1156,8 @@ Examples:
 			"geographic_region_identifier": null,
 			"taxon_scientific_name": "Bombus terrestris",
 			"taxon_vernacular_name": "Buff-tailed Bumblebee",
+			"taxon_rank": "Species",
+			"taxon_group_external_key": "bees",
 			"geographic_region": "South Hampshire",
 			"year": 2025,
 			"occurrences_count": 39,
@@ -1157,7 +1171,7 @@ Examples:
 		"total": 10
 	},
 	"links": {
-		"self": "/api/v1/taxon-year-stats?include=taxon,geographic_region&taxon_identifier[eq]=NHMSYS0021054498&year[gte]=2016",
+		"self": "/api/v1/taxon-year-stats?include=taxon,taxon_rank,taxon_group,geographic_region&taxon_identifier[eq]=NHMSYS0021054498&year[gte]=2016",
 		"next": null,
 		"prev": null
 	}

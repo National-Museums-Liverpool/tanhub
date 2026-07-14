@@ -123,6 +123,21 @@ class TaxonYearStats extends ApiController
             $sorts['taxon_vernacular_name'] = 'taxon_vernacular_name';
         }
 
+        if ($this->hasInclude($includes, 'taxon_rank')) {
+            $sorts['taxon_rank'] = 'taxon_rank';
+        }
+
+        if ($this->hasInclude($includes, 'taxon_group')) {
+            $sorts['taxon_group_external_key'] = 'taxon_group_external_key';
+        }
+
+        if ($this->hasInclude($includes, 'parent_taxa')) {
+            foreach ($this->dynamicRankAliases() as $alias) {
+                $sorts[$alias . '_scientific_name'] = $alias . '_scientific_name';
+                $sorts[$alias . '_vernacular_name'] = $alias . '_vernacular_name';
+            }
+        }
+
         if ($this->hasInclude($includes, 'geographic_region')) {
             $sorts['geographic_region'] = 'geographic_region';
         }
@@ -150,6 +165,21 @@ class TaxonYearStats extends ApiController
         if ($this->hasInclude($includes, 'taxon')) {
             $filters['taxon_scientific_name'] = 'taxon_scientific_name';
             $filters['taxon_vernacular_name'] = 'taxon_vernacular_name';
+        }
+
+        if ($this->hasInclude($includes, 'taxon_rank')) {
+            $filters['taxon_rank'] = 'taxon_rank';
+        }
+
+        if ($this->hasInclude($includes, 'taxon_group')) {
+            $filters['taxon_group_external_key'] = 'taxon_group_external_key';
+        }
+
+        if ($this->hasInclude($includes, 'parent_taxa')) {
+            foreach ($this->dynamicRankAliases() as $alias) {
+                $filters[$alias . '_scientific_name'] = $alias . '_scientific_name';
+                $filters[$alias . '_vernacular_name'] = $alias . '_vernacular_name';
+            }
         }
 
         if ($this->hasInclude($includes, 'geographic_region')) {
@@ -183,6 +213,22 @@ class TaxonYearStats extends ApiController
             $builder->select('(SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id AND deleted_at IS NULL AND blocked = 0) AS taxon_identifier', false);
         }
 
+        if ($this->hasInclude($includes, 'taxon_rank')) {
+            $builder->select('(SELECT tr.rank FROM ' . $prefix . 'taxon_ranks tr WHERE tr.id = (SELECT t.taxon_rank_id FROM ' . $prefix . 'taxa t WHERE t.id = taxon_id)) AS taxon_rank', false);
+        }
+
+        if ($this->hasInclude($includes, 'taxon_group')) {
+            $builder->select('(SELECT tg.external_key FROM ' . $prefix . 'taxon_groups tg WHERE tg.id = (SELECT t.taxon_group_id FROM ' . $prefix . 'taxa t WHERE t.id = taxon_id)) AS taxon_group_external_key', false);
+        }
+
+        if ($this->hasInclude($includes, 'parent_taxa')) {
+            foreach ($this->dynamicRankAliases() as $alias) {
+                $column = $alias . '_id';
+                $builder->select('(SELECT scientific_name FROM ' . $prefix . 'taxa WHERE id = ' . $column . ') AS ' . $alias . '_scientific_name', false);
+                $builder->select('(SELECT vernacular_name FROM ' . $prefix . 'taxa WHERE id = ' . $column . ') AS ' . $alias . '_vernacular_name', false);
+            }
+        }
+
         if ($this->hasInclude($includes, 'geographic_region')) {
             $builder->select('(SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region_identifier', false);
             $builder->select('(SELECT higher_geography FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region', false);
@@ -205,7 +251,7 @@ class TaxonYearStats extends ApiController
         }
 
         $parts = array_filter(array_map('trim', explode(',', strtolower($raw))), static fn (string $item): bool => $item !== '');
-        $supported = ['taxon', 'geographic_region'];
+        $supported = ['taxon', 'taxon_rank', 'taxon_group', 'parent_taxa', 'geographic_region'];
         $includes = [];
 
         foreach ($parts as $part) {
@@ -233,6 +279,40 @@ class TaxonYearStats extends ApiController
     private function usesIncludedBuilder(array $includes): bool
     {
         return $includes !== [];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function dynamicRankAliases(): array
+    {
+        $ranks = config('Import')->taxonRanks ?? [];
+        $ranks = is_array($ranks) ? $ranks : explode(',', (string) $ranks);
+        $aliases = [];
+
+        foreach ($ranks as $rank) {
+            if (! is_scalar($rank)) {
+                continue;
+            }
+
+            $alias = $this->normaliseRankAlias((string) $rank);
+
+            if ($alias === '') {
+                continue;
+            }
+
+            $aliases[] = $alias;
+        }
+
+        return array_values(array_unique($aliases));
+    }
+
+    private function normaliseRankAlias(string $rank): string
+    {
+        $alias = strtolower(trim($rank));
+        $alias = preg_replace('/[^a-z0-9]+/i', '_', $alias);
+
+        return trim((string) $alias, '_');
     }
 
     private function applyIdentifierFilter($builder, string $operator, $value, string $localColumn, string $relatedTable, string $relatedField, $db, string $extraWhere = ''): void

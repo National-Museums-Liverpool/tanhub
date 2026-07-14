@@ -242,7 +242,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
     public function testOccurrencesListSupportsIncludeExtensions(): void
     {
-        $result = $this->get('api/v1/occurrences?include=taxon,taxon_name,taxon_rank');
+        $result = $this->get('api/v1/occurrences?include=taxon,taxon_name,taxon_rank,taxon_group');
 
         $result->assertStatus(200);
 
@@ -252,6 +252,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertArrayHasKey('scientific_name', $first);
         $this->assertArrayHasKey('vernacular_name', $first);
         $this->assertArrayHasKey('taxon_rank', $first);
+        $this->assertArrayHasKey('taxon_group_external_key', $first);
         $this->assertArrayHasKey('given_name', $first);
     }
 
@@ -353,7 +354,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
     public function testTaxonStatsIncludeAddsTaxonAndRegionFields(): void
     {
-        $result = $this->get('api/v1/taxon-stats?include=taxon,geographic_region');
+        $result = $this->get('api/v1/taxon-stats?include=taxon,taxon_rank,taxon_group,geographic_region');
 
         $result->assertStatus(200);
 
@@ -362,6 +363,8 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
         $this->assertArrayHasKey('taxon_scientific_name', $first);
         $this->assertArrayHasKey('taxon_vernacular_name', $first);
+        $this->assertArrayHasKey('taxon_rank', $first);
+        $this->assertArrayHasKey('taxon_group_external_key', $first);
         $this->assertArrayHasKey('geographic_region', $first);
     }
 
@@ -403,7 +406,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
     public function testTaxonYearStatsIncludeAddsTaxonAndRegionFields(): void
     {
-        $result = $this->get('api/v1/taxon-year-stats?include=taxon,geographic_region');
+        $result = $this->get('api/v1/taxon-year-stats?include=taxon,taxon_rank,taxon_group,geographic_region');
 
         $result->assertStatus(200);
 
@@ -412,6 +415,8 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
         $this->assertArrayHasKey('taxon_scientific_name', $first);
         $this->assertArrayHasKey('taxon_vernacular_name', $first);
+        $this->assertArrayHasKey('taxon_rank', $first);
+        $this->assertArrayHasKey('taxon_group_external_key', $first);
         $this->assertArrayHasKey('geographic_region', $first);
     }
 

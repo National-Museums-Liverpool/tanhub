@@ -227,6 +227,10 @@ class Occurrences extends ApiController
             $sorts['taxon_rank'] = 'taxon_rank';
         }
 
+        if ($this->hasInclude($includes, 'taxon_group')) {
+            $sorts['taxon_group_external_key'] = 'taxon_group_external_key';
+        }
+
         if ($this->hasInclude($includes, 'parent_taxa')) {
             foreach ($this->dynamicRankAliases() as $alias) {
                 $sorts[$alias . '_scientific_name'] = $alias . '_scientific_name';
@@ -279,6 +283,10 @@ class Occurrences extends ApiController
 
         if ($this->hasInclude($includes, 'taxon_rank')) {
             $filters['taxon_rank'] = 'taxon_rank';
+        }
+
+        if ($this->hasInclude($includes, 'taxon_group')) {
+            $filters['taxon_group_external_key'] = 'taxon_group_external_key';
         }
 
         if ($this->hasInclude($includes, 'parent_taxa')) {
@@ -371,6 +379,10 @@ class Occurrences extends ApiController
             $builder->select('(SELECT tr.rank FROM ' . $prefix . 'taxon_ranks tr WHERE tr.id = (SELECT t.taxon_rank_id FROM ' . $prefix . 'taxa t WHERE t.id = ' . $prefix . 'occurrences.taxon_id)) AS taxon_rank', false);
         }
 
+        if ($this->hasInclude($includes, 'taxon_group')) {
+            $builder->select('(SELECT tg.external_key FROM ' . $prefix . 'taxon_groups tg WHERE tg.id = (SELECT t.taxon_group_id FROM ' . $prefix . 'taxa t WHERE t.id = ' . $prefix . 'occurrences.taxon_id)) AS taxon_group_external_key', false);
+        }
+
         if ($this->hasInclude($includes, 'parent_taxa')) {
             foreach ($this->dynamicRankAliases() as $alias) {
                 $column = $alias . '_id';
@@ -428,7 +440,7 @@ class Occurrences extends ApiController
         }
 
         $parts = array_filter(array_map('trim', explode(',', strtolower($raw))), static fn (string $item): bool => $item !== '');
-        $supported = ['taxon', 'taxon_name', 'taxon_rank', 'parent_taxa'];
+        $supported = ['taxon', 'taxon_name', 'taxon_rank', 'taxon_group', 'parent_taxa'];
         $includes = [];
 
         foreach ($parts as $part) {

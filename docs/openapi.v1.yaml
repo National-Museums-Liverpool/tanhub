@@ -423,7 +423,7 @@ components:
     OccurrencesInclude:
       name: include
       in: query
-      description: Comma-separated related fields to include. Supported values are taxon, taxon_name, taxon_rank, parent_taxa.
+      description: Comma-separated related fields to include. Supported values are taxon, taxon_name, taxon_rank, taxon_group, parent_taxa.
       schema:
         type: string
         example: taxon,taxon_name
@@ -437,14 +437,14 @@ components:
     TaxonStatsInclude:
       name: include
       in: query
-      description: Comma-separated related fields to include. Supported values are taxon and geographic_region.
+      description: Comma-separated related fields to include. Supported values are taxon, taxon_rank, taxon_group, parent_taxa, geographic_region.
       schema:
         type: string
         example: taxon,geographic_region
     TaxonYearStatsInclude:
       name: include
       in: query
-      description: Comma-separated related fields to include. Supported values are taxon and geographic_region.
+      description: Comma-separated related fields to include. Supported values are taxon, taxon_rank, taxon_group, parent_taxa, geographic_region.
       schema:
         type: string
         example: taxon,geographic_region

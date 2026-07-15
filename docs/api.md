@@ -4,6 +4,14 @@
 
 TanHub provides a read-only REST API for reporting and discovery use cases.
 
+For new integrators, the most common flow is:
+
+1. Choose a resource endpoint (for example `/api/v1/taxa` or `/api/v1/occurrences`).
+2. Add filters and sorting using query parameters.
+3. Add include expansions where supported.
+4. Page through result sets using `limit` and `offset`.
+5. Follow `links.next` until no additional page is available.
+
 - Base path: `/api/v1`
 - Data format: JSON
 - Access: unauthenticated and authenticated
@@ -14,6 +22,12 @@ The API is designed around stable, resource-level unique identifiers rather than
 ## 2. Authentication and Authorization
 
 Authentication is optional for all `GET` endpoints.
+
+Practical guidance:
+
+- You can start integrating with anonymous requests.
+- Add authentication when you need higher request throughput or access control.
+- Endpoint behavior is otherwise consistent between anonymous and authenticated usage.
 
 - Unauthenticated requests are rate limited by IP address.
 - Authenticated requests use Bearer JWT tokens and have separate (configurable) rate-limiting behavior.
@@ -35,6 +49,12 @@ For `POST /api/v1/auth/token`, the request uses `username` and `password`; `user
 Clients send:
 
 `Authorization: Bearer <access_token>`
+
+Example:
+
+```http
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOi...
+```
 
 ## 3. Rate Limiting
 
@@ -100,6 +120,11 @@ List endpoints use limit/offset pagination.
 	- `limit` (default `1000`, max `10000`, both configurable)
 	- `offset` (zero-based; default `0`)
 
+Paging recommendation for new consumers:
+
+- Begin with a small `limit` during development (for example `limit=100`).
+- Use `links.next` to continue rather than calculating URLs manually.
+
 List responses are wrapped with `data`, `meta`, and `links`.
 
 ### 5.1 Example list response shape
@@ -130,6 +155,8 @@ List responses are wrapped with `data`, `meta`, and `links`.
 
 Filtering is available on list endpoints using field-based query parameters.
 
+Filter syntax is designed to be explicit and readable: `field[operator]=value`.
+
 ### 6.1 Operators
 
 - `field[eq]=value` equals (default behavior)
@@ -156,6 +183,8 @@ Join tables are not exposed as standalone API resources.
 
 For example, when querying `occurrences`, clients can filter by geographic region via `higher_geography_identifier` without directly querying `geographic_regions_occurrences`.
 
+This keeps the public API resource-focused, while still exposing useful relationship filters.
+
 ## 7. Sorting
 
 Sorting is supported via:
@@ -166,6 +195,9 @@ Sorting is supported via:
 Multiple sort fields can be comma-separated:
 
 - `sort=from_date,-unique_key`
+
+If duplicate values occur in the leading sort field, add a stable secondary field
+(for example `sort=from_date,unique_key`) for predictable pagination behavior.
 
 ## 8. Blocking Rules
 
@@ -247,6 +279,11 @@ This section provides a practical reference for each resource with:
 - example list queries
 
 All list endpoints also support `limit`, `offset`, and `sort`.
+
+For endpoints that support include expansions, examples show both:
+
+- base responses (no include)
+- enriched responses (with include fields)
 
 Example payloads intentionally reuse a small set of sample identifiers where practical:
 

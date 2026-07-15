@@ -1,16 +1,5 @@
 # Import
 
-## Todo
-
-- [x] Taxon names
-- [] taxa.id_difficulty
-- [] taxa.rarity_group_name default
-- [] taxa blocking UI
-- [] Occurrences from Elasticsearch
-- [] warehouse reports into GitHub
-- [] test on live warehouse (recording schemes, conservation status)
-- [] UI for running spark imports
-
 ## Data sources
 
 ### iRecord

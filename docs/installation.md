@@ -1,43 +1,97 @@
-## Installation
+## Installation Guide
 
-1. Grab the code from GitHub - this will create a folder called tanhub containing the project so run it from a suitable location.
+This guide is intended for a first-time TanHub setup. It covers:
+
+- local application setup
+- first-run database setup
+- optional API throttling configuration
+- linking TanHub to an Indicia warehouse
+
+## 1. Prerequisites
+
+Before installing, ensure you have:
+
+- Composer (https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos)
+- Git (optional) - (https://git-scm.com/install/)
+- a web server (or local dev stack) with PHP 8.2 or higher and MySQL
+- access to an Indicia warehouse with rights to configure REST API connections. The warehouse
+  should have a taxon list populated with the contents of the UKSI species list as well as
+  occurrence data that you will import into TanHub.
+
+## 2. Application Setup
+
+1. Obtain a copy of the code using Git as follows:
+
    ```bash
-   $ git clone https://github.com/National-Museums-Liverpool/tanhub.git
+   git clone https://github.com/National-Museums-Liverpool/tanhub.git
+   cd tanhub
    ```
-2. Build the project dependencies:
+
+   If you don't have Git installed you can obtain the code manually by visiting
+   [Github](https://github.com/National-Museums-Liverpool/tanhub/tree/master) and clicking Code,
+   then Download Zip. Save the file, then unzip it and copy the `tanhub-master` contents to a
+   folder where you want the installation to run from and rename it to `tanhub`.
+
+2. Install dependencies:
+
    ```bash
-   $ composer install --no-dev
-   ```
-3. Set up your web-server or local development environment to serve the
-   tanhub/public folder as a website.
-4. Create a local MySQL database called tanhub.
-5. Copy env to .env and set:
-  * Config\Email.fromEmail
-  * Config\Email.fromName
-  * Settings for database.default
-6. Optionally, uncomment `import.taxonRanks` in the env file to provide a
-   custom list of taxonomic ranks which you will be able to report against
-   which should match the ranks used in UKSI.
-7. Optionally, uncomment `import.taxonGroups` in the env file to provide a
-   custom list of groups which you will be able to report against. These
-   should match UKSI output group names.
-8. Optionally, uncomment `import.geographicRegions` and
-   `import.geographicRegionLocationType` in the env file to provide a custom
-   list of regions which you will be able to report against. These must be
-   present on the Indicia server's locations table with matching names and with
-   the location type matching the configuration setting.
-9. Visit /update to run the database migrations and seed baseline lookup data.
-10. Visit /setup-admin-user to define an admin user.
-11. Uncomment this line in your .env file if this is a production server by
-   removing the # at the start:
-   ```
-   # CI_ENVIRONMENT = production
+   composer install --no-dev
    ```
 
-### Optional API throttling configuration
+3. Configure your web server to use `tanhub/public` as the document root.
 
-TanHub API throttling has separate limits for anonymous and authenticated requests.
-If needed, add or override these keys in your `.env` file:
+4. Create a MySQL database (for example, `tanhub`) and a database username and password which has
+   full access to the database you created.
+
+5. Copy the supplied local environment configuration:
+
+```bash
+cp env .env
+```
+
+6. Edit `.env` and set at least:
+
+   - `database.default.database` to the name of the MySQL database you created.
+   - `database.default.username` to the name of the MySQL user you created.
+   - `database.default.password` to the password of the MySQL user you created.
+   - `Config\Email.fromEmail` to the email address emails (such as lost password reset emails) will
+      be sent from.
+   - `Config\Email.fromName` to the name emails (such as lost password reset emails) will be sent
+      from.
+
+   Make sure you remove the # from the start of any line you edit so that it is not commented out.
+   You may have to also alter other settings for the `database.default` configuration if not using
+   a default local MySQL database server setup.
+
+7. Set up import-related configuration in `.env`:
+
+   - `import.taxonRanks` - the list of taxon ranks you would like to be able to view and report
+     against. A comma-separated list, where each rank matches one of the ranks used in the UKSI
+     database. Ranks not in the list will be ignored during import.
+   - `import.taxonGroups` - the list of taxon group names to include when importing occurrence
+      data. Should align with UKSI group names. Note that other group names may also be imported
+      into the taxon_groups table if required to complete the taxonomic hierarchy for imported
+      taxa (a higher taxon may have a group called "unassigned" for example).
+   - `import.geographicRegions` - set to the names of the regions you want to include in TanHub.
+      These should be indexed locations in the Indicia warehouse.
+   - `import.geographicRegionLocationType` - set to the name of the Location Type in Indicia that
+     the regions belong to, for example "Vice County".
+
+8. Visit the `/update` page in your browser and click the button to run the migration scripts,
+   which set up the database.
+
+9. Visit the `/setup-admin-user` and follow the instructions to create the first admin account.
+
+10. For production environments, enable production mode in `.env`:
+
+```dotenv
+CI_ENVIRONMENT = production
+```
+
+## 3. Optional API Throttling Configuration
+
+TanHub supports separate throttle windows for anonymous and authenticated requests.
+Add or override these keys in `.env` as required:
 
 ```dotenv
 api.rateLimitAnonymousCapacity = 20
@@ -46,20 +100,39 @@ api.rateLimitAuthenticatedCapacity = 60
 api.rateLimitAuthenticatedSeconds = 20
 ```
 
-- `api.rateLimitAnonymousCapacity`: number of anonymous requests allowed per window.
-- `api.rateLimitAnonymousSeconds`: window size in seconds for anonymous requests.
-- `api.rateLimitAuthenticatedCapacity`: number of authenticated requests allowed per window.
-- `api.rateLimitAuthenticatedSeconds`: window size in seconds for authenticated requests.
+- `api.rateLimitAnonymousCapacity`: anonymous requests allowed per window
+- `api.rateLimitAnonymousSeconds`: anonymous window duration in seconds
+- `api.rateLimitAuthenticatedCapacity`: authenticated requests allowed per window
+- `api.rateLimitAuthenticatedSeconds`: authenticated window duration in seconds
 
-## Linking to an Indicia warehouse
+## 4. Link TanHub to an Indicia Warehouse
 
-1. On the warehouse, select Admin > REST API Clients from the menu.
-2. Add a new client, title TanHub, username tanhub, select the main website you are fetching records for, and provide a secret.
-3. Save it, then edit the client you just created and select the Connections tab. Click New Client Connection.
-4. Title = TanHub, Proj ID = TANHUB, Sharing mode = Reporting, select a filter if needed.
-5. Set the correct Elasticsearch endpoint name which grants access to all records at the required precision.
-6. Click allow reports, and paste the following in:
-   ```
+1. In the warehouse, open `Admin > REST API Clients` from the menu. If you don't have privileges to
+   see this menu item then you will have to request that the warehouse administrator does this for
+   you.
+2. Create a REST API client:
+   - Title: `TanHub`
+   - Username: `tanhub`
+   - Website: select the source website which holds the records you want to be able to import.
+     Other websites which share their data for reporting to the chosen website will also be
+     included.
+   - Secret: enter a strong secret and keep a copy of it securely.
+3. Save, then open the new client and go to the `Connections` tab.
+4. Create a new client connection with:
+   - Title: `TanHub`
+   - Proj ID: `TANHUB`
+   - Sharing mode: `Reporting`
+   - Filter: you can optionally point this to a filter saved in the Indicia warehouse which
+     enforces access to the correct occurrence data. The TanHub import routine will apply its own
+     filtering so this option is only required if access to disallowed data is a concern.
+   - Allow confidential records: unticked
+   - Allow sensitive records: ticked
+   - Allow unreleased records: unticked
+5. Set the Elasticsearch endpoint to the endpoint name that exposes all records as configured in
+   the REST API.
+6. In `allow reports`, add:
+
+   ```text
    projects/tanhub/geographic_regions.xml
    projects/tanhub/recording_schemes.xml
    projects/tanhub/taxa.xml
@@ -67,16 +140,27 @@ api.rateLimitAuthenticatedSeconds = 20
    projects/tanhub/taxon_names.xml
    projects/tanhub/taxon_ranks.xml
    ```
-7. Click Save.
-8. Set up the Import section in your .env file, including setting Config\Import.indiciaOccurrencesEsEndpoint to the endpoint name given in point 5.
 
-## Preparing an Indicia warehouse for TanHub
+7. Save the connection.
+8. In TanHub `.env`, configure the Import section to match the connection settings as follows:
+  - `Config\Import.indiciaWarehouseUrl` - the warehouse URL without trailing slash or `index.php`.
+  - `Config\Import.indiciaTaxonListId` - the taxon list on the warehouse which contains the UKSI
+   data.
+  - `Config\Import.indiciaProjId` - set to `TANHUB` (or the Proj ID set for your client connection if different).
+  - `Config\Import.indiciaUsername` - set to `tanhub` (or the username set for your API client if different).
+  - `Config\Import.indiciaSecret` - set to the secret given for your API client.
+  - `Config\Import.indiciaOccurrencesEsEndpoint` - match the endpoint from step 5.
 
-1. Ensure the reports are present.
-2. In pgAdmin:
-   ```sql
-   grant select on recording_scheme_taxa to indicia_report_user;
-   grant select on recording_schemes to indicia_report_user;
-   ```
+## 5. Prepare the Indicia Warehouse
 
-Now see (the import documentation)[import.md] for instructions on importing the data.
+1. Ensure required TanHub reports are present in the warehouse.
+2. In pgAdmin, grant read access for reporting:
+
+```sql
+grant select on recording_scheme_taxa to indicia_report_user;
+grant select on recording_schemes to indicia_report_user;
+```
+
+## 6. Next Step
+
+After installation and warehouse linkage, continue with the import process in [docs/import.md](docs/import.md).

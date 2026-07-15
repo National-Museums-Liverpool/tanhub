@@ -401,31 +401,10 @@ class Occurrences extends ApiController
     {
         $ranks = config('Import')->taxonRanks ?? [];
         $ranks = is_array($ranks) ? $ranks : explode(',', (string) $ranks);
-        $aliases = [];
+        $scalarRanks = array_values(array_filter($ranks, static fn ($rank): bool => is_scalar($rank)));
+        $rankStrings = array_map(static fn ($rank): string => (string) $rank, $scalarRanks);
 
-        foreach ($ranks as $rank) {
-            if (! is_scalar($rank)) {
-                continue;
-            }
-
-            $alias = $this->normaliseRankAlias((string) $rank);
-
-            if ($alias === '') {
-                continue;
-            }
-
-            $aliases[] = $alias;
-        }
-
-        return array_values(array_unique($aliases));
-    }
-
-    private function normaliseRankAlias(string $rank): string
-    {
-        $alias = strtolower(trim($rank));
-        $alias = preg_replace('/[^a-z0-9]+/i', '_', $alias);
-
-        return trim((string) $alias, '_');
+        return $this->resolveAvailableTaxonRankAliases($rankStrings);
     }
 
     /**

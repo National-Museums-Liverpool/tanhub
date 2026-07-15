@@ -368,6 +368,20 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertArrayHasKey('geographic_region', $first);
     }
 
+    public function testTaxonStatsIncludeParentTaxaAddsParentFields(): void
+    {
+        $result = $this->get('api/v1/taxon-stats?include=parent_taxa');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $first = $json['data'][0];
+
+        $this->assertArrayHasKey('family_scientific_name', $first);
+        $this->assertArrayHasKey('family_vernacular_name', $first);
+        $this->assertSame('Apidae', $first['family_scientific_name']);
+    }
+
     public function testTaxonStatsRejectsInvalidInclude(): void
     {
         $result = $this->get('api/v1/taxon-stats?include=foo');
@@ -418,6 +432,20 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertArrayHasKey('taxon_rank', $first);
         $this->assertArrayHasKey('taxon_group_external_key', $first);
         $this->assertArrayHasKey('geographic_region', $first);
+    }
+
+    public function testTaxonYearStatsIncludeParentTaxaAddsParentFields(): void
+    {
+        $result = $this->get('api/v1/taxon-year-stats?include=parent_taxa');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $first = $json['data'][0];
+
+        $this->assertArrayHasKey('family_scientific_name', $first);
+        $this->assertArrayHasKey('family_vernacular_name', $first);
+        $this->assertSame('Apidae', $first['family_scientific_name']);
     }
 
     public function testTaxonYearStatsRejectsInvalidInclude(): void
@@ -585,6 +613,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'scientific_name' => 'Bombus terrestris',
                 'scientific_name_authorship' => 'Linnaeus, 1758',
                 'vernacular_name' => 'Buff-tailed Bumblebee',
+                'family_id' => 3,
                 'taxon_group_id' => 1,
                 'taxon_rank_id' => 2,
                 'id_difficulty' => 2,
@@ -605,6 +634,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'scientific_name' => 'Bombus blockedus',
                 'scientific_name_authorship' => null,
                 'vernacular_name' => 'Blocked Bee',
+                'family_id' => 3,
                 'taxon_group_id' => 1,
                 'taxon_rank_id' => 2,
                 'id_difficulty' => 3,
@@ -614,6 +644,27 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'rarity_group_name' => 'scarce',
                 'blocked' => 1,
                 'blocked_reason' => 'Sensitive record',
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ],
+            [
+                'id' => 3,
+                'taxon_identifier' => 'NHMSYS0021000001',
+                'scientific_name_identifier' => 'TVK-FAMILY-1',
+                'scientific_name' => 'Apidae',
+                'scientific_name_authorship' => null,
+                'vernacular_name' => 'Bees',
+                'family_id' => null,
+                'taxon_group_id' => 1,
+                'taxon_rank_id' => 1,
+                'id_difficulty' => 1,
+                'recording_scheme_id' => 1,
+                'conservation_status' => null,
+                'taxon_remarks' => null,
+                'rarity_group_name' => 'common',
+                'blocked' => 0,
+                'blocked_reason' => null,
                 'created_at' => $now,
                 'updated_at' => $now,
                 'deleted_at' => null,
@@ -862,6 +913,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             scientific_name VARCHAR(200) NOT NULL,
             scientific_name_authorship VARCHAR(100) NULL,
             vernacular_name VARCHAR(200) NOT NULL,
+            family_id INTEGER NULL,
             taxon_rank_id INTEGER NOT NULL,
             taxon_group_id INTEGER NOT NULL,
             id_difficulty INTEGER NULL,

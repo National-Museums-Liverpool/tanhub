@@ -12,6 +12,72 @@ use CodeIgniter\HTTP\ResponseInterface;
 abstract class ApiController extends Controller
 {
     /**
+     * Resolve configured taxon ranks to aliases that are present as *_id columns on taxa.
+     *
+     * Missing columns are skipped and logged as warnings to prevent runtime SQL errors
+     * when include=parent_taxa is requested.
+     *
+     * @param array<int, string> $ranks
+     * @return array<int, string>
+     */
+    protected function resolveAvailableTaxonRankAliases(array $ranks): array
+    {
+        $aliases = [];
+
+        foreach ($ranks as $rank) {
+            $alias = $this->normaliseTaxonRankAlias($rank);
+
+            if ($alias === '') {
+                continue;
+            }
+
+            $aliases[] = $alias;
+        }
+
+        $aliases = array_values(array_unique($aliases));
+
+        if ($aliases === []) {
+            return [];
+        }
+
+        $db = db_connect();
+        $valid = [];
+        $missingColumns = [];
+
+        foreach ($aliases as $alias) {
+            $column = $alias . '_id';
+
+            if ($db->fieldExists($column, 'taxa')) {
+                $valid[] = $alias;
+                continue;
+            }
+
+            $missingColumns[] = $column;
+        }
+
+        if ($missingColumns !== []) {
+            log_message(
+                'warning',
+                'Configured import.taxonRanks columns missing on taxa table; parent_taxa fields disabled for: {columns}',
+                ['columns' => implode(', ', $missingColumns)]
+            );
+        }
+
+        return $valid;
+    }
+
+    /**
+     * Convert a rank label to a normalised alias suitable for database column naming.
+     */
+    protected function normaliseTaxonRankAlias(string $rank): string
+    {
+        $alias = strtolower(trim($rank));
+        $alias = preg_replace('/[^a-z0-9]+/i', '_', $alias);
+
+        return trim((string) $alias, '_');
+    }
+
+    /**
      * Build a list response envelope.
      *
      * @param array<int, array<string, mixed>> $data

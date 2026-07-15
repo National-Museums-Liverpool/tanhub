@@ -9,6 +9,9 @@ use CodeIgniter\HTTP\ResponseInterface;
  */
 class TaxonStats extends ApiController
 {
+    /**
+     * List taxon stats rows.
+     */
     public function index(): ResponseInterface
     {
         $db = db_connect();
@@ -74,6 +77,9 @@ class TaxonStats extends ApiController
         return $this->respondList($data, $total, $pagination['limit'], $pagination['offset']);
     }
 
+    /**
+     * Show a single taxon stats row by UUID.
+     */
     public function show(string $uuid): ResponseInterface
     {
         $db = db_connect();
@@ -202,6 +208,9 @@ class TaxonStats extends ApiController
         return $filters;
     }
 
+    /**
+     * Build the base query used when no include expansion is requested.
+     */
     private function buildDefaultBuilder($db, string $prefix)
     {
         return $db->table('taxon_stats')
@@ -237,8 +246,8 @@ class TaxonStats extends ApiController
         if ($this->hasInclude($includes, 'parent_taxa')) {
             foreach ($this->dynamicRankAliases() as $alias) {
                 $column = $alias . '_id';
-                $builder->select('(SELECT scientific_name FROM ' . $prefix . 'taxa WHERE id = ' . $column . ') AS ' . $alias . '_scientific_name', false);
-                $builder->select('(SELECT vernacular_name FROM ' . $prefix . 'taxa WHERE id = ' . $column . ') AS ' . $alias . '_vernacular_name', false);
+                $builder->select('(SELECT p.scientific_name FROM ' . $prefix . 'taxa p WHERE p.id = (SELECT t.' . $column . ' FROM ' . $prefix . 'taxa t WHERE t.id = taxon_id AND t.deleted_at IS NULL AND t.blocked = 0) AND p.deleted_at IS NULL AND p.blocked = 0) AS ' . $alias . '_scientific_name', false);
+                $builder->select('(SELECT p.vernacular_name FROM ' . $prefix . 'taxa p WHERE p.id = (SELECT t.' . $column . ' FROM ' . $prefix . 'taxa t WHERE t.id = taxon_id AND t.deleted_at IS NULL AND t.blocked = 0) AND p.deleted_at IS NULL AND p.blocked = 0) AS ' . $alias . '_vernacular_name', false);
             }
         }
 
@@ -253,6 +262,11 @@ class TaxonStats extends ApiController
     }
 
     /**
+     * @return array<string, bool>|ResponseInterface
+     */
+    /**
+     * Parse and validate include query parameters.
+     *
      * @return array<string, bool>|ResponseInterface
      */
     private function getIncludes(): array|ResponseInterface
@@ -281,12 +295,22 @@ class TaxonStats extends ApiController
     /**
      * @param array<string, bool> $includes
      */
+    /**
+     * Check whether a specific include flag is enabled.
+     *
+     * @param array<string, bool> $includes
+     */
     private function hasInclude(array $includes, string $name): bool
     {
         return isset($includes[$name]) && $includes[$name] === true;
     }
 
     /**
+     * @param array<string, bool> $includes
+     */
+    /**
+     * Determine whether include-aware query shaping should be used.
+     *
      * @param array<string, bool> $includes
      */
     private function usesIncludedBuilder(array $includes): bool
@@ -301,33 +325,17 @@ class TaxonStats extends ApiController
     {
         $ranks = config('Import')->taxonRanks ?? [];
         $ranks = is_array($ranks) ? $ranks : explode(',', (string) $ranks);
-        $aliases = [];
+        $scalarRanks = array_values(array_filter($ranks, static fn ($rank): bool => is_scalar($rank)));
+        $rankStrings = array_map(static fn ($rank): string => (string) $rank, $scalarRanks);
 
-        foreach ($ranks as $rank) {
-            if (! is_scalar($rank)) {
-                continue;
-            }
-
-            $alias = $this->normaliseRankAlias((string) $rank);
-
-            if ($alias === '') {
-                continue;
-            }
-
-            $aliases[] = $alias;
-        }
-
-        return array_values(array_unique($aliases));
+        return $this->resolveAvailableTaxonRankAliases($rankStrings);
     }
 
-    private function normaliseRankAlias(string $rank): string
-    {
-        $alias = strtolower(trim($rank));
-        $alias = preg_replace('/[^a-z0-9]+/i', '_', $alias);
-
-        return trim((string) $alias, '_');
-    }
-
+    /**
+     * Apply identifier-based filters using subqueries.
+     *
+     * @param mixed $value
+     */
     private function applyIdentifierFilter($builder, string $operator, $value, string $localColumn, string $relatedTable, string $relatedField, $db, string $extraWhere = ''): void
     {
         if ($operator === 'eq') {

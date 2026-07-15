@@ -45,6 +45,16 @@ class CreateGridSquareStatsTable extends Migration
                 'constraint' => 11,
                 'unsigned'   => true,
             ],
+            'lon' => [
+                'type'       => 'DECIMAL',
+                'constraint' => '10,7',
+                'unsigned'   => false,
+            ],
+            'lat' => [
+                'type'       => 'DECIMAL',
+                'constraint' => '10,7',
+                'unsigned'   => false,
+            ],
             'partial' => [
                 'type'       => 'TINYINT',
                 'constraint' => 1,
@@ -65,7 +75,7 @@ class CreateGridSquareStatsTable extends Migration
         ]);
 
         $this->forge->addKey('id', true);
-    $this->forge->addUniqueKey('uuid');
+        $this->forge->addUniqueKey('uuid');
         $this->forge->addUniqueKey(['square', 'geographic_region_id']);
         $this->forge->addKey('square');
         $this->forge->addKey('geographic_region_id');

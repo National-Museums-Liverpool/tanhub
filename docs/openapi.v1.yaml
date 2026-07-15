@@ -423,10 +423,10 @@ components:
     OccurrencesInclude:
       name: include
       in: query
-      description: Comma-separated related fields to include. Supported values are taxon, taxon_name, taxon_rank, taxon_group, parent_taxa.
+      description: Comma-separated related fields to include. Supported values are taxon, taxon_name, taxon_rank, taxon_group, parent_taxa, grid_square_stats.
       schema:
         type: string
-        example: taxon,taxon_name
+        example: taxon,taxon_name,grid_square_stats
     GridSquareStatsInclude:
       name: include
       in: query

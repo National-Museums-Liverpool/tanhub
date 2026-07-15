@@ -208,6 +208,13 @@ class Occurrences extends ApiController
             'data_source_abbr' => 'data_source_abbr',
         ];
 
+        if ($this->hasInclude($includes, 'grid_square_stats')) {
+            $sorts['easting'] = 'easting';
+            $sorts['northing'] = 'northing';
+            $sorts['lat'] = 'lat';
+            $sorts['lon'] = 'lon';
+        }
+
         if (! $this->hasInclude($includes, 'taxon')) {
             return $sorts;
         }
@@ -264,9 +271,15 @@ class Occurrences extends ApiController
             'sex' => 'sex',
             'life_stage' => 'life_stage',
             'organism_quantity' => 'organism_quantity',
-            'data_source_abbr' => $usesIncludedBuilder ? 'data_source_abbr' : '__data_source_abbr__',
             'higher_geography_identifier' => '__higher_geography_identifier__',
         ];
+
+        if ($this->hasInclude($includes, 'grid_square_stats')) {
+            $filters['easting'] = 'easting';
+            $filters['northing'] = 'northing';
+            $filters['lat'] = 'lat';
+            $filters['lon'] = 'lon';
+        }
 
         if (! $this->hasInclude($includes, 'taxon')) {
             return $filters;
@@ -363,6 +376,11 @@ class Occurrences extends ApiController
             ->where($prefix . 'occurrences.deleted_at IS NULL', null, false)
             ->where($prefix . 'occurrences.blocked = 0', null, false);
 
+        if ($this->hasInclude($includes, 'grid_square_stats')) {
+            $builder->join($prefix . 'grid_square_stats gss', 'gss.square = ' . $prefix . 'occurrences.grid_ref_2km', 'left');
+            $builder->select('gss.easting, gss.northing, gss.lat, gss.lon', false);
+        }
+
         if ($this->hasInclude($includes, 'taxon')) {
             $builder->select('(SELECT scientific_name FROM ' . $prefix . 'taxa WHERE id = ' . $prefix . 'occurrences.taxon_id) AS scientific_name', false);
             $builder->select('(SELECT scientific_name_authorship FROM ' . $prefix . 'taxa WHERE id = ' . $prefix . 'occurrences.taxon_id) AS scientific_name_authorship', false);
@@ -419,7 +437,7 @@ class Occurrences extends ApiController
         }
 
         $parts = array_filter(array_map('trim', explode(',', strtolower($raw))), static fn (string $item): bool => $item !== '');
-        $supported = ['taxon', 'taxon_name', 'taxon_rank', 'taxon_group', 'parent_taxa'];
+        $supported = ['taxon', 'taxon_name', 'taxon_rank', 'taxon_group', 'parent_taxa', 'grid_square_stats'];
         $includes = [];
 
         foreach ($parts as $part) {

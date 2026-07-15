@@ -242,7 +242,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
     public function testOccurrencesListSupportsIncludeExtensions(): void
     {
-        $result = $this->get('api/v1/occurrences?include=taxon,taxon_name,taxon_rank,taxon_group');
+        $result = $this->get('api/v1/occurrences?include=taxon,taxon_name,taxon_rank,taxon_group,grid_square_stats');
 
         $result->assertStatus(200);
 
@@ -254,6 +254,14 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertArrayHasKey('taxon_rank', $first);
         $this->assertArrayHasKey('taxon_group_external_key', $first);
         $this->assertArrayHasKey('given_name', $first);
+        $this->assertArrayHasKey('easting', $first);
+        $this->assertArrayHasKey('northing', $first);
+        $this->assertArrayHasKey('lat', $first);
+        $this->assertArrayHasKey('lon', $first);
+        $this->assertSame(410000, $first['easting']);
+        $this->assertSame(110000, $first['northing']);
+        $this->assertSame('50.1234567', (string) $first['lat']);
+        $this->assertSame('-1.2345678', (string) $first['lon']);
     }
 
     public function testOccurrencesListRejectsInvalidInclude(): void
@@ -778,6 +786,8 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'geographic_region_id' => 1,
                 'easting' => 412300,
                 'northing' => 112300,
+                'lon' => -1.1000000,
+                'lat' => 50.1000000,
                 'partial' => 0,
                 'occurrences_count' => 12,
                 'species_count' => 7,
@@ -789,9 +799,24 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'geographic_region_id' => 2,
                 'easting' => 456700,
                 'northing' => 156700,
+                'lon' => -1.2000000,
+                'lat' => 50.2000000,
                 'partial' => 1,
                 'occurrences_count' => 4,
                 'species_count' => 3,
+            ],
+            [
+                'id' => 3,
+                'uuid' => '55555555-5555-4555-8555-555555555555',
+                'square' => 'SU15A',
+                'geographic_region_id' => null,
+                'easting' => 410000,
+                'northing' => 110000,
+                'lon' => -1.2345678,
+                'lat' => 50.1234567,
+                'partial' => 0,
+                'occurrences_count' => 1,
+                'species_count' => 1,
             ],
         ]);
 
@@ -977,6 +1002,8 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             geographic_region_id INTEGER NULL,
             easting INTEGER NOT NULL,
             northing INTEGER NOT NULL,
+            lon DECIMAL(10,7) NULL,
+            lat DECIMAL(10,7) NULL,
             partial INTEGER NOT NULL DEFAULT 0,
             occurrences_count INTEGER NOT NULL DEFAULT 0,
             species_count INTEGER NOT NULL DEFAULT 0

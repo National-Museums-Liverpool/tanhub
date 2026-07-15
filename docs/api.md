@@ -445,18 +445,20 @@ Examples:
 	- excludes: `blocked`, `blocked_reason`, `created_at`, `updated_at`, `deleted_at`
 - Include:
 	- query parameter: `include`
-	- supported values: `taxon`, `taxon_name`, `taxon_rank`, `taxon_group`, `parent_taxa`
+	- supported values: `taxon`, `taxon_name`, `taxon_rank`, `taxon_group`, `parent_taxa`, `grid_square_stats`
 	- included fields:
 		- `taxon`: `scientific_name`, `scientific_name_authorship`, `scientific_name_identifier`, `vernacular_name`
 		- `taxon_name`: `given_name`, `taxon_name_uuid`
 		- `taxon_rank`: `taxon_rank`
 		- `taxon_group`: `taxon_group_external_key`
 		- `parent_taxa`: parent taxon scientific/vernacular fields by configured rank (for example `family_scientific_name`, `family_vernacular_name`)
+		- `grid_square_stats`: `easting`, `northing`, `lat`, `lon`: include `grid_square_stats` when
+		  the lat/long or easting/northing are required for mapping.
 	- include-only sort/filter fields are available when their include is requested
 
 Examples:
 
-- Request: `/api/v1/occurrences?include=taxon,taxon_name,taxon_rank,taxon_group&taxon_identifier[eq]=NHMSYS0021054498`
+- Request: `/api/v1/occurrences?include=taxon,taxon_name,taxon_rank,taxon_group,grid_square_stats&taxon_identifier[eq]=NHMSYS0021054498`
 	Response:
 
 ```json
@@ -471,6 +473,10 @@ Examples:
 			"given_name": "Bombus terrestris",
 			"taxon_rank": "Species",
 			"taxon_group_external_key": "bees",
+			"easting": 410000,
+			"northing": 110000,
+			"lat": 50.1234567,
+			"lon": -1.2345678,
 			"from_date": "2024-05-11",
 			"to_date": "2024-05-11",
 			"grid_ref": "SU123456",

@@ -45,6 +45,7 @@ until it returns "Has more: no".
 ```bash
 $ php spark import:indicia --source indicia --entity recording_schemes
 $ php spark import:indicia --source indicia --entity geographic_regions
+$ php spark import:indicia --source indicia --entity grid_square_stats
 $ php spark import:indicia --source indicia --entity taxon_groups
 $ php spark import:indicia --source indicia --entity taxon_ranks
 $ php spark import:indicia --source indicia --entity taxa
@@ -71,6 +72,8 @@ $ php spark import:occurrences --source indicia --page-size 500 --limit 5000
 $ php spark import:occurrences --source nbn --page-size 500 --limit 5000
 ```
 
+Occurrence checkpoints are tracked in `import_offsets` using source keys in the form `<source>-occurrences:occurrences` (for example `indicia-occurrences:occurrences`).
+
 Optional parameters:
 
 - `--dry-run` fetch and validate records without writing to `occurrences`.
@@ -88,6 +91,12 @@ skipped due to missing foreign key mappings.
 
 For taxon group imports, the `implied` column from `taxon_groups.xml` is
 persisted as a boolean flag on `taxon_groups.implied`.
+
+For grid square stats imports, the `grid_squares.xml` report uses the same
+`geographic_regions` and `location_type` parameters as
+`geographic_regions.xml`. It fills `uuid`, `square`, `geographic_region_id`,
+`easting`, `northing`, `lat`, `lon`, and `partial`; the counts are filled by
+the separate grid-square counts task.
 
 Configure the taxon groups that will be imported in your `env` file's
 `import.taxonRanks` setting.

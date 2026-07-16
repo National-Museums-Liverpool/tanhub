@@ -37,7 +37,7 @@ class ImportIndicia extends BaseCommand
      */
     protected $options = [
         '--source' => 'Source key: indicia. Required.',
-        '--entity' => 'Entity to import: recording_schemes, taxon_groups, taxon_ranks, geographic_regions, taxa, taxon_names, occurrences.',
+        '--entity' => 'Entity to import: recording_schemes, taxon_groups, taxon_ranks, geographic_regions, grid_square_stats, taxa, taxon_names, occurrences.',
         '--limit' => 'Maximum records to fetch in this run.',
         '--offset' => 'Optional offset override. Defaults to stored offset for the source/entity.',
         '--since' => 'Optional checkpoint override. Applies when --entity=occurrences.',

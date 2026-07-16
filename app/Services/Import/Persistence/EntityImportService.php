@@ -25,6 +25,7 @@ class EntityImportService
             'recording_schemes' => new RecordingSchemesImportService(),
             'taxon_ranks' => new TaxonRanksImportService(),
             'geographic_regions' => new GeographicRegionsImportService(),
+            'grid_square_stats' => new GridSquareStatsImportService(),
             'taxa' => new TaxaImportService(),
             'taxon_names' => new TaxonNamesImportService(),
             default => throw new InvalidArgumentException('Unsupported import entity: ' . $entity),

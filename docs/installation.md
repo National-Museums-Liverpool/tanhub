@@ -133,6 +133,7 @@ api.rateLimitAuthenticatedSeconds = 20
 6. In `allow reports`, add:
 
    ```text
+   projects/tanhub/grid_square_stats.xml
    projects/tanhub/geographic_regions.xml
    projects/tanhub/recording_schemes.xml
    projects/tanhub/taxa.xml

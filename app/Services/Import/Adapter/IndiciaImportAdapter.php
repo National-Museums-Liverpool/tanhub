@@ -26,6 +26,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
      */
     private const SUPPORTED_ENTITIES = [
         'geographic_regions',
+        'grid_square_stats',
         'recording_schemes',
         'taxa',
         'taxon_groups',
@@ -88,6 +89,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
             case 'taxa':
             case 'taxon_ranks':
             case 'geographic_regions':
+            case 'grid_square_stats':
             case 'taxon_names':
                 $report = $entity;
                 break;
@@ -112,7 +114,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
         if (in_array($report, ['taxa', 'taxon_names'])) {
             $query['taxon_group_ids'] = $this->getTaxonGroupIndiciaIdsAsReportParam();
         }
-        if ($report === 'geographic_regions') {
+        if (in_array($report, ['geographic_regions', 'grid_square_stats'], true)) {
             $query['geographic_regions'] = $this->getConfigListAsReportParam('geographicRegions');
             $query['location_type'] = trim((string) ($this->importConfig->geographicRegionLocationType ?? ''));
         }
@@ -176,6 +178,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
             'taxon_groups' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseTaxonGroupRow($row), $rows), 'external_key'),
             'taxon_ranks' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseTaxonRankRow($row), $rows), 'rank'),
             'geographic_regions' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseGeographicRegionRow($row), $rows), 'higher_geography_identifier'),
+            'grid_square_stats' => $this->uniqueRowsByCompositeKey(array_map(fn (array $row): array => $this->normaliseGridSquareStatRow($row), $rows), ['location_id', 'square']),
             default => [],
         };
     }
@@ -326,6 +329,26 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
     }
 
     /**
+     * Cleanup a grid square stats row read from Indicia.
+     *
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function normaliseGridSquareStatRow(array $row): array
+    {
+        return [
+            'location_id' => (int) ($row['location_id'] ?? $row['location_code'] ?? $row['id'] ?? 0),
+            'location_code' => trim((string) ($row['location_code'] ?? '')),
+            'square' => strtoupper(trim((string) ($row['square'] ?? ''))),
+            'centre_easting' => $row['centre_easting'] ?? null,
+            'centre_northing' => $row['centre_northing'] ?? null,
+            'centre_lat' => $row['centre_lat'] ?? null,
+            'centre_lon' => $row['centre_lon'] ?? null,
+            'partial' => $row['partial'] ?? 0,
+        ];
+    }
+
+    /**
      * @param array<int, array<string, mixed>> $rows
      * @return array<int, array<string, mixed>>
      */
@@ -337,6 +360,34 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
             $identifier = trim((string) ($row[$key] ?? ''));
 
             if ($identifier === '') {
+                continue;
+            }
+
+            $deduplicated[$identifier] = $row;
+        }
+
+        return array_values($deduplicated);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     * @param array<int, string> $keys
+     * @return array<int, array<string, mixed>>
+     */
+    private function uniqueRowsByCompositeKey(array $rows, array $keys): array
+    {
+        $deduplicated = [];
+
+        foreach ($rows as $row) {
+            $parts = [];
+
+            foreach ($keys as $key) {
+                $parts[] = trim((string) ($row[$key] ?? ''));
+            }
+
+            $identifier = implode('|', $parts);
+
+            if ($identifier === '|') {
                 continue;
             }
 

@@ -32,6 +32,12 @@ class CreateImportOffsetsTable extends Migration
                 'unsigned'   => true,
                 'default'    => 0,
             ],
+            'next_checkpoint' => [
+                'type'       => 'VARCHAR',
+                'constraint' => 255,
+                'null'       => true,
+                'after'      => 'next_offset',
+            ],
             'created_at' => [
                 'type'    => 'DATETIME',
                 'null'    => false,

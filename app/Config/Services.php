@@ -46,6 +46,7 @@ class Services extends BaseService
             new \App\Services\Import\Persistence\OccurrenceImportService(),
             model(\App\Models\ImportRunModel::class),
             model(\App\Models\DataSourceModel::class),
+            model(\App\Models\ImportOffsetModel::class),
         );
     }
 

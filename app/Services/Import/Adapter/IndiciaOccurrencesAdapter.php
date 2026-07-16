@@ -304,15 +304,8 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
      */
     private function normalizeRecord(array $record): array
     {
-        $gridRef = (string) ($this->stringFromPath($record, 'location.output_sref_blurred')
-            ?? $this->stringFromPath($record, 'location.output_sref')
-            ?? $this->stringFromPath($record, 'location.input_sref')
-            ?? ($record['grid_ref'] ?? $record['grid_reference'] ?? ''));
-        $gridRef2km = (string) ($record['grid_ref_2km'] ?? '');
-
-        if ($gridRef2km === '' && $gridRef !== '') {
-            $gridRef2km = strtoupper(substr(str_replace(' ', '', $gridRef), 0, 5));
-        }
+        $gridRef = (string) ($this->stringFromPath($record, 'location.output_sref'));
+        $gridRef2km = $this->calculateTetrad($gridRef);
         return [
             'remote_id' => (string) ($record['_id']
                 ?? $this->stringFromPath($record, 'occurrence.source_system_key')
@@ -346,6 +339,57 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
                 ?? $record['organism_quantity']
                 ?? null,
         ];
+    }
+
+    /**
+     * Convert an OSGB grid reference to a DINTY format 2km reference.
+     *
+     * @param string $gridRef
+     * @return string|null
+     */
+    private function calculateTetrad(string $gridRef): ?string
+    {
+        $gridRef = strtoupper(preg_replace('/\s+/', '', trim($gridRef)) ?? '');
+
+        if ($gridRef === '' || preg_match('/^[A-Z]{2}\d+$/', $gridRef) !== 1) {
+            return null;
+        }
+
+        $letters = substr($gridRef, 0, 2);
+        $digits = substr($gridRef, 2);
+
+        if (strlen($digits) < 4 || strlen($digits) % 2 !== 0) {
+            return null;
+        }
+
+        if (str_contains($letters, 'I')) {
+            return null;
+        }
+
+        $precisionDigits = strlen($digits) / 2;
+        $scale = 10 ** (5 - $precisionDigits);
+        $hectadScale = 10 ** ($precisionDigits - 1);
+
+        $eastingDigits = (int) substr($digits, 0, $precisionDigits);
+        $northingDigits = (int) substr($digits, $precisionDigits);
+
+        $eastingHectad = intdiv($eastingDigits, $hectadScale);
+        $northingHectad = intdiv($northingDigits, $hectadScale);
+
+        $eastingWithinHectad = ($eastingDigits % $hectadScale) * $scale;
+        $northingWithinHectad = ($northingDigits % $hectadScale) * $scale;
+
+        $tetradX = intdiv($eastingWithinHectad, 2000);
+        $tetradY = intdiv($northingWithinHectad, 2000);
+
+        if ($tetradX < 0 || $tetradX > 4 || $tetradY < 0 || $tetradY > 4) {
+            return null;
+        }
+
+        $tetradLetters = 'ABCDEFGHIJKLMNPQRSTUVWXYZ';
+        $tetradIndex = ($tetradY * 5) + $tetradX;
+
+        return $letters . $eastingHectad . $northingHectad . $tetradLetters[$tetradIndex];
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Services\Import;
 
 use App\Models\DataSourceModel;
+use App\Models\ImportOffsetModel;
 use App\Models\ImportRunModel;
 use App\Services\Import\Adapter\OccurrenceSourceAdapterFactory;
 use App\Services\Import\Persistence\OccurrenceImportService;
@@ -15,16 +16,35 @@ use RuntimeException;
  */
 class ImportOrchestrator
 {
+    /**
+     * Initialize occurrence import orchestration dependencies.
+     *
+     * @param ImportConfig|null                   $config Import configuration.
+     * @param OccurrenceSourceAdapterFactory|null $adapterFactory Source adapter factory.
+     * @param OccurrenceImportService|null        $occurrenceImportService Occurrence persistence service.
+     * @param ImportRunModel|null                 $importRunModel Import run tracker model.
+     * @param DataSourceModel|null                $dataSourceModel Data source model.
+     * @param ImportOffsetModel|null              $importOffsetModel Import offset/checkpoint model.
+     */
     public function __construct(
         private readonly ?ImportConfig $config = null,
         private readonly ?OccurrenceSourceAdapterFactory $adapterFactory = null,
         private readonly ?OccurrenceImportService $occurrenceImportService = null,
         private readonly ?ImportRunModel $importRunModel = null,
         private readonly ?DataSourceModel $dataSourceModel = null,
+        private readonly ?ImportOffsetModel $importOffsetModel = null,
     ) {
     }
 
     /**
+     * Execute an occurrence import run for a source.
+     *
+     * @param string      $sourceKey Source key to import from.
+     * @param int         $limit Maximum records to process in this run.
+     * @param int         $pageSize Source page size per fetch.
+     * @param bool        $dryRun Whether persistence is disabled for this run.
+     * @param string|null $checkpointOverride Optional checkpoint override.
+     *
      * @return array<string, int|string|null>
      */
     public function run(
@@ -39,8 +59,10 @@ class ImportOrchestrator
         $occurrenceImportService = $this->occurrenceImportService ?? new OccurrenceImportService();
         $importRunModel = $this->importRunModel ?? model(ImportRunModel::class);
         $dataSourceModel = $this->dataSourceModel ?? model(DataSourceModel::class);
+        $importOffsetModel = $this->importOffsetModel ?? model(ImportOffsetModel::class);
 
         $source = strtolower($sourceKey);
+        $sourceEntityKey = $this->occurrenceSourceKey($source);
         $sourceAbbr = strtoupper($adapterFactory->sourceAbbr($source));
 
         $dataSource = $dataSourceModel->where('abbr', $sourceAbbr)->first();
@@ -49,10 +71,11 @@ class ImportOrchestrator
             throw new InvalidArgumentException('No data_sources row found for abbr: ' . $sourceAbbr);
         }
 
-        $checkpoint = $checkpointOverride ?? $this->lastSuccessfulCheckpoint($importRunModel, $source);
+        $checkpoint = $checkpointOverride
+            ?? $this->lastSuccessfulCheckpoint($importOffsetModel, $importRunModel, $source, $sourceEntityKey);
 
         $runId = (int) $importRunModel->insert([
-            'source_key' => $source,
+            'source_key' => $sourceEntityKey,
             'source_abbr' => $sourceAbbr,
             'status' => 'running',
             'checkpoint' => $checkpoint,
@@ -107,6 +130,10 @@ class ImportOrchestrator
 
             $status = $total['errors'] > 0 ? 'failed' : 'success';
 
+            if (! $dryRun) {
+                $importOffsetModel->setCheckpoint($sourceEntityKey, $checkpoint);
+            }
+
             $importRunModel->update($runId, [
                 'status' => $status,
                 'checkpoint' => $checkpoint,
@@ -130,6 +157,10 @@ class ImportOrchestrator
                 'errors' => $total['errors'],
             ];
         } catch (\Throwable $exception) {
+            if (! $dryRun) {
+                $importOffsetModel->setCheckpoint($sourceEntityKey, $checkpoint);
+            }
+
             $importRunModel->update($runId, [
                 'status' => 'failed',
                 'checkpoint' => $checkpoint,
@@ -146,20 +177,60 @@ class ImportOrchestrator
         }
     }
 
-    private function lastSuccessfulCheckpoint(ImportRunModel $importRunModel, string $sourceKey): ?string
+    /**
+     * Resolve the checkpoint to resume from for an occurrence import.
+     *
+     * @param ImportOffsetModel $importOffsetModel Import offset/checkpoint model.
+     * @param ImportRunModel    $importRunModel Import run tracker model.
+     * @param string            $source Source key.
+     * @param string            $sourceEntityKey Source/entity tracking key.
+     *
+     * @return string|null Checkpoint token when available.
+     */
+    private function lastSuccessfulCheckpoint(
+        ImportOffsetModel $importOffsetModel,
+        ImportRunModel $importRunModel,
+        string $source,
+        string $sourceEntityKey,
+    ): ?string
     {
-        $run = $importRunModel
-            ->where('source_key', $sourceKey)
-            ->whereIn('status', ['success', 'partial'])
-            ->orderBy('id', 'desc')
-            ->first();
+        $checkpoint = $importOffsetModel->getCheckpoint($sourceEntityKey);
 
-        if ($run === null) {
-            return null;
+        if ($checkpoint !== null) {
+            return $checkpoint;
         }
 
-        $checkpoint = $run['checkpoint'] ?? null;
+        // Backward compatibility for runs created before occurrence source-key normalization.
+        foreach ([$sourceEntityKey, $source] as $legacySourceKey) {
+            $run = $importRunModel
+                ->where('source_key', $legacySourceKey)
+                ->whereIn('status', ['success', 'partial'])
+                ->orderBy('id', 'desc')
+                ->first();
 
-        return is_string($checkpoint) && $checkpoint !== '' ? $checkpoint : null;
+            if ($run === null) {
+                continue;
+            }
+
+            $runCheckpoint = $run['checkpoint'] ?? null;
+
+            if (is_string($runCheckpoint) && $runCheckpoint !== '') {
+                return $runCheckpoint;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Build the occurrence source key used for run and checkpoint tracking.
+     *
+     * @param string $source Source key.
+     *
+     * @return string Canonical occurrence source/entity key.
+     */
+    private function occurrenceSourceKey(string $source): string
+    {
+        return $source . '-occurrences:occurrences';
     }
 }

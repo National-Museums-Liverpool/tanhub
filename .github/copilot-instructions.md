@@ -5,11 +5,15 @@ applyTo: 'app/**'
 ---
 # Project general coding standards
 
-- Ensure that all code is properly formatted and adheres to the CodeIgniter coding standards (https://github.com/CodeIgniter/coding-standard).
-- Use CodeIgniter and PHP best practices for all code.
-- Ensure that all code is properly documented with PHPDoc comments.
+- MUST: Ensure that all code is properly formatted and adheres to the CodeIgniter coding standards (https://github.com/CodeIgniter/coding-standard).
+- MUST: Use CodeIgniter and PHP best practices for all code.
+- MUST: Ensure that all code is properly documented with PHPDoc comments.
+- MUST: Add a PHPDoc block to every new or modified class, method, and function in app/**.
+- MUST: Include @param for each parameter and @return for all non-void methods.
+- MUST: Include one-line summary describing purpose/behavior.
+- NEVER: Leave newly introduced methods undocumented, even for private helpers.
 - Endeavour to make code that is clear and easy to read.
-- Use proper escaping of user input to prevent XSS and other security vulnerabilities.
+- MUST: Use proper escaping of user input to prevent XSS and other security vulnerabilities.
 
 # Theme
 

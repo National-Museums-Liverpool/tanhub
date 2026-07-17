@@ -18,6 +18,10 @@
             <div class="alert alert-danger" role="alert"><?= esc((string) session()->getFlashdata('error')) ?></div>
         <?php endif; ?>
 
+        <?php if (session()->getFlashdata('warning')): ?>
+            <div class="alert alert-warning" role="alert"><?= esc((string) session()->getFlashdata('warning')) ?></div>
+        <?php endif; ?>
+
         <div class="mb-4">
             <h2 class="h5">Current queue</h2>
             <?php if ($page['taskQueue'] === []): ?>

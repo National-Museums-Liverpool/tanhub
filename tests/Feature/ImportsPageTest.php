@@ -119,6 +119,90 @@ final class ImportsPageTest extends CIUnitTestCase
         $this->assertSame('completed', (string) $queueRow['status']);
     }
 
+    public function testRunTaskWithSkippedRecordsShowsWarning(): void
+    {
+        $this->markTaxonomyDependenciesComplete();
+
+        $this->authenticateAs('imports-admin-warning@example.com', 'admin');
+
+        $mock = $this->createMock(EntityImportOrchestrator::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->with('indicia', 'taxon_names', $this->greaterThan(0), false, null)
+            ->willReturn([
+                'status' => 'success',
+                'run_id' => 100,
+                'fetched' => 10,
+                'inserted' => 8,
+                'updated' => 0,
+                'skipped' => 2,
+                'errors' => 0,
+            ]);
+
+        \Config\Services::injectMock('importOrchestrator', $mock);
+
+        $result = $this->post('imports/run', [
+            'task_key' => 'taxonomy:indicia:taxon_names',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirectTo(site_url('imports'));
+        $result->assertSessionHas('warning');
+
+        $queueRow = db_connect()
+            ->table('import_task_queue')
+            ->where('task_key', 'taxonomy:indicia:taxon_names')
+            ->orderBy('id', 'desc')
+            ->get()
+            ->getRowArray();
+
+        $this->assertIsArray($queueRow);
+        $this->assertSame('completed', (string) $queueRow['status']);
+        $this->assertStringContainsString('skipped: 2', strtolower((string) $queueRow['message']));
+    }
+
+    public function testRunTaskWithErrorsShowsErrorSummaryAndMarksQueueFailed(): void
+    {
+        $this->markTaxonomyDependenciesComplete();
+
+        $this->authenticateAs('imports-admin-error@example.com', 'admin');
+
+        $mock = $this->createMock(EntityImportOrchestrator::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->with('indicia', 'taxon_names', $this->greaterThan(0), false, null)
+            ->willReturn([
+                'status' => 'failed',
+                'run_id' => 101,
+                'fetched' => 10,
+                'inserted' => 7,
+                'updated' => 0,
+                'skipped' => 1,
+                'errors' => 2,
+            ]);
+
+        \Config\Services::injectMock('importOrchestrator', $mock);
+
+        $result = $this->post('imports/run', [
+            'task_key' => 'taxonomy:indicia:taxon_names',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirectTo(site_url('imports'));
+        $result->assertSessionHas('error');
+
+        $queueRow = db_connect()
+            ->table('import_task_queue')
+            ->where('task_key', 'taxonomy:indicia:taxon_names')
+            ->orderBy('id', 'desc')
+            ->get()
+            ->getRowArray();
+
+        $this->assertIsArray($queueRow);
+        $this->assertSame('failed', (string) $queueRow['status']);
+        $this->assertStringContainsString('errors: 2', strtolower((string) $queueRow['message']));
+    }
+
     private function seedImportOffsets(): void
     {
         $db = db_connect();

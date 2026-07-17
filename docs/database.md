@@ -133,12 +133,12 @@ unique ID of the record as loaded from the remote system.
 | id                                 | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                                           |
 | unique_key                         | VARCHAR(100) | NO   | UQ  |                   | Unique key for the API                                                                |
 | taxon_id                           | BIGINT       | NO   | FK  |                   | ID of the taxon this is a record of                                                   |
-| <rank>_id                          | BIGINT       | YES  | FK  |                   | Dynamic taxon-rank FK (for each configured rank), references `taxa.id`               |
+| <rank>_id                          | BIGINT       | YES  | FK  |                   | Dynamic taxon-rank FK (for each configured rank), references `taxa.id`                |
 | taxon_name_id                      | BIGINT       | NO   | FK  |                   | ID of the name given for this occurrence which may be accepted, synonym or vernacular |
 | from_date                          | DATE         | YES  |     |                   | Start of the date range that covers the record                                        |
 | to_date                            | DATE         | YES  |     |                   | End of the date range that covers the record                                          |
 | grid_ref                           | VARCHAR(20)  | NO   |     |                   | OSGB grid reference                                                                   |
-| grid_ref_2km                       | CHAR(5)      | NO   |     |                   | 2km (DINTY) grid ref that best fits the record                                        |
+| grid_ref_2km                       | CHAR(5)      | YES  |     |                   | 2km (DINTY) grid ref that best fits the record, null for less precise records         |
 | locality                           | VARCHAR(255) | YES  |     |                   | Site name associated with the record                                                  |
 | recorded_by                        | VARCHAR(255) | NO   |     |                   | Name of the person or agent that recorded the occurrence                              |
 | identified_by                      | VARCHAR(255) | YES  |     |                   | Name of person or agent that made the identification                                  |

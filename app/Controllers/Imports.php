@@ -195,7 +195,9 @@ class Imports extends BaseController
             return redirect()->to(site_url('imports'))->with('message', 'Task was queued. Another task is currently running.');
         }
 
-        $messages = [];
+        $infoMessages = [];
+        $warningMessages = [];
+        $errorMessages = [];
 
         while (true) {
             $nextQueued = $this->nextQueuedTask($queueModel);
@@ -218,7 +220,7 @@ class Imports extends BaseController
             }
 
             if ($state['blocked_by'] !== []) {
-                $messages[] = 'Queued task ' . $state['label'] . ' is blocked by: ' . implode(', ', $state['blocked_by']) . '.';
+                $errorMessages[] = 'Queued task ' . $state['label'] . ' is blocked by: ' . implode(', ', $state['blocked_by']) . '.';
                 break;
             }
 
@@ -229,7 +231,7 @@ class Imports extends BaseController
             ]);
 
             if (! $state['supports_run']) {
-                $messages[] = 'Task ' . $state['label'] . ' is not implemented yet.';
+                $errorMessages[] = 'Task ' . $state['label'] . ' is not implemented yet.';
                 $queueModel->update((int) $nextQueued['id'], [
                     'status' => 'failed',
                     'message' => 'Task is not implemented yet.',
@@ -240,14 +242,29 @@ class Imports extends BaseController
 
             try {
                 $result = $this->runTask($state);
-                $messages[] = 'Task ' . $state['label'] . ' completed with status: ' . (string) ($result['status'] ?? 'success') . '.';
+                $summary = $this->summarizeTaskResult($state, $result);
+                $runStatus = strtolower((string) ($result['status'] ?? 'success'));
+                $queueStatus = $runStatus === 'success' ? 'completed' : 'failed';
+
+                if ($runStatus !== 'success') {
+                    $errorMessages[] = $summary;
+                } elseif (((int) ($result['skipped'] ?? 0)) > 0) {
+                    $warningMessages[] = $summary;
+                } else {
+                    $infoMessages[] = $summary;
+                }
+
                 $queueModel->update((int) $nextQueued['id'], [
-                    'status' => 'completed',
-                    'message' => 'Completed with status: ' . (string) ($result['status'] ?? 'success') . '.',
+                    'status' => $queueStatus,
+                    'message' => $summary,
                     'finished_at' => date('Y-m-d H:i:s'),
                 ]);
+
+                if ($queueStatus === 'failed') {
+                    break;
+                }
             } catch (Throwable $exception) {
-                $messages[] = 'Task ' . $state['label'] . ' failed: ' . $exception->getMessage();
+                $errorMessages[] = 'Task ' . $state['label'] . ' failed: ' . $exception->getMessage();
                 $queueModel->update((int) $nextQueued['id'], [
                     'status' => 'failed',
                     'message' => $exception->getMessage(),
@@ -257,19 +274,63 @@ class Imports extends BaseController
             }
         }
 
-        if ($messages === []) {
+        if ($infoMessages === [] && $warningMessages === [] && $errorMessages === []) {
             return redirect()->to(site_url('imports'))->with('message', 'No tasks were processed.');
         }
 
-        $hasFailure = false;
-        foreach ($messages as $message) {
-            if (str_contains(strtolower($message), 'failed') || str_contains(strtolower($message), 'blocked')) {
-                $hasFailure = true;
-                break;
-            }
+        $redirect = redirect()->to(site_url('imports'));
+
+        if ($infoMessages !== []) {
+            $redirect = $redirect->with('message', implode(' ', $infoMessages));
         }
 
-        return redirect()->to(site_url('imports'))->with($hasFailure ? 'error' : 'message', implode(' ', $messages));
+        if ($warningMessages !== []) {
+            $redirect = $redirect->with('warning', implode(' ', $warningMessages));
+        }
+
+        if ($errorMessages !== []) {
+            $redirect = $redirect->with('error', implode(' ', $errorMessages));
+        }
+
+        return $redirect;
+    }
+
+    /**
+     * Format a user-facing summary for a completed task run.
+     *
+     * @param array<string, mixed> $state
+     * @param array<string, mixed> $result
+     * @return string
+     */
+    private function summarizeTaskResult(array $state, array $result): string
+    {
+        $status = strtolower((string) ($result['status'] ?? 'success'));
+        $fetched = (int) ($result['fetched'] ?? 0);
+        $inserted = (int) ($result['inserted'] ?? 0);
+        $updated = (int) ($result['updated'] ?? 0);
+        $skipped = (int) ($result['skipped'] ?? 0);
+        $errors = (int) ($result['errors'] ?? 0);
+
+        $summary = sprintf(
+            'Task %s finished with status %s. Fetched: %d, inserted: %d, updated: %d, skipped: %d, errors: %d.',
+            (string) ($state['label'] ?? 'unknown'),
+            $status,
+            $fetched,
+            $inserted,
+            $updated,
+            $skipped,
+            $errors,
+        );
+
+        if ($errors > 0) {
+            return $summary . ' Import stopped early because some records failed.';
+        }
+
+        if ($skipped > 0) {
+            return $summary . ' Some records were skipped; review the import logs if this was unexpected.';
+        }
+
+        return $summary;
     }
 
     /**

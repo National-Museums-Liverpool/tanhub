@@ -84,7 +84,8 @@ class OccurrenceImportService
                 $gridRef = trim((string) ($record['grid_ref'] ?? ''));
                 $gridRef2km = trim((string) ($record['grid_ref_2km'] ?? ''));
 
-                if ($gridRef === '' || $gridRef2km === '') {
+                if ($gridRef === '') {
+                    log_message('debug', 'Skipping occurrence record due to missing grid reference: ' . var_export($record, true));
                     $counts['skipped']++;
                     $counts['processed']++;
                     $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);

@@ -67,6 +67,7 @@ class CreateOccurrencesTable extends Migration
             'grid_ref_2km' => [
                 'type'       => 'CHAR',
                 'constraint' => 5,
+                'null'       => true,
             ],
             'locality' => [
                 'type'       => 'VARCHAR',

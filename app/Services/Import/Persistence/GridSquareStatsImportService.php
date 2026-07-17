@@ -31,7 +31,7 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
 
         foreach ($rows as $row) {
             try {
-                $locationCode = (int) ($row['location_code'] ?? 0);
+                $locationIdentifier = $this->nullableInt($row['location_id'] ?? null) ?? $this->nullableInt($row['location_code'] ?? null);
                 $square = strtoupper(trim((string) ($row['square'] ?? '')));
                 $easting = $this->nullableInt($row['centre_easting'] ?? null);
                 $northing = $this->nullableInt($row['centre_northing'] ?? null);
@@ -39,25 +39,36 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
                 $lon = $this->nullableDecimal($row['centre_lon'] ?? null);
                 $partial = $this->toFlag($row['partial'] ?? 0);
 
-                if (empty($locationCode) || $square === '' || $easting === null || $northing === null || $lat === null || $lon === null) {
+                if ($locationIdentifier === null || $square === '' || $easting === null || $northing === null || $lat === null || $lon === null) {
                     log_message('warning', 'Grid square stats row skipped due to missing required fields: ' . json_encode($row));
+                    log_message('warning', 'Fields: ' . json_encode([
+                        'location_id' => $locationIdentifier,
+                        'square' => $square,
+                        'centre_easting' => $easting,
+                        'centre_northing' => $northing,
+                        'centre_lat' => $lat,
+                        'centre_lon' => $lon,
+                        'partial' => $partial,
+                    ]));
                     $counts['skipped']++;
                     $counts['processed']++;
                     continue;
                 }
 
-                if (! array_key_exists($locationCode, $cachedGeographicRegionIds)) {
+                $cacheKey = (string) $locationIdentifier;
+
+                if (! array_key_exists($cacheKey, $cachedGeographicRegionIds)) {
                     $geographicRegion = $db->table('geographic_regions')
                         ->select('id')
-                        ->where('higher_geography_identifier', $locationCode)
+                        ->where('higher_geography_identifier', $locationIdentifier)
                         ->where('deleted_at', null)
                         ->get()
                         ->getRowArray();
 
-                    $cachedGeographicRegionIds[$locationCode] = $geographicRegion === null ? 0 : (int) $geographicRegion['id'];
+                    $cachedGeographicRegionIds[$cacheKey] = $geographicRegion === null ? 0 : (int) $geographicRegion['id'];
                 }
 
-                $geographicRegionId = (int) $cachedGeographicRegionIds[$locationCode];
+                $geographicRegionId = (int) $cachedGeographicRegionIds[$cacheKey];
 
                 if ($geographicRegionId <= 0) {
                     log_message('warning', 'Grid square stats row skipped due to missing geographic region: ' . json_encode($row));
@@ -67,7 +78,7 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
                 }
 
                 $payload = [
-                    'uuid' => $this->stableUuid($locationCode . '|' . $square),
+                    'uuid' => $this->stableUuid((string) $locationIdentifier . '|' . $square),
                     'square' => substr($square, 0, 12),
                     'geographic_region_id' => $geographicRegionId,
                     'easting' => $easting,

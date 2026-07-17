@@ -63,6 +63,8 @@ Optional parameters:
 - `--limit n` to override the default limit of 5000 records per fetch.
 - `--offset n` to override the offset
 
+
+
 ### Occurrence imports
 
 Import occurrences from either source:
@@ -104,3 +106,23 @@ Configure the taxon groups that will be imported in your `env` file's
 The importer is designed to stop on an error, allowing you to diagnose, fix
 then restart the process from where it left off.
 
+Dependencies:
+You cannot import `grid_square_stats` until the following imports are completed:
+- `geographic_regions`
+You cannot import `taxa` until the following imports are completed:
+- `recording_schemes`
+- `geographic_regions`
+- `taxon_groups`
+- `taxon_ranks`
+You cannot import `taxon_names` until the following imports are completed:
+- `taxa`
+You cannot import `occurrences` until the following imports are completed:
+- `recording_schemes`
+- `geographic_regions`
+- `grid_square_stats`
+- `taxon_groups`
+- `taxon_ranks`
+- `taxa`
+- `taxon_names`
+
+An import task is marked as complete when it is successfully run and returns has more: no.

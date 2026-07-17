@@ -1,21 +1,15 @@
 # Database schema
 
-The Tanhub database is an intentionally simplified representation of species
-and observation data optimised for reporting outputs rather than accurate
-storage of raw data.
+The Tanhub database is an intentionally simplified representation of species and observation data
+optimised for reporting outputs rather than accurate storage of raw data.
 
-The data schema is designed to use Darwin Core standards where possible, with
-consideration for importing data from the UKSI species database. Fields that
-map directly to a property in the Darwin Core specification are indicated by
-DwC followed by the Darwin Core property name.
+The data schema is designed to use Darwin Core standards where possible, with consideration for
+importing data from the UKSI species database. Fields that map directly to a property in the Darwin
+Core specification are indicated by DwC followed by the Darwin Core property name.
 
-Each data
-entity that is exposed to the API has a unique field associated with it that
-is exposed via the API - this will be a Darwin Core field where possible, or
-a uuid field is added where using an existing Darwin Core field is not
-feasible.
-
-
+Each data entity that is exposed to the API has a unique field associated with it that is exposed
+via the API - this will be a Darwin Core field where possible, or a uuid field is added where using
+an existing Darwin Core field is not feasible.
 
 ## Entity Relationship Diagram
 

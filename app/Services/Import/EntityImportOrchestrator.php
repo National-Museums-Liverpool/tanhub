@@ -41,6 +41,9 @@ class EntityImportOrchestrator
         $source = strtolower($sourceKey);
         $entityKey = strtolower($entity);
         $sourceEntityKey = $source . '-taxonomy:' . $entityKey;
+
+        $this->assertDependenciesComplete($importOffsetModel, $source, $entityKey);
+
         $sourceAbbr = strtoupper($adapterFactory->sourceAbbr($source));
 
         $dataSource = $dataSourceModel->where('abbr', $sourceAbbr)->first();
@@ -68,9 +71,11 @@ class EntityImportOrchestrator
             $nextOffset = $offset + $processed;
 
             $status = $counts['errors'] > 0 ? 'failed' : 'success';
+            $isComplete = $counts['errors'] === 0 && $batch->hasMore === false;
 
             if (! $dryRun) {
                 $importOffsetModel->setOffset($sourceEntityKey, $nextOffset);
+                $importOffsetModel->setCompletion($sourceEntityKey, $isComplete);
             }
 
             $importRunModel->update($runId, [
@@ -99,6 +104,10 @@ class EntityImportOrchestrator
                 'errors' => $counts['errors'],
             ];
         } catch (\Throwable $exception) {
+            if (! $dryRun) {
+                $importOffsetModel->setCompletion($sourceEntityKey, false);
+            }
+
             $importRunModel->update($runId, [
                 'status' => 'failed',
                 'checkpoint' => (string) $offset,
@@ -114,5 +123,58 @@ class EntityImportOrchestrator
     private function lastSuccessfulOffset(ImportOffsetModel $importOffsetModel, string $sourceKey): int
     {
         return $importOffsetModel->getOffset($sourceKey);
+    }
+
+    /**
+     * Ensure dependent taxonomy entities have been fully imported.
+     *
+     * @param ImportOffsetModel $importOffsetModel Import offset/checkpoint model.
+     * @param string            $source Source key.
+     * @param string            $entityKey Entity to import.
+     *
+     * @return void
+     */
+    private function assertDependenciesComplete(ImportOffsetModel $importOffsetModel, string $source, string $entityKey): void
+    {
+        $dependencies = $this->dependenciesFor($entityKey);
+
+        if ($dependencies === []) {
+            return;
+        }
+
+        $missing = [];
+
+        foreach ($dependencies as $dependency) {
+            $dependencySourceKey = $source . '-taxonomy:' . $dependency;
+
+            if (! $importOffsetModel->isComplete($dependencySourceKey)) {
+                $missing[] = $dependency;
+            }
+        }
+
+        if ($missing === []) {
+            return;
+        }
+
+        throw new RuntimeException(
+            'Cannot import ' . $entityKey . ' until these imports are complete: ' . implode(', ', $missing),
+        );
+    }
+
+    /**
+     * Resolve prerequisite entity imports for a taxonomy entity.
+     *
+     * @param string $entityKey Entity key.
+     *
+     * @return array<int, string>
+     */
+    private function dependenciesFor(string $entityKey): array
+    {
+        return match ($entityKey) {
+            'grid_square_stats' => ['geographic_regions'],
+            'taxa' => ['recording_schemes', 'geographic_regions', 'taxon_groups', 'taxon_ranks'],
+            'taxon_names' => ['taxa'],
+            default => [],
+        };
     }
 }

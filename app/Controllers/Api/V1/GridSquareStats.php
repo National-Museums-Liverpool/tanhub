@@ -128,12 +128,11 @@ class GridSquareStats extends ApiController
             'geographic_region_identifier' => 'geographic_region_identifier',
         ];
 
-        if (! $this->hasInclude($includes, 'geographic_region')) {
-            return $sorts;
+        if ($this->hasInclude($includes, 'geographic_region')) {
+            $sorts['geographic_region'] = 'higher_geography';
+            $sorts['geographic_region_identifier'] = 'higher_geography_identifier';
+            $sorts['geographic_region_location_type'] = 'location_type';
         }
-
-        $sorts['geographic_region'] = 'higher_geography';
-        $sorts['geographic_region_location_type'] = 'location_type';
 
         return $sorts;
     }
@@ -157,12 +156,11 @@ class GridSquareStats extends ApiController
             'species_count' => 'species_count',
         ];
 
-        if (! $this->hasInclude($includes, 'geographic_region')) {
-            return $filters;
+        if ($this->hasInclude($includes, 'geographic_region')) {
+            $filters['geographic_region'] = 'higher_geography';
+            $filters['geographic_region_identifier'] = 'higher_geography_identifier';
+            $filters['geographic_region_location_type'] = 'location_type';
         }
-
-        $filters['geographic_region'] = 'higher_geography';
-        $filters['geographic_region_location_type'] = 'location_type';
 
         return $filters;
     }

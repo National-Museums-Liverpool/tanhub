@@ -51,6 +51,7 @@ final class GridSquareStatsImportServiceTest extends CIUnitTestCase
         $counts = $service->import([
             [
                 'location_id' => 991234,
+                'location_code' => 'GB23',
                 'square' => 'su99a',
                 'centre_easting' => 412300,
                 'centre_northing' => 112300,

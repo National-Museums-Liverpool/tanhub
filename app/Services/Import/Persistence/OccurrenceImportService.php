@@ -62,6 +62,7 @@ class OccurrenceImportService
                 $givenNameTvk = trim((string) ($record['given_name_identifier'] ?? ''));
 
                 if ($remoteId === '' || $tvk === '' || $givenNameTvk === '') {
+                    log_message('debug', 'Skipping occurrence record due to missing identifiers: ' . var_export($record, true));
                     $counts['skipped']++;
                     $counts['processed']++;
                     $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);
@@ -72,6 +73,7 @@ class OccurrenceImportService
                 $linkedTaxonName = $taxonNameModel->where('given_name_identifier', $givenNameTvk)->first();
 
                 if ($linkedTaxon === null || $linkedTaxonName === null) {
+                    log_message('debug', 'Skipping occurrence record due to missing linked taxon: ' . var_export($record, true));
                     $counts['skipped']++;
                     $counts['processed']++;
                     $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);

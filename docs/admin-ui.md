@@ -37,6 +37,7 @@ Top-level sections are:
 - Taxon names
 - Occurrences
 - Data sources
+- Imports
 
 ## Shared page behaviour
 
@@ -54,6 +55,39 @@ All detail pages should follow the same interaction model:
 - Show validation messages inline and at top-level summary.
 - Show a success flash message after save.
 - Provide a clear "Back to list" action.
+
+## Imports
+
+Provides a page showing a table of the following import tasks and sources (corresponding to the
+import Spark commands listed in [the Import documentation](import.md)), grouped into categories for
+lookups, taxonomy, occurrences and report stats:
+- Lookups
+  - recording_schemes (Indicia)
+  - geographic_regions (Indicia)
+- taxonomy
+  - taxon_groups (Indicia)
+  - taxon_ranks (Indicia)
+  - taxa (Indicia)
+  - taxon_names (Indicia)
+- occurrences
+  - occurrences (Indicia)
+  - occurrences (NBN)
+- report stats:
+  - grid_square_stats
+  - taxon_stats
+  - taxon_year_stats
+
+Each task in the table shows the task name, data source (not relevant for report stats), next
+offset or checkpoint, is complete and has a "Go" button allowing the task to be run from the UI. If
+the import task is blocked because it depends on another task which is not yet complete it shows
+"Blocked by ..." with a list of the blocking tasks instead of a Go button.
+
+When a task is run by clicking Go, it is added to a queue of tasks to process. The first task
+starts processing immediately and its Go button is replaced with a "running" badge. When it
+finishes, the Go button is restored and any other tasks blocked by this task are unblocked, only
+if the task is complete. Any other tasks in the queue then proceed in the order they were added.
+
+The current queue is shown on the page.
 
 ## Table coverage and behaviour
 

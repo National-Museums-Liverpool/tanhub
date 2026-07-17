@@ -18,6 +18,8 @@ $routes->get('recording-schemes', 'RecordingSchemes::index', ['filter' => ['sess
 $routes->get('recording-schemes/(:num)', 'RecordingSchemes::details/$1', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('geographic-regions', 'GeographicRegions::index', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('geographic-regions/(:num)', 'GeographicRegions::details/$1', ['filter' => ['session', 'group:admin,manager']]);
+$routes->get('imports', 'Imports::index', ['filter' => ['session', 'group:admin,manager']]);
+$routes->post('imports/run', 'Imports::run', ['filter' => ['session', 'group:admin,manager']]);
 
 $routes->group('api/v1', ['filter' => 'api-rate-limit'], static function ($routes): void {
 	$routes->post('auth/token', 'Api\\V1\\AuthTokens::token');

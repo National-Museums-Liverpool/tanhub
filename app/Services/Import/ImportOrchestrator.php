@@ -63,6 +63,9 @@ class ImportOrchestrator
 
         $source = strtolower($sourceKey);
         $sourceEntityKey = $this->occurrenceSourceKey($source);
+
+        $this->assertTaxonomyDependenciesComplete($importOffsetModel);
+
         $sourceAbbr = strtoupper($adapterFactory->sourceAbbr($source));
 
         $dataSource = $dataSourceModel->where('abbr', $sourceAbbr)->first();
@@ -120,6 +123,7 @@ class ImportOrchestrator
                 $hasMore = $counts['errors'] > 0 ? true : ($page->hasMore && $counts['fetched'] > 0);
 
                 if ($counts['fetched'] === 0) {
+                    $hasMore = false;
                     break;
                 }
 
@@ -132,6 +136,7 @@ class ImportOrchestrator
 
             if (! $dryRun) {
                 $importOffsetModel->setCheckpoint($sourceEntityKey, $checkpoint);
+                $importOffsetModel->setCompletion($sourceEntityKey, $status === 'success' && $hasMore === false);
             }
 
             $importRunModel->update($runId, [
@@ -159,6 +164,7 @@ class ImportOrchestrator
         } catch (\Throwable $exception) {
             if (! $dryRun) {
                 $importOffsetModel->setCheckpoint($sourceEntityKey, $checkpoint);
+                $importOffsetModel->setCompletion($sourceEntityKey, false);
             }
 
             $importRunModel->update($runId, [
@@ -232,5 +238,49 @@ class ImportOrchestrator
     private function occurrenceSourceKey(string $source): string
     {
         return $source . '-occurrences:occurrences';
+    }
+
+    /**
+     * Ensure taxonomy prerequisites are complete before importing occurrences.
+     *
+     * @param ImportOffsetModel $importOffsetModel Import offset/checkpoint model.
+     *
+     * @return void
+     */
+    private function assertTaxonomyDependenciesComplete(ImportOffsetModel $importOffsetModel): void
+    {
+        $taxonomySource = strtolower((string) array_key_first((array) ($this->config?->taxonomySources ?? config(ImportConfig::class)->taxonomySources)));
+
+        if ($taxonomySource === '') {
+            $taxonomySource = 'indicia';
+        }
+
+        $requiredEntities = [
+            'recording_schemes',
+            'geographic_regions',
+            'grid_square_stats',
+            'taxon_groups',
+            'taxon_ranks',
+            'taxa',
+            'taxon_names',
+        ];
+
+        $missing = [];
+
+        foreach ($requiredEntities as $entity) {
+            $sourceKey = $taxonomySource . '-taxonomy:' . $entity;
+
+            if (! $importOffsetModel->isComplete($sourceKey)) {
+                $missing[] = $entity;
+            }
+        }
+
+        if ($missing === []) {
+            return;
+        }
+
+        throw new RuntimeException(
+            'Cannot import occurrences until these imports are complete: ' . implode(', ', $missing),
+        );
     }
 }

@@ -31,6 +31,7 @@ class ImportOffsetModel extends Model
         'source_key',
         'next_offset',
         'next_checkpoint',
+        'is_complete',
     ];
 
     /**
@@ -87,6 +88,7 @@ class ImportOffsetModel extends Model
         $this->insert([
             'source_key' => $sourceKey,
             'next_offset' => $offset,
+            'is_complete' => 0,
         ]);
     }
 
@@ -139,6 +141,52 @@ class ImportOffsetModel extends Model
             'source_key' => $sourceKey,
             'next_offset' => 0,
             'next_checkpoint' => $checkpoint,
+            'is_complete' => 0,
+        ]);
+    }
+
+    /**
+     * Get completion state for a source key.
+     *
+     * @param string $sourceKey Source/entity tracking key.
+     *
+     * @return bool True when the import stream has been fully exhausted.
+     */
+    public function isComplete(string $sourceKey): bool
+    {
+        $row = $this->where('source_key', $sourceKey)->first();
+
+        if (! is_array($row)) {
+            return false;
+        }
+
+        return ((int) ($row['is_complete'] ?? 0)) === 1;
+    }
+
+    /**
+     * Persist completion state for a source key.
+     *
+     * @param string $sourceKey Source/entity tracking key.
+     * @param bool   $isComplete Whether the stream has been fully exhausted.
+     *
+     * @return void
+     */
+    public function setCompletion(string $sourceKey, bool $isComplete): void
+    {
+        $existing = $this->where('source_key', $sourceKey)->first();
+        $value = $isComplete ? 1 : 0;
+
+        if (is_array($existing) && isset($existing['id'])) {
+            $this->update((int) $existing['id'], ['is_complete' => $value]);
+
+            return;
+        }
+
+        $this->insert([
+            'source_key' => $sourceKey,
+            'next_offset' => 0,
+            'next_checkpoint' => null,
+            'is_complete' => $value,
         ]);
     }
 }

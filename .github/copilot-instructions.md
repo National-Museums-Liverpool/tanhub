@@ -14,6 +14,7 @@ applyTo: 'app/**'
 - NEVER: Leave newly introduced methods undocumented, even for private helpers.
 - Endeavour to make code that is clear and easy to read.
 - MUST: Use proper escaping of user input to prevent XSS and other security vulnerabilities.
+- MUST: wrap documentation markdown files at 100 characters.
 
 # Theme
 

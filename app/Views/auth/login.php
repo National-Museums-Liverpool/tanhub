@@ -38,7 +38,7 @@
                     </div>
                     <div class="d-flex flex-column flex-sm-row gap-3 align-items-sm-center justify-content-between">
                         <button class="btn btn-brand btn-lg px-4" type="submit"><?= esc($page['authSubmitLabel']) ?></button>
-                        <p class="mb-0 section-copy"><?= esc($page['authAltPrompt']) ?> <a href="<?= esc($page['authAltUrl']) ?>"><?= esc($page['authAltLabel']) ?></a></p>
+                        <p class="mb-0 section-copy">User accounts are managed by administrators.</p>
                     </div>
                 </form>
             </div>

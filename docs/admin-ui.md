@@ -56,6 +56,29 @@ All detail pages should follow the same interaction model:
 - Show a success flash message after save.
 - Provide a clear "Back to list" action.
 
+## Users
+
+Access:
+
+- List/create/edit: Admin only.
+- Self-registration is disabled after initial setup.
+
+List page:
+
+- Columns: id, username, email, active, groups, created, actions.
+- Supports sort and search.
+
+Create page:
+
+- Fields: username, email, active, password, password_confirm.
+- Password is required on create.
+
+Edit page:
+
+- Editable: username, email, active, password.
+- Password is optional on edit; when supplied it updates the stored password.
+- Setting active to false blocks login for that account.
+
 ## Imports
 
 Provides a page showing a table of the following import tasks and sources (corresponding to the

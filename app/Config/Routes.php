@@ -18,6 +18,11 @@ $routes->get('recording-schemes', 'RecordingSchemes::index', ['filter' => ['sess
 $routes->get('recording-schemes/(:num)', 'RecordingSchemes::details/$1', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('geographic-regions', 'GeographicRegions::index', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('geographic-regions/(:num)', 'GeographicRegions::details/$1', ['filter' => ['session', 'group:admin,manager']]);
+$routes->get('users', 'Users::index', ['filter' => ['session', 'group:admin']]);
+$routes->get('users/create', 'Users::create', ['filter' => ['session', 'group:admin']]);
+$routes->post('users/create', 'Users::store', ['filter' => ['session', 'group:admin']]);
+$routes->get('users/(:num)', 'Users::details/$1', ['filter' => ['session', 'group:admin']]);
+$routes->post('users/(:num)', 'Users::update/$1', ['filter' => ['session', 'group:admin']]);
 $routes->get('imports', 'Imports::index', ['filter' => ['session', 'group:admin,manager']]);
 $routes->post('imports/run', 'Imports::run', ['filter' => ['session', 'group:admin,manager']]);
 

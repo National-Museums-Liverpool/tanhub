@@ -38,15 +38,18 @@ abstract class BaseController extends Controller
      * Render a page with shared defaults and role-aware navigation.
      *
      * @param array<string, mixed> $page
+     * @return string
      */
     protected function renderPage(string $view, array $page = []): string
     {
         try {
           $isLoggedIn = auth()->loggedIn();
-          $isTaxonGroupManager = $isLoggedIn && auth()->user() !== null && auth()->user()->inGroup('admin', 'manager');
+          $isAdmin = $isLoggedIn && auth()->user() !== null && auth()->user()->inGroup('admin');
+          $isStaff = $isLoggedIn && auth()->user() !== null && auth()->user()->inGroup('admin', 'manager');
         } catch (\CodeIgniter\Database\Exceptions\DatabaseException $exception) {
           $isLoggedIn = false;
-          $isTaxonGroupManager = false;
+          $isAdmin = false;
+          $isStaff = false;
         }
 
         $defaults = [
@@ -93,6 +96,12 @@ abstract class BaseController extends Controller
                   'style' => 'link',
                 ],
                 [
+                  'label' => 'Users',
+                  'url' => site_url('users'),
+                  'path' => 'users',
+                  'style' => 'link',
+                ],
+                [
                   'label' => 'Imports',
                   'url' => site_url('imports'),
                   'path' => 'imports',
@@ -109,12 +118,6 @@ abstract class BaseController extends Controller
                     'url' => site_url('logout'),
                     'path' => 'logout',
                     'style' => 'link',
-                ],
-                [
-                    'label' => 'Register',
-                    'url' => site_url('register'),
-                    'path' => 'register',
-                    'style' => 'button',
                 ],
                 [
                     'label' => 'Docs',
@@ -135,21 +138,27 @@ abstract class BaseController extends Controller
             'year' => date('Y'),
         ];
         if ($isLoggedIn) {
-          // Hide login and register for logged-in users, since they are not relevant.
+          // Hide login for logged-in users, since it is not relevant.
           $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
-            return ! isset($item['path']) || ! in_array($item['path'], ['login', 'register']);
+            return ! isset($item['path']) || ! in_array($item['path'], ['login']);
           });
 
-          if (! $isTaxonGroupManager) {
+          if (! $isStaff) {
             $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
-              return ! isset($item['path']) || ! in_array($item['path'], ['taxon-groups', 'orders', 'superfamilies', 'families', 'recording-schemes', 'geographic-regions', 'imports']);
+              return ! isset($item['path']) || ! in_array($item['path'], ['taxon-groups', 'orders', 'superfamilies', 'families', 'recording-schemes', 'geographic-regions', 'imports', 'users']);
+            });
+          }
+
+          if (! $isAdmin) {
+            $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
+              return ! isset($item['path']) || $item['path'] !== 'users';
             });
           }
         }
         else {
           // Hide logout for guests, since it is not relevant.
           $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
-            return ! isset($item['path']) || ! in_array($item['path'], ['logout', 'taxon-groups', 'orders', 'superfamilies', 'families', 'recording-schemes', 'geographic-regions', 'imports']);
+            return ! isset($item['path']) || ! in_array($item['path'], ['logout', 'taxon-groups', 'orders', 'superfamilies', 'families', 'recording-schemes', 'geographic-regions', 'imports', 'users']);
           });
         }
 

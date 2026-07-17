@@ -82,6 +82,10 @@ cp env .env
 
 9. Visit the `/setup-admin-user` and follow the instructions to create the first admin account.
 
+   - This is the only self-service account creation step.
+   - After setup, open `/users` as an admin to create and manage all other users.
+   - Public `/register` self-registration is disabled.
+
 10. For production environments, enable production mode in `.env`:
 
 ```dotenv

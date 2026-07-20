@@ -58,6 +58,12 @@ a:focus {
 .navbar-shell {
     border-radius: 1.25rem;
     margin-top: 1.5rem;
+    position: relative;
+    z-index: 1030;
+}
+
+.navbar-shell .dropdown-menu {
+    z-index: 1035;
 }
 
 .navbar .nav-link {
@@ -68,6 +74,17 @@ a:focus {
 .navbar .nav-link:focus,
 .navbar .nav-link.active {
     color: var(--th-ink);
+}
+
+.navbar-brand {
+    padding: 0;
+}
+
+.site-logo {
+    height: 6rem;
+    width: auto;
+    flex: 0 0 auto;
+    object-fit: contain;
 }
 
 .hero,

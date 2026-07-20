@@ -15,6 +15,8 @@ class CreateGeographicRegionsTable extends Migration
      */
     public function up(): void
     {
+        $isSqlite = strtoupper((string) ($this->db->DBDriver ?? '')) === 'SQLITE3';
+
         $this->forge->addField([
             'id' => [
                 'type'           => 'BIGINT',
@@ -23,8 +25,8 @@ class CreateGeographicRegionsTable extends Migration
                 'auto_increment' => true,
             ],
             'higher_geography_identifier' => [
-                'type'       => 'INT',
-                'constraint' => 10,
+                'type'       => 'VARCHAR',
+                'constraint' => 100,
                 'unsigned'   => true,
             ],
             'higher_geography' => [
@@ -34,6 +36,10 @@ class CreateGeographicRegionsTable extends Migration
             'location_type' => [
                 'type'       => 'VARCHAR',
                 'constraint' => 100,
+            ],
+            'footprint_geometry' => [
+                'type'       => $isSqlite ? 'TEXT' : 'GEOMETRY',
+                'null'       => true,
             ],
             'data_source_id' => [
                 'type'       => 'BIGINT',

@@ -104,6 +104,7 @@ the system. Populated using the `.env` file's `import.geographicRegions` and
 | higher_geography_identifier | INT          | NO   | UQ  |                   | Identifier for the geographic region, e.g. a Watsonian Vice-County number |
 | higher_geography            | VARCHAR(100) | NO   |     |                   | Geographic name of the region                                             |
 | location_type               | VARCHAR(100) | NO   |     |                   | Name of the type of location                                              |
+| footprint_geometry          | GEOMETRY     | NO   |     |                   | Footprint or boundary of the geometry in WGS8 (EPSG:4326)                 |
 | data_source_id              | BIGINT       | NO   | FK  |                   | ID of the source of the data (iRecord, NBN Atlas etc)                     |
 | created_at                  | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                             |
 | updated_at                  | DATETIME     | YES  |     |                   | Update date                                                               |

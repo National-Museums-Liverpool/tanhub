@@ -321,9 +321,10 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
     private function normaliseGeographicRegionRow(array $row): array
     {
         return [
-            'higher_geography_identifier' => (int) ($row['higher_geography_identifier'] ?? $row['location_code'] ?? $row['code'] ?? $row['id'] ?? 0),
-            'higher_geography' => trim((string) ($row['higher_geography'] ?? $row['name'] ?? $row['title'] ?? '')),
+            'higher_geography_identifier' => trim((string) ($row['higher_geography_identifier'] ?? '')),
+            'higher_geography' => trim((string) ($row['higher_geography'] ?? '')),
             'location_type' => trim((string) ($row['location_type'] ?? $this->importConfig->geographicRegionLocationType ?? '')),
+            'footprint_geometry' => trim((string) ($row['footprint_geometry'] ?? '')),
             'data_source_abbr' => strtoupper((string) ($this->sourceConfig['abbr'] ?? 'IREC')),
         ];
     }

@@ -36,6 +36,7 @@ class GeographicRegionModel extends Model
         'higher_geography_identifier',
         'higher_geography',
         'location_type',
+        'footprint_geometry',
         'data_source_id',
     ];
 

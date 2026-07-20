@@ -68,14 +68,13 @@ erDiagram
 
 ## Dynamic taxon rank foreign keys
 
-Taxonomic hierarchy is stored using dynamic foreign-key columns on both the
-`taxa` and `occurrences` tables. During installation, a column is added for
-each configured taxon rank using the pattern `<rank>_id` (for example
-`kingdom_id`, `class_id`, `family_id`, `order_id`).
+Taxonomic hierarchy is stored using dynamic foreign-key columns on both the `taxa` and
+`occurrences` tables. During installation, a column is added for each configured taxon rank using
+the pattern `<rank>_id` (for example `kingdom_id`, `class_id`, `family_id`, `order_id`).
 
-Each of these columns is a foreign key to `taxa.id`, so rank relationships are
-modelled as self-references to the `taxa` table rather than separate
-`orders`, `superfamilies`, or `families` tables.
+Each of these columns is a foreign key to `taxa.id`, so rank relationships are modelled as
+self-references to the `taxa` table rather than separate`orders`, `superfamilies`, or `families`
+tables.
 
 ## Unprocessed data table details
 
@@ -94,8 +93,8 @@ Lookup table for names of data sources such as iRecord and the NBN Atlas.
 
 ### geographic_regions
 
-Lists the regions which define the geographical constraint of the data held in
-the system. Populated using the `.env` file's `import.geographicRegions` and
+Lists the regions which define the geographical constraint of the data held in the system.
+Populated using the `.env` file's `import.geographicRegions` and
 `import.geographicRegionLocationType` configurations from the Indicia database.
 
 | Column                      | Type         | Null | Key | Default           | Description                                                               |
@@ -124,10 +123,9 @@ overlap region boundaries.
 
 ### occurrences
 
-Occurrence data stored in the system, imported from a source such as iRecord or
-the NBN Atlas. A reference to the original record is held in the unique_key
-field, constructed from the data_source abbreviation, then a colon, then the
-unique ID of the record as loaded from the remote system.
+Occurrence data stored in the system, imported from a source such as iRecord or the NBN Atlas. A
+reference to the original record is held in the unique_key field, constructed from the data_source
+abbreviation, then a colon, then the unique ID of the record as loaded from the remote system.
 
 | Column                             | Type         | Null | Key | Default           | Description                                                                           |
 | ---------------------------------- | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------------------------------- |
@@ -169,10 +167,9 @@ Recording schemes associated with taxa loaded in the system.
 
 ### taxa
 
-Details of species concepts. May also contain other reportable taxonomic levels
-(e.g. aggregates). Taxa are generally imported but species account text may be
-added locally. Where a field maps directly to a Darwin Core concept, this is
-indicated in the description.
+Details of species concepts. May also contain other reportable taxonomic levels (e.g. aggregates).
+Taxa are generally imported but species account text may be added locally. Where a field maps
+directly to a Darwin Core concept, this is indicated in the description.
 
 | Column                     | Type         | Null | Key | Default           | Description                                                            |
 | -------------------------- | ------------ | ---- | --- | ----------------- | ---------------------------------------------------------------------- |
@@ -195,20 +192,18 @@ indicated in the description.
 | updated_at                 | DATETIME     | YES  |     |                   | Update date                                                            |
 | deleted_at                 | DATETIME     | YES  |     |                   | Deletion date                                                          |
 
-Note that when TanHub is linked to UKSI as its source of taxonomic data, the
-following applies:
-- taxon_identifier will contain `ORGANISM_KEY`, the UKSI provided unique
-  identifier of the organism and unique ID for the API.
-- scientific_name_identifier will contain the unique identifier of the accepted
-  taxon name, the `TAXON_VERSION_KEY`.
-- conservation_status will hold the GB Red List designation's abbreviation,
-  e.g. LC or VU.
+Note that when TanHub is linked to UKSI as its source of taxonomic data, the following applies:
+- taxon_identifier will contain `ORGANISM_KEY`, the UKSI provided unique identifier of the organism
+  and unique ID for the API.
+- scientific_name_identifier will contain the unique identifier of the accepted taxon name, the
+  `TAXON_VERSION_KEY`.
+- conservation_status will hold the GB Red List designation's abbreviation, e.g. LC or VU.
 
 ### taxon_groups
 
-Taxon reporting categories. The friendly field allows a local override for
-taxon groups imported from other databases such as UKSI. Groups covered by
-this installation of TanHub are defined in configuration.
+Taxon reporting categories. The friendly field allows a local override for taxon groups imported
+from other databases such as UKSI. Groups covered by this installation of TanHub are defined in
+configuration.
 
 | Column                 | Type         | Null | Key | Default           | Description                                                                                                  |
 | ---------------------- | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------------------------------------------------------ |
@@ -224,8 +219,8 @@ this installation of TanHub are defined in configuration.
 
 ### taxon_ranks
 
-Taxonomic ranks such as Species, Family, Order. Ranks covered by this
-installation of TanHub are defined in configuration.
+Taxonomic ranks such as Species, Family, Order. Ranks covered by this installation of TanHub are
+defined in configuration.
 
 | Column     | Type        | Null | Key | Default           | Description                              |
 | ---------- | ----------- | ---- | --- | ----------------- | ---------------------------------------- |
@@ -239,14 +234,12 @@ installation of TanHub are defined in configuration.
 
 ### taxon_names
 
-Provides a full list of species and other taxon names that are searchable when
-finding a concept for reporting. This includes accepted scientific names,
-common (vernacular) names and synonyms. Where a field maps directly to a Darwin
-Core concept, this is indicated in the description. Note that
-scientific_name_identifier is not necessarily unique in this instance as one
-name can be attached to more than one taxonomic concept, in this data schema we
-duplicate the name records for simplicity as this avoids the need for an
-additional join table.
+Provides a full list of species and other taxon names that are searchable when finding a concept
+for reporting. This includes accepted scientific names, common (vernacular) names and synonyms.
+Where a field maps directly to a Darwin Core concept, this is indicated in the description. Note
+that scientific_name_identifier is not necessarily unique in this instance as one name can be
+attached to more than one taxonomic concept, in this data schema we duplicate the name records for
+simplicity as this avoids the need for an additional join table.
 
 | Column                     | Type         | Null | Key     | Default           | Description                                                                      |
 | -------------------------- | ------------ | ---- | ------- | ----------------- | -------------------------------------------------------------------------------- |
@@ -265,27 +258,24 @@ additional join table.
 * `UQ*` indicates a compound unique index across
   `taxon_id, scientific_name_identifier`.
 
-Note that when TanHub is linked to UKSI as its source of taxonomic data, the
-following applies:
-- scientific_name_identifier will contain the unique identifier of this taxon
-  name, the `TAXON_VERSION_KEY`.
+Note that when TanHub is linked to UKSI as its source of taxonomic data, the following applies:
+- scientific_name_identifier will contain the unique identifier of this taxon name, the
+  `TAXON_VERSION_KEY`.
 
 ## Processed data table details
 
-The following tables contain processed data designed to make reporting outputs
-easier to build and more efficient to run.
+The following tables contain processed data designed to make reporting outputs easier to build and
+more efficient to run.
 
 ### grid_square_stats
 
-Statistics for 2km grid squares. Where a grid square intersects 2 or more
-region boundaries, there will be a copy of the grid square per region (with
-partial set to true). The number of records and species will pertain to the
-portion of the grid square inside that VC. There will also be a copy with the
-geographic_region_id null and partial set to false. Therefore, a query for all
-grid squares should filter on partial=false. A query on a given
-geographic_region_id can filter on the geographic_region_id alone (this will
-include contained grid squares, plus those along the boundary where partial is
-true).
+Statistics for 2km grid squares. Where a grid square intersects 2 or more region boundaries, there
+will be a copy of the grid square per region (with partial set to true). The number of records and
+species will pertain to the portion of the grid square inside that VC. There will also be a copy
+with the geographic_region_id null and partial set to false. Therefore, a query for all grid
+squares should filter on partial=false. A query on a given geographic_region_id can filter on the
+geographic_region_id alone (this will include contained grid squares, plus those along the boundary
+where partial is true).
 
 | Column               | Type        | Null | Key     | Default        | Description                                                                                          |
 | -------------------- | ----------- | ---- | ------- | -------------- | ---------------------------------------------------------------------------------------------------- |
@@ -304,10 +294,9 @@ they cannot be duplicated.
 
 ### taxon_stats
 
-A table with statistics for each taxon, both in the context of a region and
-across all regions. Contains a row per taxon for the full dataset, plus a row
-per taxon per region, so it is easy to access stats across the dataset or
-region filtered.
+A table with statistics for each taxon, both in the context of a region and across all regions.
+Contains a row per taxon for the full dataset, plus a row per taxon per region, so it is easy to
+access stats across the dataset or region filtered.
 
 | Column                     | Type         | Null | Key     | Default        | Description                                                                            |
 | -------------------------- | ------------ | ---- | ------- | -------------- | -------------------------------------------------------------------------------------- |
@@ -328,8 +317,8 @@ region filtered.
 
 ### taxon_year_stats
 
-Containing data for each taxon covering the last 10 years, both across all data
-and broken down by region.
+Containing data for each taxon covering the last 10 years, both across all data and broken down by
+region.
 
 | Column               | Type     | Null | Key     | Default        | Description                                           |
 | -------------------- | -------- | ---- | ------- | -------------- | ----------------------------------------------------- |
@@ -341,5 +330,4 @@ and broken down by region.
 | occurrences_count    | INT      | NO   |         |                | Number of occurrences for the taxon/year combination  |
 | grid_square_count    | INT      | NO   |         |                | Number of grid squares for the taxon/year combination |
 
-UQ* indicates there is a compound unique key on `taxon_id`,
-`geographic_region_id` and `year`.
+UQ* indicates there is a compound unique key on `taxon_id`, `geographic_region_id` and `year`.

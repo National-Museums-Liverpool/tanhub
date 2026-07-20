@@ -34,13 +34,14 @@ class GeographicRegionsImportService implements EntityImportServiceInterface
 
         foreach ($rows as $row) {
             try {
-                $higherGeographyIdentifier = (int) ($row['higher_geography_identifier'] ?? 0);
+                $higherGeographyIdentifier = (string) ($row['higher_geography_identifier'] ?? '');
                 $higherGeography = trim((string) ($row['higher_geography'] ?? ''));
                 $locationType = trim((string) ($row['location_type'] ?? ''));
                 $dataSourceAbbr = strtoupper(trim((string) ($row['data_source_abbr'] ?? 'IREC')));
                 $footprintGeometry = $this->nullableString($row['footprint_geometry'] ?? null, 65535);
 
                 if ($higherGeographyIdentifier <= 0 || $higherGeography === '' || $locationType === '') {
+                    log_message('debug', 'Geographic region row skipped due to missing required fields: ' . json_encode($row));
                     $counts['skipped']++;
                     $counts['processed']++;
                     continue;

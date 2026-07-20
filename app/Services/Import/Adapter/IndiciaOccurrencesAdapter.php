@@ -66,6 +66,7 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             throw new RuntimeException('Indicia request failed with status ' . $response->getStatusCode() . '.' . $bodyPreview);
         }
 
+        log_message('debug', 'Indicia response body: ' . (string) $response->getBody());
         $payload = json_decode($response->getBody(), true);
 
         if (! is_array($payload)) {

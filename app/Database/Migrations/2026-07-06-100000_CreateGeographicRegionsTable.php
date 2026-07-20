@@ -27,7 +27,6 @@ class CreateGeographicRegionsTable extends Migration
             'higher_geography_identifier' => [
                 'type'       => 'VARCHAR',
                 'constraint' => 100,
-                'unsigned'   => true,
             ],
             'higher_geography' => [
                 'type'       => 'VARCHAR',

@@ -20,6 +20,30 @@ use CodeIgniter\Config\BaseService;
 class Services extends BaseService
 {
     /**
+     * Grid square stats derived counts service.
+     */
+    public static function gridSquareStatsCountsService(bool $getShared = true): \App\Services\Stats\GridSquareStatsCountsService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('gridSquareStatsCountsService');
+        }
+
+        return new \App\Services\Stats\GridSquareStatsCountsService();
+    }
+
+    /**
+     * Geographic regions to occurrences assignment service.
+     */
+    public static function geographicRegionsOccurrenceImportService(bool $getShared = true): \App\Services\Import\Persistence\GeographicRegionsOccurrenceImportService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('geographicRegionsOccurrenceImportService');
+        }
+
+        return new \App\Services\Import\Persistence\GeographicRegionsOccurrenceImportService();
+    }
+
+    /**
      * Occurrence import adapter factory service.
      */
     public static function occurrenceImportSourceAdapterFactory(bool $getShared = true): \App\Services\Import\Adapter\OccurrenceSourceAdapterFactory

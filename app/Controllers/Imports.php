@@ -89,9 +89,9 @@ class Imports extends BaseController
             'category' => 'Occurrences',
             'label' => 'occurrences',
             'source' => 'nbn',
-            'kind' => 'occurrence',
+            'kind' => 'unsupported',
             'source_key' => 'nbn-occurrences:occurrences',
-            'supports_run' => true,
+            'supports_run' => false,
         ],
         'stats:indicia:grid_square_stats' => [
             'category' => 'Report stats',
@@ -117,6 +117,14 @@ class Imports extends BaseController
             'kind' => 'unsupported',
             'source_key' => 'derived-stats:taxon_year_stats',
             'supports_run' => false,
+        ],
+        'stats:derived:grid_square_stats_counts' => [
+            'category' => 'Report stats',
+            'label' => 'grid_square_stats_counts',
+            'source' => null,
+            'kind' => 'derived',
+            'source_key' => 'derived-stats:grid_square_stats_counts',
+            'supports_run' => true,
         ],
     ];
 
@@ -150,8 +158,12 @@ class Imports extends BaseController
             'taxonomy:indicia:taxa',
             'taxonomy:indicia:taxon_names',
         ],
-        'stats:derived:taxon_stats' => ['occurrence:indicia:occurrences', 'occurrence:nbn:occurrences'],
-        'stats:derived:taxon_year_stats' => ['occurrence:indicia:occurrences', 'occurrence:nbn:occurrences'],
+        'stats:derived:taxon_stats' => ['occurrence:indicia:occurrences'],
+        'stats:derived:taxon_year_stats' => ['occurrence:indicia:occurrences'],
+        'stats:derived:grid_square_stats_counts' => [
+            'stats:indicia:grid_square_stats',
+            'occurrence:indicia:occurrences',
+        ],
     ];
 
     /**
@@ -442,6 +454,13 @@ class Imports extends BaseController
                 false,
                 null,
             );
+        }
+
+        if ($kind === 'derived') {
+            /** @var \App\Services\Stats\GridSquareStatsCountsService $service */
+            $service = service('gridSquareStatsCountsService');
+
+            return $service->run(false);
         }
 
         throw new RuntimeException('Task is not runnable yet.');

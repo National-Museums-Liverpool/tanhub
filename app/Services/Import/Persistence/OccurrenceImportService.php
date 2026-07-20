@@ -69,7 +69,6 @@ class OccurrenceImportService
                     $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);
                     continue;
                 }
-                log_message('debug', 'Linked taxon: ' . var_export($linkedTaxon, true));
 
                 $gridRef = trim((string) ($record['grid_ref'] ?? ''));
                 $gridRef2km = trim((string) ($record['grid_ref_2km'] ?? ''));

@@ -31,7 +31,7 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
 
         foreach ($rows as $row) {
             try {
-                $locationIdentifier = $this->nullableInt($row['location_id'] ?? null) ?? $this->nullableInt($row['location_code'] ?? null);
+                $higherGeographyIdentifier = trim((string) ($row['higher_geography_identifier'] ?? ''));
                 $square = strtoupper(trim((string) ($row['square'] ?? '')));
                 $easting = $this->nullableInt($row['centre_easting'] ?? null);
                 $northing = $this->nullableInt($row['centre_northing'] ?? null);
@@ -39,10 +39,10 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
                 $lon = $this->nullableDecimal($row['centre_lon'] ?? null);
                 $partial = $this->toFlag($row['partial'] ?? 0);
 
-                if ($locationIdentifier === null || $square === '' || $easting === null || $northing === null || $lat === null || $lon === null) {
+                if ($higherGeographyIdentifier === null || $square === '' || $easting === null || $northing === null || $lat === null || $lon === null) {
                     log_message('warning', 'Grid square stats row skipped due to missing required fields: ' . json_encode($row));
                     log_message('warning', 'Fields: ' . json_encode([
-                        'location_id' => $locationIdentifier,
+                        'higher_geography_identifier' => $higherGeographyIdentifier,
                         'square' => $square,
                         'centre_easting' => $easting,
                         'centre_northing' => $northing,
@@ -55,12 +55,12 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
                     continue;
                 }
 
-                $cacheKey = (string) $locationIdentifier;
+                $cacheKey = (string) $higherGeographyIdentifier;
 
                 if (! array_key_exists($cacheKey, $cachedGeographicRegionIds)) {
                     $geographicRegion = $db->table('geographic_regions')
                         ->select('id')
-                        ->where('higher_geography_identifier', $locationIdentifier)
+                        ->where('higher_geography_identifier', $higherGeographyIdentifier)
                         ->where('deleted_at', null)
                         ->get()
                         ->getRowArray();
@@ -78,7 +78,7 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
                 }
 
                 $payload = [
-                    'uuid' => $this->stableUuid((string) $locationIdentifier . '|' . $square),
+                    'uuid' => $this->stableUuid((string) $higherGeographyIdentifier . '|' . $square),
                     'square' => substr($square, 0, 12),
                     'geographic_region_id' => $geographicRegionId,
                     'easting' => $easting,

@@ -3,6 +3,7 @@
 namespace Config;
 
 use CodeIgniter\Config\BaseConfig;
+use RuntimeException;
 
 /**
  * Import pipeline configuration.
@@ -12,7 +13,7 @@ class Import extends BaseConfig
     /**
      * @var int
      */
-    public int $defaultLimit = 1000;
+    public int $defaultLimit = 5000;
 
     /**
      * @var int
@@ -146,6 +147,29 @@ class Import extends BaseConfig
             $this->geographicRegionLocationType = trim($configuredGeographicRegionLocationType);
             log_message('info', 'Configured geographic region location type overriden: ' . $configuredGeographicRegionLocationType);
         }
+
+        $this->assertSpeciesRankConfigured();
+    }
+
+    /**
+     * Ensure taxon ranks contain Species so species_id dynamic columns are always present.
+     */
+    private function assertSpeciesRankConfigured(): void
+    {
+        $ranks = $this->taxonRanks;
+        $ranks = is_array($ranks) ? $ranks : explode(',', (string) $ranks);
+
+        foreach ($ranks as $rank) {
+            if (! is_scalar($rank)) {
+                continue;
+            }
+
+            if (strcasecmp(trim((string) $rank), 'Species') === 0) {
+                return;
+            }
+        }
+
+        throw new RuntimeException('Config Import: import.taxonRanks must include Species.');
     }
 
 }

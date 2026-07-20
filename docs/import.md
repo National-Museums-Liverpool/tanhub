@@ -81,11 +81,88 @@ Optional parameters:
 - `--dry-run` fetch and validate records without writing to `occurrences`.
 - `--since` override source checkpoint for a run.
 
+### Derived grid square stats counts
+
+After occurrence imports, run the derived counts task to populate
+`grid_square_stats.occurrences_count` and `grid_square_stats.species_count`:
+
+```bash
+$ php spark stats:grid-square-stats
+```
+
+Optional parameters:
+
+- `--dry-run` compute aggregates without writing updates.
+
+### Verify derived counts
+
+After running `php spark stats:grid-square-stats`, you can verify that stored
+counts match the expected aggregate values using the following SQL.
+
+Expected counts from active occurrences:
+
+```sql
+SELECT
+  UPPER(o.grid_ref_2km) AS square,
+  gro.geographic_region_id,
+  COUNT(*) AS expected_occurrences_count,
+  COUNT(DISTINCT t.species_id) AS expected_species_count
+FROM occurrences o
+INNER JOIN geographic_regions_occurrences gro
+  ON gro.occurrence_id = o.id
+INNER JOIN taxa t
+  ON t.id = o.taxon_id
+WHERE o.deleted_at IS NULL
+  AND o.blocked = 0
+  AND o.grid_ref_2km IS NOT NULL
+  AND TRIM(o.grid_ref_2km) <> ''
+GROUP BY UPPER(o.grid_ref_2km), gro.geographic_region_id
+ORDER BY square, gro.geographic_region_id;
+```
+
+Rows where stored counts differ from expected counts:
+
+```sql
+SELECT
+  gss.square,
+  gss.geographic_region_id,
+  gss.occurrences_count AS stored_occurrences_count,
+  COALESCE(exp.expected_occurrences_count, 0) AS expected_occurrences_count,
+  gss.species_count AS stored_species_count,
+  COALESCE(exp.expected_species_count, 0) AS expected_species_count
+FROM grid_square_stats gss
+LEFT JOIN (
+  SELECT
+    UPPER(o.grid_ref_2km) AS square,
+    gro.geographic_region_id,
+    COUNT(*) AS expected_occurrences_count,
+    COUNT(DISTINCT t.species_id) AS expected_species_count
+  FROM occurrences o
+  INNER JOIN geographic_regions_occurrences gro
+    ON gro.occurrence_id = o.id
+  INNER JOIN taxa t
+    ON t.id = o.taxon_id
+  WHERE o.deleted_at IS NULL
+    AND o.blocked = 0
+    AND o.grid_ref_2km IS NOT NULL
+    AND TRIM(o.grid_ref_2km) <> ''
+  GROUP BY UPPER(o.grid_ref_2km), gro.geographic_region_id
+) exp
+  ON exp.square = gss.square
+  AND exp.geographic_region_id = gss.geographic_region_id
+WHERE gss.occurrences_count <> COALESCE(exp.expected_occurrences_count, 0)
+  OR gss.species_count <> COALESCE(exp.expected_species_count, 0)
+ORDER BY gss.square, gss.geographic_region_id;
+```
+
 ## Notes
 
 Taxonomic hierarchy is populated through dynamic `<rank>_id` fields on `taxa`
 and `occurrences`, based on configured import ranks (for example
 `kingdom_id`, `class_id`, `family_id`).
+
+`import.taxonRanks` must include `Species` so `species_id` is always present
+for derived species counts.
 
 For taxa imports, load related lookup data first (`recording_schemes`,
 `taxon_ranks` and `taxon_groups` at minimum), otherwise taxa rows may be
@@ -99,6 +176,11 @@ For grid square stats imports, the `grid_squares.xml` report uses the same
 `geographic_regions.xml`. It fills `uuid`, `square`, `geographic_region_id`,
 `easting`, `northing`, `lat`, `lon`, and `partial`; the counts are filled by
 the separate grid-square counts task.
+
+The grid-square counts task uses active occurrences only
+(`occurrences.deleted_at IS NULL` and `occurrences.blocked = 0`) and aggregates
+by `(grid_ref_2km, geographic_region_id)`. `species_count` is calculated as a
+distinct count of `taxa.species_id` values linked by `occurrences.taxon_id`.
 
 Configure the taxon groups that will be imported in your `env` file's
 `import.taxonRanks` setting.
@@ -124,5 +206,10 @@ You cannot import `occurrences` until the following imports are completed:
 - `taxon_ranks`
 - `taxa`
 - `taxon_names`
+You cannot run `stats:grid-square-stats` until the following imports are
+completed:
+- `grid_square_stats`
+- `occurrences` (indicia)
+- `occurrences` (nbn)
 
 An import task is marked as complete when it is successfully run and returns has more: no.

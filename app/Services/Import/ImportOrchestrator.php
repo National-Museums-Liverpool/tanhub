@@ -132,6 +132,16 @@ class ImportOrchestrator
                 }
             }
 
+            if ($total['errors'] === 0 && ! $dryRun) {
+                /** @var \App\Services\Import\Persistence\GeographicRegionsOccurrenceImportService $geographicRegionsOccurrenceImportService */
+                $geographicRegionsOccurrenceImportService = service('geographicRegionsOccurrenceImportService');
+                $assignmentResult = $geographicRegionsOccurrenceImportService->run(false);
+
+                if (((int) ($assignmentResult['errors'] ?? 0)) > 0) {
+                    $total['errors'] += (int) ($assignmentResult['errors'] ?? 0);
+                }
+            }
+
             $status = $total['errors'] > 0 ? 'failed' : 'success';
 
             if (! $dryRun) {

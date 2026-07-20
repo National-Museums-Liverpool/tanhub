@@ -61,6 +61,8 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
         $batchOffset = max(0, $offset);
 
         $rawRows = $this->fetchImportData($entityKey, $batchLimit, $batchOffset);
+        log_message('debug', 'Fetched ' . count($rawRows) . ' rows for entity ' . $entityKey . ' with limit ' . $batchLimit . ' and offset ' . $batchOffset);
+        log_message('debug', 'Raw rows: ' . var_export($rawRows, true));
         $normalisedRows = $this->normaliseRows($entityKey, $rawRows);
 
         return new ImportBatch(
@@ -321,7 +323,8 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
     private function normaliseGeographicRegionRow(array $row): array
     {
         return [
-            'higher_geography_identifier' => trim((string) ($row['higher_geography_identifier'] ?? '')),
+            // Use location code, or location ID if code is not available.
+            'higher_geography_identifier' => trim((string) ($row['higher_geography_identifier'] ?? $row['id'])),
             'higher_geography' => trim((string) ($row['higher_geography'] ?? '')),
             'location_type' => trim((string) ($row['location_type'] ?? $this->importConfig->geographicRegionLocationType ?? '')),
             'footprint_geometry' => trim((string) ($row['footprint_geometry'] ?? '')),
@@ -338,8 +341,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
     private function normaliseGridSquareStatRow(array $row): array
     {
         return [
-            'location_id' => (int) ($row['location_id'] ?? $row['location_code'] ?? $row['id'] ?? 0),
-            'location_code' => trim((string) ($row['location_code'] ?? '')),
+            'higher_geography_identifier' => trim((string) ($row['higher_geography_identifier'] ?? '')),
             'square' => strtoupper(trim((string) ($row['square'] ?? ''))),
             'centre_easting' => $row['centre_easting'] ?? null,
             'centre_northing' => $row['centre_northing'] ?? null,

@@ -34,11 +34,7 @@ class GridSquareStats extends ApiController
             return $filters;
         }
 
-        $usesIncludedBuilder = $this->usesIncludedBuilder($includes);
-
-        $builder = $usesIncludedBuilder
-            ? $this->buildIncludedBuilder($db, $prefix, $includes)
-            : $this->buildDefaultBuilder($db, $prefix);
+        $builder = $this->getBuilder($db, $prefix, $includes);
 
         $normal = [];
         $custom = [];
@@ -93,11 +89,7 @@ class GridSquareStats extends ApiController
             return $includes;
         }
 
-        $usesIncludedBuilder = $this->usesIncludedBuilder($includes);
-
-        $item = ($usesIncludedBuilder
-            ? $this->buildIncludedBuilder($db, $prefix, $includes)
-            : $this->buildDefaultBuilder($db, $prefix))
+        $item = $this->buildBuilder($db, $prefix, $includes)
             ->where('uuid', $uuid)
             ->get()
             ->getRowArray();
@@ -115,73 +107,66 @@ class GridSquareStats extends ApiController
      */
     private function allowedSorts(array $includes): array
     {
-        $usesIncludedBuilder = $this->usesIncludedBuilder($includes);
 
         $sorts = [
             'uuid' => 'uuid',
             'square' => 'square',
             'easting' => 'easting',
             'northing' => 'northing',
+            'lon' => 'lon',
+            'lat' => 'lat',
             'partial' => 'partial',
             'occurrences_count' => 'occurrences_count',
             'species_count' => 'species_count',
-            'geographic_region_identifier' => 'geographic_region_identifier',
+            'geographic_region__higher_geography_identifier' => 'g.higher_geography_identifier',
         ];
 
         if ($this->hasInclude($includes, 'geographic_region')) {
-            $sorts['geographic_region'] = 'higher_geography';
-            $sorts['geographic_region_identifier'] = 'higher_geography_identifier';
-            $sorts['geographic_region_location_type'] = 'location_type';
+            $sorts['geographic_region__higher_geography'] = 'g.higher_geography';
+            $sorts['geographic_region__location_type'] = 'g.location_type';
         }
 
         return $sorts;
     }
 
     /**
+     * Fetch array of allowed filters (API key => column name).
+     *
      * @param array<string, bool> $includes
      * @return array<string, string>
      */
     private function allowedFilters(array $includes): array
     {
-        $usesIncludedBuilder = $this->usesIncludedBuilder($includes);
-
         $filters = [
             'uuid' => 'uuid',
             'square' => 'square',
-            'geographic_region_identifier' => '__geographic_region_identifier__',
             'easting' => 'easting',
             'northing' => 'northing',
             'partial' => 'partial',
             'occurrences_count' => 'occurrences_count',
             'species_count' => 'species_count',
+            'geographic_region__higher_geography_identifier' => 'g.higher_geography_identifier',
         ];
 
         if ($this->hasInclude($includes, 'geographic_region')) {
-            $filters['geographic_region'] = 'higher_geography';
-            $filters['geographic_region_identifier'] = 'higher_geography_identifier';
-            $filters['geographic_region_location_type'] = 'location_type';
+            $filters['geographic_region__higher_geography'] = 'g.higher_geography';
+            $filters['geographic_region__location_type'] = 'g.location_type';
         }
 
         return $filters;
     }
 
-    private function buildDefaultBuilder($db, string $prefix)
-    {
-        return $db->table('grid_square_stats')
-            ->select('uuid, square, CAST((SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS INTEGER) AS geographic_region_identifier, easting, northing, partial, occurrences_count, species_count', false);
-    }
-
     /**
      * @param array<string, bool> $includes
      */
-    private function buildIncludedBuilder($db, string $prefix, array $includes)
+    private function getBuilder($db, string $prefix, array $includes)
     {
-        $builder = $db->table('grid_square_stats')
-            ->select('uuid, square, CAST((SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS INTEGER) AS geographic_region_identifier, easting, northing, partial, occurrences_count, species_count', false);
+        $builder = $db->table('grid_square_stats s')
+            ->select('s.uuid, s.square, s.easting, s.northing, s.lon, s.lat, s.partial, s.occurrences_count, s.species_count, g.higher_geography_identifier as geographic_region__higher_geography_identifier')
+            ->join('geographic_regions g', 'g.id = s.geographic_region_id AND g.deleted_at IS NULL', 'left');
 
         if ($this->hasInclude($includes, 'geographic_region')) {
-            $builder->select('(SELECT higher_geography FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region', false);
-            $builder->select('(SELECT location_type FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region_location_type', false);
+            $builder->select('g.higher_geography as geographic_region__higher_geography, g.location_type as geographic_region__location_type');
         }
 
         return $builder;
@@ -219,13 +204,5 @@ class GridSquareStats extends ApiController
     private function hasInclude(array $includes, string $name): bool
     {
         return isset($includes[$name]) && $includes[$name] === true;
-    }
-
-    /**
-     * @param array<string, bool> $includes
-     */
-    private function usesIncludedBuilder(array $includes): bool
-    {
-        return $includes !== [];
     }
 }

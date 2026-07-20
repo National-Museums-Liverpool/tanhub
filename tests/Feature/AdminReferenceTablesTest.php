@@ -55,7 +55,7 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
      */
     public function testListPagesRequireLogin(): void
     {
-        foreach (['taxon-groups', 'taxon-ranks', 'taxa', 'geographic-regions', 'recording-schemes'] as $path) {
+        foreach (['taxon-groups', 'taxon-ranks', 'taxa', 'geographic-regions', 'recording-schemes', 'data-sources', 'occurrences'] as $path) {
             $result = $this->get($path);
             $result->assertStatus(302);
             $result->assertRedirect();
@@ -69,7 +69,7 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
     {
         $this->authenticateAs('general-user@example.com', 'user');
 
-        foreach (['taxon-groups', 'taxon-ranks', 'taxa', 'geographic-regions', 'recording-schemes'] as $path) {
+        foreach (['taxon-groups', 'taxon-ranks', 'taxa', 'geographic-regions', 'recording-schemes', 'data-sources', 'occurrences'] as $path) {
             $result = $this->get($path);
             $result->assertStatus(302);
             $result->assertRedirect();
@@ -102,6 +102,14 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
         $recordingSchemes = $this->get('recording-schemes');
         $recordingSchemes->assertStatus(200);
         $recordingSchemes->assertSee('Recording schemes');
+
+        $dataSources = $this->get('data-sources');
+        $dataSources->assertStatus(200);
+        $dataSources->assertSee('Data sources');
+
+        $occurrences = $this->get('occurrences');
+        $occurrences->assertStatus(200);
+        $occurrences->assertSee('Occurrences');
     }
 
     /**

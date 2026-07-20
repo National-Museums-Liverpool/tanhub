@@ -67,7 +67,8 @@ cp env .env
 
    - `import.taxonRanks` - the list of taxon ranks you would like to be able to view and report
      against. A comma-separated list, where each rank matches one of the ranks used in the UKSI
-     database. Ranks not in the list will be ignored during import.
+     database. Ranks not in the list will be ignored during import. This must always include
+     "Species".
    - `import.taxonGroups` - the list of taxon group names to include when importing occurrence
       data. Should align with UKSI group names. Note that other group names may also be imported
       into the taxon_groups table if required to complete the taxonomic hierarchy for imported

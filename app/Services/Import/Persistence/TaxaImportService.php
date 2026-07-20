@@ -31,6 +31,7 @@ class TaxaImportService implements EntityImportServiceInterface
         try {
             $groupMap = $this->prepareLookup('taxon_groups', 'external_key', 'id');
             $schemeMap = $this->prepareLookup('recording_schemes', 'external_key', 'id');
+            $schemeTitleMap = $this->prepareStringLookup('recording_schemes', 'external_key', 'title');
             $taxonRankMap = $this->prepareLookup('taxon_ranks', 'rank', 'id');
             $taxonRanks = config('Import')->taxonRanks;
         } catch (\Throwable $exception) {
@@ -78,7 +79,6 @@ class TaxaImportService implements EntityImportServiceInterface
                     'recording_scheme_id' => $schemeId,
                     'taxon_rank_id' => $taxonRankId,
                     'conservation_status' => $this->nullableString($row['conservation_status'] ?? null, 10),
-                    'rarity_group_name' => 'Unassigned',
                     'blocked' => 0,
                     'blocked_reason' => null,
                     'deleted_at' => null,
@@ -107,9 +107,11 @@ class TaxaImportService implements EntityImportServiceInterface
 
                 if ($existingTaxa === null) {
                     $counts['inserted']++;
+                    $insertPayload = $taxaPayload;
+                    $insertPayload['rarity_group_name'] = $this->defaultRarityGroupName($schemeExternalKey, $schemeTitleMap);
 
                     if (! $dryRun) {
-                        $db->table('taxa')->insert($taxaPayload);
+                        $db->table('taxa')->insert($insertPayload);
                         $taxaId = $db->insertId();
                     }
                 } else {
@@ -184,6 +186,54 @@ class TaxaImportService implements EntityImportServiceInterface
         }
 
         return $map;
+    }
+
+    /**
+     * Create an in-memory lookup of string values for a given table.
+     *
+     * Keyed by a given column.
+     *
+     * @return array<string, string>
+     *   Lookup array.
+     */
+    private function prepareStringLookup(string $table, string $keyColumn, string $valueColumn): array
+    {
+        $rows = db_connect()->table($table)
+            ->select([$valueColumn, $keyColumn])
+            ->where('deleted_at', null)
+            ->where("$keyColumn IS NOT NULL", null, false)
+            ->where("$valueColumn IS NOT NULL", null, false)
+            ->get()
+            ->getResultArray();
+
+        $map = [];
+
+        foreach ($rows as $row) {
+            $key = trim((string) $row[$keyColumn]);
+            $value = trim((string) $row[$valueColumn]);
+
+            if ($key === '' || $value === '') {
+                continue;
+            }
+
+            $map[$key] = $value;
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param array<string, string> $schemeTitleMap
+     */
+    private function defaultRarityGroupName(string $schemeExternalKey, array $schemeTitleMap): string
+    {
+        $schemeTitle = trim((string) ($schemeTitleMap[$schemeExternalKey] ?? ''));
+
+        if ($schemeTitle === '') {
+            return 'Unassigned';
+        }
+
+        return substr($schemeTitle, 0, 100);
     }
 
     /**

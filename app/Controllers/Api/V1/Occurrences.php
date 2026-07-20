@@ -331,12 +331,12 @@ class Occurrences extends ApiController
                 life_stage,
                 organism_quantity,
                 (SELECT abbr FROM ' . $prefix . 'data_sources WHERE id = ' . $prefix . 'occurrences.data_source_id) AS data_source_abbr,
-                (SELECT MIN(gr.higher_geography_identifier)
+                CAST((SELECT MIN(gr.higher_geography_identifier)
                     FROM ' . $prefix . 'geographic_regions_occurrences gro
                     INNER JOIN ' . $prefix . 'geographic_regions gr
                         ON gr.id = gro.geographic_region_id
                     WHERE gro.occurrence_id = ' . $prefix . 'occurrences.id
-                        AND gr.deleted_at IS NULL) AS higher_geography_identifier',
+                        AND gr.deleted_at IS NULL) AS INTEGER) AS higher_geography_identifier',
                 false
             )
             ->where($prefix . 'occurrences.deleted_at IS NULL', null, false)
@@ -365,12 +365,12 @@ class Occurrences extends ApiController
                 life_stage,
                 organism_quantity,
                 (SELECT abbr FROM ' . $prefix . 'data_sources WHERE id = data_source_id) AS data_source_abbr,
-                (SELECT MIN(gr.higher_geography_identifier)
+                CAST((SELECT MIN(gr.higher_geography_identifier)
                     FROM ' . $prefix . 'geographic_regions_occurrences gro
                     INNER JOIN ' . $prefix . 'geographic_regions gr
                         ON gr.id = gro.geographic_region_id
                     WHERE gro.occurrence_id = id
-                        AND gr.deleted_at IS NULL) AS higher_geography_identifier',
+                        AND gr.deleted_at IS NULL) AS INTEGER) AS higher_geography_identifier',
                 false
             )
             ->where($prefix . 'occurrences.deleted_at IS NULL', null, false)

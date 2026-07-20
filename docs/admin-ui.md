@@ -268,7 +268,7 @@ associated import code so they cannot be edited via the UI.
 
 Access:
 
-- List/view: Admin only.
+- List/view: Admin and Manager.
 
 List page:
 

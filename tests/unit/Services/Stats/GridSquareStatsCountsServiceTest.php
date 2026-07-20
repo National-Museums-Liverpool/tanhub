@@ -19,28 +19,24 @@ final class GridSquareStatsCountsServiceTest extends CIUnitTestCase
         $this->db = db_connect();
         $prefix = $this->db->getPrefix();
 
-        $this->db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'occurrences (
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'geographic_regions_occurrences');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'grid_square_stats');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'occurrences');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_names');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxa');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_groups');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_ranks');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'geographic_regions');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'data_sources');
+
+        $this->db->query('CREATE TABLE ' . $prefix . 'data_sources (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            taxon_id INTEGER NOT NULL,
-            grid_ref_2km VARCHAR(5) NULL,
-            blocked INTEGER NOT NULL DEFAULT 0,
-            deleted_at DATETIME NULL
+            abbr VARCHAR(10) NOT NULL,
+            title VARCHAR(100) NOT NULL,
+            url VARCHAR(100) NOT NULL
         )');
 
-        $this->db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'geographic_regions_occurrences (
-            geographic_region_id INTEGER NOT NULL,
-            occurrence_id INTEGER NOT NULL
-        )');
-
-        $this->db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'grid_square_stats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            square VARCHAR(12) NOT NULL,
-            geographic_region_id INTEGER NULL,
-            occurrences_count INTEGER NOT NULL DEFAULT 0,
-            species_count INTEGER NOT NULL DEFAULT 0
-        )');
-
-        $this->db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'taxon_groups (
+        $this->db->query('CREATE TABLE ' . $prefix . 'taxon_groups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title VARCHAR(200) NOT NULL,
             indicia_taxon_group_id INTEGER NOT NULL,
@@ -48,7 +44,7 @@ final class GridSquareStatsCountsServiceTest extends CIUnitTestCase
             deleted_at DATETIME NULL
         )');
 
-        $this->db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'taxon_ranks (
+        $this->db->query('CREATE TABLE ' . $prefix . 'taxon_ranks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             rank VARCHAR(50) NOT NULL,
             abbr VARCHAR(50) NULL,
@@ -56,6 +52,86 @@ final class GridSquareStatsCountsServiceTest extends CIUnitTestCase
             deleted_at DATETIME NULL
         )');
 
+        $this->db->query('CREATE TABLE ' . $prefix . 'taxa (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            taxon_identifier VARCHAR(100) NOT NULL,
+            scientific_name_identifier VARCHAR(100) NOT NULL,
+            scientific_name VARCHAR(200) NOT NULL,
+            scientific_name_authorship VARCHAR(100) NULL,
+            vernacular_name VARCHAR(200) NOT NULL,
+            taxon_rank_id INTEGER NULL,
+            taxon_group_id INTEGER NULL,
+            species_id INTEGER NULL,
+            rarity_group_name VARCHAR(100) NULL,
+            blocked INTEGER NOT NULL DEFAULT 0,
+            blocked_reason TEXT NULL,
+            deleted_at DATETIME NULL
+        )');
+
+        $this->db->query('CREATE TABLE ' . $prefix . 'taxon_names (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid CHAR(36) NOT NULL,
+            taxon_id INTEGER NOT NULL,
+            name VARCHAR(200) NOT NULL,
+            given_name_identifier VARCHAR(100) NOT NULL,
+            accepted INTEGER NOT NULL DEFAULT 0,
+            scientific INTEGER NOT NULL DEFAULT 0,
+            deleted_at DATETIME NULL
+        )');
+
+        $this->db->query('CREATE TABLE ' . $prefix . 'geographic_regions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            higher_geography_identifier INTEGER NOT NULL,
+            higher_geography VARCHAR(100) NOT NULL,
+            location_type VARCHAR(100) NOT NULL,
+            footprint_geometry TEXT NULL,
+            data_source_id INTEGER NOT NULL,
+            deleted_at DATETIME NULL
+        )');
+
+        $this->db->query('CREATE TABLE ' . $prefix . 'occurrences (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            unique_key VARCHAR(100) NULL,
+            taxon_id INTEGER NOT NULL,
+            taxon_name_id INTEGER NULL,
+            from_date DATE NULL,
+            to_date DATE NULL,
+            grid_ref VARCHAR(20) NULL,
+            grid_ref_2km VARCHAR(5) NULL,
+            locality VARCHAR(255) NULL,
+            recorded_by VARCHAR(255) NULL,
+            identified_by VARCHAR(255) NULL,
+            identification_verification_status VARCHAR(2) NULL,
+            sex VARCHAR(20) NULL,
+            life_stage VARCHAR(20) NULL,
+            organism_quantity VARCHAR(20) NULL,
+            data_source_id INTEGER NULL,
+            latitude DECIMAL(10,7) NULL,
+            longitude DECIMAL(10,7) NULL,
+            blocked INTEGER NOT NULL DEFAULT 0,
+            deleted_at DATETIME NULL
+        )');
+
+        $this->db->query('CREATE TABLE ' . $prefix . 'geographic_regions_occurrences (
+            geographic_region_id INTEGER NOT NULL,
+            occurrence_id INTEGER NOT NULL
+        )');
+
+        $this->db->query('CREATE TABLE ' . $prefix . 'grid_square_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid CHAR(36) NOT NULL,
+            square VARCHAR(12) NOT NULL,
+            geographic_region_id INTEGER NULL,
+            easting INTEGER NOT NULL DEFAULT 0,
+            northing INTEGER NOT NULL DEFAULT 0,
+            lon DECIMAL(10,7) NULL,
+            lat DECIMAL(10,7) NULL,
+            partial INTEGER NOT NULL DEFAULT 0,
+            occurrences_count INTEGER NOT NULL DEFAULT 0,
+            species_count INTEGER NOT NULL DEFAULT 0
+        )');
+
+        $this->db->table('data_sources')->emptyTable();
         $this->db->table('geographic_regions_occurrences')->emptyTable();
         $this->db->table('occurrences')->emptyTable();
         $this->db->table('taxon_names')->emptyTable();
@@ -64,7 +140,6 @@ final class GridSquareStatsCountsServiceTest extends CIUnitTestCase
         $this->db->table('taxon_ranks')->emptyTable();
         $this->db->table('grid_square_stats')->emptyTable();
         $this->db->table('geographic_regions')->emptyTable();
-        $this->db->table('data_sources')->emptyTable();
     }
 
     public function testRunUpdatesCountsFromActiveOccurrencesOnly(): void

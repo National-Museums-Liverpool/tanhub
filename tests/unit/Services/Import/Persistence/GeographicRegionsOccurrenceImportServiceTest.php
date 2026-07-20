@@ -19,17 +19,21 @@ final class GeographicRegionsOccurrenceImportServiceTest extends CIUnitTestCase
         $this->db = db_connect();
         $prefix = $this->db->getPrefix();
 
-        $this->db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'geographic_regions (
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'geographic_regions_occurrences');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'occurrences');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'geographic_regions');
+
+        $this->db->query('CREATE TABLE ' . $prefix . 'geographic_regions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             higher_geography_identifier INTEGER NOT NULL,
             higher_geography VARCHAR(100) NOT NULL,
             location_type VARCHAR(100) NOT NULL,
-            polygon_geometry TEXT NULL,
+            footprint_geometry TEXT NULL,
             data_source_id INTEGER NOT NULL,
             deleted_at DATETIME NULL
         )');
 
-        $this->db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'occurrences (
+        $this->db->query('CREATE TABLE ' . $prefix . 'occurrences (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             latitude DECIMAL(10,7) NULL,
             longitude DECIMAL(10,7) NULL,
@@ -37,7 +41,7 @@ final class GeographicRegionsOccurrenceImportServiceTest extends CIUnitTestCase
             deleted_at DATETIME NULL
         )');
 
-        $this->db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'geographic_regions_occurrences (
+        $this->db->query('CREATE TABLE ' . $prefix . 'geographic_regions_occurrences (
             geographic_region_id INTEGER NOT NULL,
             occurrence_id INTEGER NOT NULL
         )');
@@ -55,7 +59,7 @@ final class GeographicRegionsOccurrenceImportServiceTest extends CIUnitTestCase
                 'higher_geography_identifier' => 101,
                 'higher_geography' => 'Region A',
                 'location_type' => 'Vice County',
-                'polygon_geometry' => 'POLYGON((0 0,2 0,2 2,0 2,0 0))',
+                'footprint_geometry' => 'POLYGON((0 0,2 0,2 2,0 2,0 0))',
                 'data_source_id' => 1,
                 'deleted_at' => null,
             ],
@@ -64,7 +68,7 @@ final class GeographicRegionsOccurrenceImportServiceTest extends CIUnitTestCase
                 'higher_geography_identifier' => 102,
                 'higher_geography' => 'Region B',
                 'location_type' => 'Vice County',
-                'polygon_geometry' => 'POLYGON((1 1,3 1,3 3,1 3,1 1))',
+                'footprint_geometry' => 'POLYGON((1 1,3 1,3 3,1 3,1 1))',
                 'data_source_id' => 1,
                 'deleted_at' => null,
             ],

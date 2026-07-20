@@ -21,10 +21,10 @@ class GeographicRegions extends ApiController
         }
 
         $sorts = $this->getSorts([
-            'higher_geography_identifier' => 'geographic_regions.higher_geography_identifier',
-            'higher_geography' => 'geographic_regions.higher_geography',
-            'location_type' => 'geographic_regions.location_type',
-            'data_source_abbr' => 'data_sources.abbr',
+            'higher_geography_identifier' => 'higher_geography_identifier',
+            'higher_geography' => 'higher_geography',
+            'location_type' => 'location_type',
+            'data_source_abbr' => 'data_source_abbr',
         ], 'higher_geography');
 
         if ($sorts instanceof ResponseInterface) {
@@ -32,22 +32,35 @@ class GeographicRegions extends ApiController
         }
 
         $filters = $this->getFilters([
-            'higher_geography_identifier' => 'geographic_regions.higher_geography_identifier',
-            'higher_geography' => 'geographic_regions.higher_geography',
-            'location_type' => 'geographic_regions.location_type',
-            'data_source_abbr' => 'data_sources.abbr',
+            'higher_geography_identifier' => 'higher_geography_identifier',
+            'higher_geography' => 'higher_geography',
+            'location_type' => 'location_type',
+            'data_source_abbr' => '__data_source_abbr__',
         ]);
 
         if ($filters instanceof ResponseInterface) {
             return $filters;
         }
 
+        $normalFilters = [];
+        $customFilters = [];
+
+        foreach ($filters as $filter) {
+            if (($filter['column'] ?? null) === '__data_source_abbr__') {
+                $customFilters[] = $filter;
+                continue;
+            }
+
+            $normalFilters[] = $filter;
+        }
+
         $builder = db_connect()->table('geographic_regions')
-            ->select('geographic_regions.higher_geography_identifier, geographic_regions.higher_geography, geographic_regions.location_type, data_sources.abbr AS data_source_abbr')
+            ->select('CAST(higher_geography_identifier AS INTEGER) AS higher_geography_identifier, higher_geography, location_type, data_sources.abbr AS data_source_abbr')
             ->join('data_sources', 'data_sources.id = geographic_regions.data_source_id', 'left')
             ->where('geographic_regions.deleted_at', null);
 
-        $this->applyFilters($builder, $filters);
+        $this->applyFilters($builder, $normalFilters);
+        $this->applyDataSourceAbbrFilter($builder, $customFilters);
         $this->applySorts($builder, $sorts);
 
         $total = (clone $builder)->countAllResults();
@@ -66,9 +79,9 @@ class GeographicRegions extends ApiController
     public function show(string $higherGeographyIdentifier): ResponseInterface
     {
         $item = db_connect()->table('geographic_regions')
-            ->select('geographic_regions.higher_geography_identifier, geographic_regions.higher_geography, geographic_regions.location_type, data_sources.abbr AS data_source_abbr')
+            ->select('CAST(higher_geography_identifier AS INTEGER) AS higher_geography_identifier, higher_geography, location_type, data_sources.abbr AS data_source_abbr')
             ->join('data_sources', 'data_sources.id = geographic_regions.data_source_id', 'left')
-            ->where('geographic_regions.higher_geography_identifier', $higherGeographyIdentifier)
+            ->where('higher_geography_identifier', $higherGeographyIdentifier)
             ->where('geographic_regions.deleted_at', null)
             ->get()
             ->getRowArray();
@@ -78,5 +91,27 @@ class GeographicRegions extends ApiController
         }
 
         return $this->respondItem($item);
+    }
+
+    /**
+     * Apply the joined data source abbreviation filter.
+     *
+     * @param object $builder
+     * @param array<int, array<string, mixed>> $filters
+     * @return void
+     */
+    private function applyDataSourceAbbrFilter(object $builder, array $filters): void
+    {
+        foreach ($filters as $filter) {
+            if (($filter['column'] ?? null) !== '__data_source_abbr__') {
+                continue;
+            }
+
+            if (($filter['operator'] ?? null) !== 'eq') {
+                continue;
+            }
+
+            $builder->where('data_sources.abbr', $filter['value']);
+        }
     }
 }

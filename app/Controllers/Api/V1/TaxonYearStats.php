@@ -201,7 +201,7 @@ class TaxonYearStats extends ApiController
     private function buildDefaultBuilder($db, string $prefix)
     {
         return $db->table('taxon_year_stats')
-            ->select('uuid, (SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id AND deleted_at IS NULL AND blocked = 0) AS taxon_identifier, (SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region_identifier, year, occurrences_count, grid_square_count', false)
+            ->select('uuid, (SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id AND deleted_at IS NULL AND blocked = 0) AS taxon_identifier, CAST((SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS INTEGER) AS geographic_region_identifier, year, occurrences_count, grid_square_count', false)
             ->where('taxon_id IN (SELECT id FROM ' . $prefix . 'taxa WHERE deleted_at IS NULL AND blocked = 0)', null, false);
     }
 
@@ -239,10 +239,10 @@ class TaxonYearStats extends ApiController
         }
 
         if ($this->hasInclude($includes, 'geographic_region')) {
-            $builder->select('(SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region_identifier', false);
+            $builder->select('CAST((SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS INTEGER) AS geographic_region_identifier', false);
             $builder->select('(SELECT higher_geography FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region', false);
         } else {
-            $builder->select('(SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region_identifier', false);
+            $builder->select('CAST((SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS INTEGER) AS geographic_region_identifier', false);
         }
 
         return $builder;

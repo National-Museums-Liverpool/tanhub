@@ -168,7 +168,7 @@ class GridSquareStats extends ApiController
     private function buildDefaultBuilder($db, string $prefix)
     {
         return $db->table('grid_square_stats')
-            ->select('uuid, square, (SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region_identifier, easting, northing, partial, occurrences_count, species_count', false);
+            ->select('uuid, square, CAST((SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS INTEGER) AS geographic_region_identifier, easting, northing, partial, occurrences_count, species_count', false);
     }
 
     /**
@@ -177,7 +177,7 @@ class GridSquareStats extends ApiController
     private function buildIncludedBuilder($db, string $prefix, array $includes)
     {
         $builder = $db->table('grid_square_stats')
-            ->select('uuid, square, (SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region_identifier, easting, northing, partial, occurrences_count, species_count', false);
+            ->select('uuid, square, CAST((SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS INTEGER) AS geographic_region_identifier, easting, northing, partial, occurrences_count, species_count', false);
 
         if ($this->hasInclude($includes, 'geographic_region')) {
             $builder->select('(SELECT higher_geography FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region', false);

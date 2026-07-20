@@ -76,6 +76,89 @@ class DataSources extends BaseController
     }
 
     /**
+     * Create a new data source from submitted form data.
+     *
+     * @return RedirectResponse
+     */
+    public function store(): RedirectResponse
+    {
+        $rules = [
+            'abbr' => 'required|max_length[10]',
+            'title' => 'required|max_length[100]',
+            'url' => 'required|valid_url|max_length[100]',
+        ];
+
+        if (! $this->validate($rules)) {
+            return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
+        }
+
+        $abbr = strtoupper(trim((string) $this->request->getPost('abbr')));
+        $title = trim((string) $this->request->getPost('title'));
+        $url = trim((string) $this->request->getPost('url'));
+
+        if ($this->isAbbrTaken($abbr)) {
+            return redirect()->back()->withInput()->with('errors', ['abbr' => 'That abbreviation is already in use.']);
+        }
+
+        if ($this->isTitleTaken($title)) {
+            return redirect()->back()->withInput()->with('errors', ['title' => 'That title is already in use.']);
+        }
+
+        /** @var DataSourceModel $model */
+        $model = model(DataSourceModel::class);
+        $model->insert([
+            'abbr' => $abbr,
+            'title' => $title,
+            'url' => $url,
+        ]);
+
+        return redirect()->to(site_url('data-sources/' . $model->getInsertID()))->with('message', 'Data source created.');
+    }
+
+    /**
+     * Update an existing data source.
+     *
+     * @param int $id Data source identifier.
+     * @return RedirectResponse
+     */
+    public function update(int $id): RedirectResponse
+    {
+        $dataSource = $this->findDataSource($id);
+
+        $rules = [
+            'abbr' => 'required|max_length[10]',
+            'title' => 'required|max_length[100]',
+            'url' => 'required|valid_url|max_length[100]',
+        ];
+
+        if (! $this->validate($rules)) {
+            return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
+        }
+
+        $abbr = strtoupper(trim((string) $this->request->getPost('abbr')));
+        $title = trim((string) $this->request->getPost('title'));
+        $url = trim((string) $this->request->getPost('url'));
+
+        if ($this->isAbbrTaken($abbr, $id)) {
+            return redirect()->back()->withInput()->with('errors', ['abbr' => 'That abbreviation is already in use.']);
+        }
+
+        if ($this->isTitleTaken($title, $id)) {
+            return redirect()->back()->withInput()->with('errors', ['title' => 'That title is already in use.']);
+        }
+
+        /** @var DataSourceModel $model */
+        $model = model(DataSourceModel::class);
+        $model->update($id, [
+            'abbr' => $abbr,
+            'title' => $title,
+            'url' => $url,
+        ]);
+
+        return redirect()->to(site_url('data-sources/' . $id))->with('message', 'Data source updated.');
+    }
+
+    /**
      * Find a data source or throw a 404.
      *
      * @param int $id Data source identifier.

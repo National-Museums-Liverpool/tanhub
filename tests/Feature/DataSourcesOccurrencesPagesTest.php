@@ -164,9 +164,16 @@ final class DataSourcesOccurrencesPagesTest extends CIUnitTestCase
         $db = db_connect();
         $now = date('Y-m-d H:i:s');
 
+        $db->query('PRAGMA foreign_keys = OFF');
+
+        $db->table('geographic_regions_occurrences')->emptyTable();
         $db->table('occurrences')->emptyTable();
         $db->table('taxon_names')->emptyTable();
         $db->table('taxa')->emptyTable();
+        $db->table('grid_square_stats')->emptyTable();
+        $db->table('taxon_stats')->emptyTable();
+        $db->table('taxon_year_stats')->emptyTable();
+        $db->table('geographic_regions')->emptyTable();
         $db->table('taxon_groups')->emptyTable();
         $db->table('taxon_ranks')->emptyTable();
         $db->table('recording_schemes')->emptyTable();
@@ -319,6 +326,8 @@ final class DataSourcesOccurrencesPagesTest extends CIUnitTestCase
                 'deleted_at' => null,
             ],
         ]);
+
+        $db->query('PRAGMA foreign_keys = ON');
     }
 
     /**

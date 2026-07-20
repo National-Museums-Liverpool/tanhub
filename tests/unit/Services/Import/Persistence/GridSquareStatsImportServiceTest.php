@@ -19,13 +19,20 @@ final class GridSquareStatsImportServiceTest extends CIUnitTestCase
         $this->db = db_connect();
         $prefix = $this->db->getPrefix();
 
-        $this->db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'geographic_regions (
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'grid_square_stats');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'geographic_regions');
+
+        $this->db->query('CREATE TABLE ' . $prefix . 'geographic_regions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             higher_geography_identifier INTEGER NOT NULL,
+            higher_geography VARCHAR(100) NULL,
+            location_type VARCHAR(100) NULL,
+            footprint_geometry TEXT NULL,
+            data_source_id INTEGER NULL,
             deleted_at DATETIME NULL
         )');
 
-        $this->db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'grid_square_stats (
+        $this->db->query('CREATE TABLE ' . $prefix . 'grid_square_stats (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             uuid VARCHAR(36) NOT NULL,
             square VARCHAR(12) NOT NULL,
@@ -50,7 +57,7 @@ final class GridSquareStatsImportServiceTest extends CIUnitTestCase
         $service = new GridSquareStatsImportService();
         $counts = $service->import([
             [
-                'location_id' => 991234,
+                'higher_geography_identifier' => 991234,
                 'location_code' => 'GB23',
                 'square' => 'su99a',
                 'centre_easting' => 412300,

@@ -7,7 +7,7 @@
             <div class="auth-panel p-4 p-lg-5 h-100">
                 <span class="eyebrow mb-3">Taxonomy</span>
                 <h1 class="section-heading mb-3">Taxon details</h1>
-                <p class="section-copy mb-4">Most fields are read-only. Admin users can set the blocked flag and blocked reason.</p>
+                <p class="section-copy mb-4">Most fields are read-only. Manager and admin users can edit rarity group name and taxon remarks. Admin users can also set blocking controls.</p>
             </div>
         </div>
         <div class="col-lg-7">
@@ -80,6 +80,18 @@
                             </label>
                             <input class="form-control" id="recording_scheme_id" type="text" value="<?= esc((string) ($page['referenceLabels']['recording_scheme_id'] ?? '')) ?>" disabled>
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="rarity_group_name">
+                                Rarity group name
+                                <?php if (! $page['canEditDetails']): ?>
+                                    <span class="badge bg-secondary ms-2">Read-only</span>
+                                <?php endif; ?>
+                            </label>
+                            <input class="form-control<?= isset($errors['rarity_group_name']) ? ' is-invalid' : '' ?>" id="rarity_group_name" name="rarity_group_name" type="text" maxlength="100" value="<?= esc(old('rarity_group_name', (string) ($page['taxon']['rarity_group_name'] ?? ''))) ?>" <?= $page['canEditDetails'] ? '' : 'disabled' ?>>
+                            <?php if (isset($errors['rarity_group_name'])): ?>
+                                <div class="invalid-feedback d-block"><?= esc($errors['rarity_group_name']) ?></div>
+                            <?php endif; ?>
+                        </div>
 
                         <?php foreach ($page['classificationColumns'] as $column): ?>
                             <div class="col-md-6">
@@ -90,6 +102,19 @@
                                 <input class="form-control" id="<?= esc($column) ?>" type="text" value="<?= esc((string) ($page['referenceLabels'][$column] ?? '')) ?>" disabled>
                             </div>
                         <?php endforeach; ?>
+
+                        <div class="col-12">
+                            <label class="form-label" for="taxon_remarks">
+                                Remarks
+                                <?php if (! $page['canEditDetails']): ?>
+                                    <span class="badge bg-secondary ms-2">Read-only</span>
+                                <?php endif; ?>
+                            </label>
+                            <textarea class="form-control<?= isset($errors['taxon_remarks']) ? ' is-invalid' : '' ?>" id="taxon_remarks" name="taxon_remarks" rows="3" <?= $page['canEditDetails'] ? '' : 'disabled' ?>><?= esc(old('taxon_remarks', (string) ($page['taxon']['taxon_remarks'] ?? ''))) ?></textarea>
+                            <?php if (isset($errors['taxon_remarks'])): ?>
+                                <div class="invalid-feedback d-block"><?= esc($errors['taxon_remarks']) ?></div>
+                            <?php endif; ?>
+                        </div>
 
                         <div class="col-md-6">
                             <label class="form-label" for="blocked">
@@ -120,7 +145,7 @@
                         </div>
                     </div>
 
-                    <?php if ($page['canModerate']): ?>
+                    <?php if ($page['canEditDetails'] || $page['canModerate']): ?>
                         <div class="d-flex flex-column flex-sm-row gap-3 align-items-sm-center justify-content-between mt-4">
                             <button class="btn btn-brand btn-lg px-4" type="submit">Save</button>
                             <a class="btn btn-outline-brand" href="<?= esc(site_url('taxa')) ?>">Back to list</a>

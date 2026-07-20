@@ -89,11 +89,31 @@ final class TaxaPagesTest extends CIUnitTestCase
         $result->assertSee('Alpha scheme');
     }
 
+    public function testManagerCanUpdateRarityGroupNameAndRemarks(): void
+    {
+        $this->authenticateAs('taxa-manager-update-text@example.com', 'manager');
+
+        $result = $this->post('taxa/1', [
+            'rarity_group_name' => 'locally-rare',
+            'taxon_remarks' => 'Manager edited remarks',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirect();
+
+        $taxon = model(TaxonModel::class)->find(1);
+
+        $this->assertSame('locally-rare', $taxon['rarity_group_name']);
+        $this->assertSame('Manager edited remarks', $taxon['taxon_remarks']);
+    }
+
     public function testManagerCannotUpdateModerationFields(): void
     {
         $this->authenticateAs('taxa-manager-update@example.com', 'manager');
 
         $result = $this->post('taxa/1', [
+            'rarity_group_name' => 'locally-common',
+            'taxon_remarks' => 'Manager note',
             'blocked' => '1',
             'blocked_reason' => 'Sensitive record',
         ]);
@@ -103,6 +123,8 @@ final class TaxaPagesTest extends CIUnitTestCase
 
         $taxon = model(TaxonModel::class)->find(1);
 
+        $this->assertSame('locally-common', $taxon['rarity_group_name']);
+        $this->assertSame('Manager note', $taxon['taxon_remarks']);
         $this->assertSame(0, (int) $taxon['blocked']);
         $this->assertNull($taxon['blocked_reason']);
     }

@@ -86,6 +86,9 @@ class Taxa extends BaseController
             ->getResultArray();
 
         $referenceLabels = $this->referenceLabels($taxon);
+        $user = auth()->user();
+        $canEditDetails = $user !== null && $user->inGroup('admin', 'manager');
+        $canModerate = $user !== null && $user->inGroup('admin');
 
         return $this->renderPage('taxa/details', [
             'pageTitle' => 'Taxon details',
@@ -94,7 +97,8 @@ class Taxa extends BaseController
             'taxon' => $taxon,
             'taxonNames' => $taxonNames,
             'referenceLabels' => $referenceLabels,
-            'canModerate' => auth()->user() !== null && auth()->user()->inGroup('admin'),
+            'canEditDetails' => $canEditDetails,
+            'canModerate' => $canModerate,
             'classificationColumns' => $this->classificationColumns($taxon),
         ]);
     }
@@ -104,10 +108,30 @@ class Taxa extends BaseController
      */
     public function update(int $id): RedirectResponse
     {
-        $rules = [
-            'blocked' => 'permit_empty|in_list[0,1]',
-            'blocked_reason' => 'permit_empty|max_length[2000]',
-        ];
+        $user = auth()->user();
+        $canEditDetails = $user !== null && $user->inGroup('admin', 'manager');
+        $canModerate = $user !== null && $user->inGroup('admin');
+
+        if (! $canEditDetails && ! $canModerate) {
+            return redirect()->back()->with('error', 'You are not authorised to update this taxon.');
+        }
+
+        $postData = $this->request->getPost();
+
+        $rules = [];
+
+        if ($canEditDetails && is_array($postData) && array_key_exists('rarity_group_name', $postData)) {
+            $rules['rarity_group_name'] = 'permit_empty|max_length[100]';
+        }
+
+        if ($canEditDetails && is_array($postData) && array_key_exists('taxon_remarks', $postData)) {
+            $rules['taxon_remarks'] = 'permit_empty|max_length[65535]';
+        }
+
+        if ($canModerate) {
+            $rules['blocked'] = 'permit_empty|in_list[0,1]';
+            $rules['blocked_reason'] = 'permit_empty|max_length[2000]';
+        }
 
         if (! $this->validate($rules)) {
             return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
@@ -121,15 +145,30 @@ class Taxa extends BaseController
             throw PageNotFoundException::forPageNotFound();
         }
 
-        $blocked = (int) $this->request->getPost('blocked') === 1;
-        $blockedReason = trim((string) $this->request->getPost('blocked_reason'));
+        $updateData = [];
 
-        $model->update($id, [
-            'blocked' => $blocked ? 1 : 0,
-            'blocked_reason' => $blocked ? ($blockedReason === '' ? null : $blockedReason) : null,
-        ]);
+        if ($canEditDetails && is_array($postData) && array_key_exists('rarity_group_name', $postData)) {
+            $updateData['rarity_group_name'] = trim((string) $this->request->getPost('rarity_group_name'));
+        }
 
-        return redirect()->to(site_url('taxa/' . $id))->with('message', 'Taxon moderation settings updated.');
+        if ($canEditDetails && is_array($postData) && array_key_exists('taxon_remarks', $postData)) {
+            $taxonRemarks = trim((string) $this->request->getPost('taxon_remarks'));
+            $updateData['taxon_remarks'] = $taxonRemarks === '' ? null : $taxonRemarks;
+        }
+
+        if ($canModerate) {
+            $blocked = (int) $this->request->getPost('blocked') === 1;
+            $blockedReason = trim((string) $this->request->getPost('blocked_reason'));
+
+            $updateData['blocked'] = $blocked ? 1 : 0;
+            $updateData['blocked_reason'] = $blocked ? ($blockedReason === '' ? null : $blockedReason) : null;
+        }
+
+        if ($updateData !== []) {
+            $model->update($id, $updateData);
+        }
+
+        return redirect()->to(site_url('taxa/' . $id))->with('message', 'Taxon details updated.');
     }
 
     /**

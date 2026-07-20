@@ -13,6 +13,8 @@ class TaxonModel extends Model
      * @var array<int, string>
      */
     private const BASE_ALLOWED_FIELDS = [
+        'rarity_group_name',
+        'taxon_remarks',
         'blocked',
         'blocked_reason',
     ];

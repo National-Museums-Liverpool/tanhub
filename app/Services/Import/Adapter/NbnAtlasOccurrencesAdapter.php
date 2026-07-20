@@ -122,7 +122,7 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         }
 
         return [
-            'remote_id' => (string) ($record['id'] ?? $record['occurrence_id'] ?? ''),
+            'remote_id' => (string) ($record['occurrenceID'] ?? ''),
             'source_name' => (string) ($record['dataResourceName'] ?? $record['source_name'] ?? 'NBN Atlas'),
             'taxon_identifier' => (string) ($record['taxon_identifier'] ?? $record['taxonID'] ?? ''),
             'given_name_identifier' => (string) ($record['given_name_identifier'] ?? $record['scientificNameID'] ?? ''),
@@ -137,8 +137,32 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             'sex' => $record['sex'] ?? null,
             'life_stage' => $record['life_stage'] ?? null,
             'organism_quantity' => $record['organism_quantity'] ?? null,
+            'latitude' => $record['decimalLatitude'] ?? null,
+            'longitude' => $record['decimalLongitude'] ?? null,
             'blocked' => (bool) ($record['blocked'] ?? false),
             'blocked_reason' => $record['blocked_reason'] ?? null,
         ];
+    }
+
+    /**
+     * @param array<int, mixed> $values
+     */
+    private function numberFromAny(array $values): ?float
+    {
+        foreach ($values as $value) {
+            if (! is_scalar($value)) {
+                continue;
+            }
+
+            $string = trim((string) $value);
+
+            if ($string === '' || ! is_numeric($string)) {
+                continue;
+            }
+
+            return (float) $string;
+        }
+
+        return null;
     }
 }

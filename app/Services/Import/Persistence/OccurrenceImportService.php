@@ -46,16 +46,6 @@ class OccurrenceImportService
         foreach ($records as $record) {
             try {
                 log_message('debug', 'Record: ' . var_export($record, true));
-                $sourceName = (string) ($record['source_name'] ?? '');
-
-                // Business rule: skip iRecord records when importing from mixed feeds.
-                if ($sourceName !== '' && stripos($sourceName, 'irecord') !== false) {
-                    log_message('debug', 'Skipping iRecord occurrence record due to mixed feeds: ' . $sourceName);
-                    $counts['skipped']++;
-                    $counts['processed']++;
-                    $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);
-                    continue;
-                }
 
                 $remoteId = trim((string) ($record['remote_id'] ?? ''));
                 $tvk = trim((string) ($record['scientific_name_identifier'] ?? ''));
@@ -109,6 +99,8 @@ class OccurrenceImportService
                     'sex' => $this->nullableString($record['sex'] ?? null, 20),
                     'life_stage' => $this->nullableString($record['life_stage'] ?? null, 20),
                     'organism_quantity' => $this->nullableString($record['organism_quantity'] ?? null, 20),
+                    'latitude' => $this->nullableFloat($record['latitude'] ?? null),
+                    'longitude' => $this->nullableFloat($record['longitude'] ?? null),
                     'data_source_id' => $dataSourceId,
                 ];
                 foreach ($rankColumns as $rankColumn) {
@@ -186,6 +178,24 @@ class OccurrenceImportService
         }
 
         return substr($string, 0, $maxLength);
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function nullableFloat($value): ?float
+    {
+        if (! is_scalar($value)) {
+            return null;
+        }
+
+        $string = trim((string) $value);
+
+        if ($string === '' || ! is_numeric($string)) {
+            return null;
+        }
+
+        return (float) $string;
     }
 
     /**

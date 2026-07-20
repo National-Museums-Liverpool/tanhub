@@ -28,6 +28,8 @@ class OccurrenceModel extends Model
         'life_stage',
         'organism_quantity',
         'data_source_id',
+        'latitude',
+        'longitude',
         'blocked',
         'blocked_reason',
     ];

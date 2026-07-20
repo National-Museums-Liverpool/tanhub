@@ -306,38 +306,29 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
     {
         $gridRef = (string) ($this->stringFromPath($record, 'location.output_sref'));
         $gridRef2km = $this->calculateTetrad($gridRef);
+        $point = explode(',', (string) $this->valueFromPath($record, 'location.point'));
         return [
-            'remote_id' => (string) ($record['_id']
-                ?? $this->stringFromPath($record, 'occurrence.source_system_key')
-                ?? ($record['id'] ?? $record['occurrence_id'] ?? '')),
-            'source_name' => (string) ($this->stringFromPath($record, 'metadata.website.title')
-                ?? $record['source_name']
-                ?? 'Indicia'),
+            'remote_id' => (string) $record['_id'],
             // Indicia ES data doesn't currently hold the organism key.
             'taxon_identifier' => null,
             // So we can use the accepted name TVK as a unique ID instead.
-            'scientific_name_identifier' => (string) ($this->stringFromPath($record, 'taxon.accepted_taxon_id')
-                ?? $this->stringFromPath($record, 'taxon.species_taxon_id')
-                ?? $record['taxon_identifier']
-                ?? ''),
-            'given_name_identifier' => (string) ($this->stringFromPath($record, 'taxon.taxon_id')
-                ?? $record['given_name_identifier']
-                ?? $this->stringFromPath($record, 'taxon.accepted_taxon_id')
-                ?? ''),
-            'from_date' => $this->valueFromPath($record, 'event.date_start') ?? $record['from_date'] ?? $record['event_date'] ?? null,
-            'to_date' => $this->valueFromPath($record, 'event.date_end') ?? $record['to_date'] ?? null,
+            'scientific_name_identifier' => (string) $this->stringFromPath($record, 'taxon.accepted_taxon_id'),
+            'given_name_identifier' => (string) $this->stringFromPath($record, 'taxon.taxon_id'),
+            'from_date' => $this->valueFromPath($record, 'event.date_start') ?? null,
+            'to_date' => $this->valueFromPath($record, 'event.date_end') ?? null,
             'grid_ref' => $gridRef,
             'grid_ref_2km' => $gridRef2km,
-            'locality' => $this->valueFromPath($record, 'location.verbatim_locality') ?? $record['locality'] ?? null,
-            'recorded_by' => $this->valueFromPath($record, 'event.recorded_by') ?? $record['recorded_by'] ?? null,
-            'identified_by' => $this->valueFromPath($record, 'identification.identified_by') ?? $record['identified_by'] ?? null,
-            'identification_verification_status' => $this->valueFromPath($record, 'identification.verification_status') ?? $record['identification_verification_status'] ?? 'UN',
-            'sex' => $this->valueFromPath($record, 'occurrence.sex') ?? $record['sex'] ?? null,
-            'life_stage' => $this->valueFromPath($record, 'occurrence.life_stage') ?? $record['life_stage'] ?? null,
+            'locality' => $this->valueFromPath($record, 'location.verbatim_locality') ?? null,
+            'recorded_by' => $this->valueFromPath($record, 'event.recorded_by') ?? null,
+            'identified_by' => $this->valueFromPath($record, 'identification.identified_by') ?? null,
+            'identification_verification_status' => $this->valueFromPath($record, 'identification.verification_status'),
+            'sex' => $this->valueFromPath($record, 'occurrence.sex') ?? null,
+            'life_stage' => $this->valueFromPath($record, 'occurrence.life_stage') ?? null,
             'organism_quantity' => $this->valueFromPath($record, 'occurrence.organism_quantity')
                 ?? $this->valueFromPath($record, 'occurrence.individual_count')
-                ?? $record['organism_quantity']
                 ?? null,
+            'latitude' => $point[0] ?? null,
+            'longitude' => $point[1] ?? null,
         ];
     }
 

@@ -107,6 +107,16 @@ class CreateOccurrencesTable extends Migration
                 'constraint' => 20,
                 'unsigned'   => true,
             ],
+            'latitude' => [
+                'type'       => 'DECIMAL',
+                'constraint' => '10,7',
+                'null'       => true,
+            ],
+            'longitude' => [
+                'type'       => 'DECIMAL',
+                'constraint' => '10,7',
+                'null'       => true,
+            ],
             'blocked' => [
                 'type'       => 'TINYINT',
                 'constraint' => 1,

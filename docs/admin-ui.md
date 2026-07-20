@@ -26,18 +26,19 @@ General rules:
 
 Each top-level data section has a list page linked from the main menu.
 
-Top-level sections are:
+The menu hierarchy is:
 
-- Users
-- Taxon groups
-- Taxon ranks
-- Geographic regions
-- Recording schemes
-- Taxa
-- Taxon names
+- Lookups
+  - Data sources
+  - Geographic regions
+  - Recording schemes
+- Taxonomy
+  - Taxon groups
+  - Taxon ranks
+  - Taxa
 - Occurrences
-- Data sources
 - Imports
+- Users
 
 ## Shared page behaviour
 
@@ -94,9 +95,10 @@ lookups, taxonomy, occurrences and report stats:
   - taxon_names (Indicia)
 - occurrences
   - occurrences (Indicia)
-  - occurrences (NBN)
+  - occurrences (NBN, not implemented)
 - report stats:
   - grid_square_stats
+  - grid_square_stats_counts
   - taxon_stats
   - taxon_year_stats
 
@@ -111,6 +113,10 @@ finishes, the Go button is restored and any other tasks blocked by this task are
 if the task is complete. Any other tasks in the queue then proceed in the order they were added.
 
 The current queue is shown on the page.
+
+`grid_square_stats_counts` is a derived task that recalculates
+`grid_square_stats.occurrences_count` and `grid_square_stats.species_count`
+from active occurrences after both occurrence import streams complete.
 
 ## Table coverage and behaviour
 
@@ -209,23 +215,28 @@ Access:
 
 List page:
 
-- Columns: id, taxon_identifier, scientific_name, vernacular_name,
-  conservation_status, blocked, actions.
-- Generic search: `q` across taxon_identifier, scientific_name,
-  vernacular_name, and conservation_status.
+- Columns: id, taxon_identifier, scientific_name, vernacular_name, conservation_status, blocked,
+  actions.
+- Generic search: `q` across taxon_identifier, scientific_name, vernacular_name, and
+  conservation_status.
 - Filters: taxon_group, taxon_rank, recording_scheme, blocked.
 - Default sort: scientific_name asc.
 
 Detail/edit page:
 
-- Read-only: taxon_identifier, scientific_name_identifier, scientific_name,
-  vernacular_name, classification FKs.
-- Classification FKs are dynamic self-references on taxa (for example
-  order_id, family_id, species_id) rather than separate order, family, or
-  superfamily tables.
-- Read-only table: associated taxon names (name, given_name_identifier,
-  accepted, scientific).
-- Editable: blocked, blocked_reason (admin only).
+Allows you to review the details stored for a taxon, including the names. Admins can block a taxon
+from appearing in reports and set its blocked reason. Admins and managers can specify remarks for
+a taxon and override the rarity group name. The rarity group name defaults to the associated
+recording scheme name and groups taxa together into collections within which they can be compared
+for rarity calculations, so they are only compared to similarly recorded taxa.
+
+- Read-only: taxon_identifier, scientific_name_identifier, scientific_name, vernacular_name,
+  classification FKs.
+- Classification FKs are dynamic self-references on taxa (for example order_id, family_id,
+  species_id) rather than separate order, family, or superfamily tables.
+- Read-only table: associated taxon names (name, given_name_identifier, accepted, scientific).
+- Editable: blocked, blocked_reason (admin only), taxon_remarks, rarity_group_name (manager or
+  admin only).
 
 ### Taxon names
 
@@ -252,25 +263,25 @@ Detail/edit page:
 
 ### Data sources
 
+For info only, data sources are created as part of the installation and each data source has
+associated import code so they cannot be edited via the UI.
+
 Access:
 
-- List/view: Admin and Manager.
-- Create/edit: Admin only.
+- List/view: Admin only.
 
 List page:
 
 - Columns: id, abbr, title, url, actions.
 - Default sort: title asc.
 
-Edit page:
+Details page:
 
-- Editable: abbr, title, url.
-- abbr and title must validate as unique.
+- Read only: id, abbr, title, url.
 
 ## Validation and safety rules
 
-- All uniqueness constraints in schema must be validated in forms and handled
-  gracefully on save.
+- All uniqueness constraints in schema must be validated in forms and handled gracefully on save.
 - All FK selections must be validated against existing rows.
 - blocked_reason is required when blocked is true.
 - Audit metadata (created_at, updated_at, deleted_at) is never manually edited.

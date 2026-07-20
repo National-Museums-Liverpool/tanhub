@@ -43,13 +43,13 @@ abstract class BaseController extends Controller
     protected function renderPage(string $view, array $page = []): string
     {
         try {
-          $isLoggedIn = auth()->loggedIn();
-          $isAdmin = $isLoggedIn && auth()->user() !== null && auth()->user()->inGroup('admin');
-          $isStaff = $isLoggedIn && auth()->user() !== null && auth()->user()->inGroup('admin', 'manager');
+            $isLoggedIn = auth()->loggedIn();
+            $isAdmin = $isLoggedIn && auth()->user() !== null && auth()->user()->inGroup('admin');
+            $isStaff = $isLoggedIn && auth()->user() !== null && auth()->user()->inGroup('admin', 'manager');
         } catch (\CodeIgniter\Database\Exceptions\DatabaseException $exception) {
-          $isLoggedIn = false;
-          $isAdmin = false;
-          $isStaff = false;
+            $isLoggedIn = false;
+            $isAdmin = false;
+            $isStaff = false;
         }
 
         $defaults = [
@@ -58,74 +58,7 @@ abstract class BaseController extends Controller
             'metaDescription' => 'Centralised wildlife observation reporting hub.',
             'tagline' => 'Centralised wildlife observation reporting hub.',
             'bodyClass' => 'app-shell',
-            'navItems' => [
-                [
-                    'label' => 'Home',
-                    'url' => site_url('/'),
-                    'path' => '',
-                    'style' => 'link',
-                ],
-                [
-                  'label' => 'Taxon groups',
-                  'url' => site_url('taxon-groups'),
-                  'path' => 'taxon-groups',
-                  'style' => 'link',
-                ],
-                [
-                  'label' => 'Taxon ranks',
-                  'url' => site_url('taxon-ranks'),
-                  'path' => 'taxon-ranks',
-                  'style' => 'link',
-                ],
-                [
-                  'label' => 'Taxa',
-                  'url' => site_url('taxa'),
-                  'path' => 'taxa',
-                  'style' => 'link',
-                ],
-                [
-                  'label' => 'Recording schemes',
-                  'url' => site_url('recording-schemes'),
-                  'path' => 'recording-schemes',
-                  'style' => 'link',
-                ],
-                [
-                  'label' => 'Geographic regions',
-                  'url' => site_url('geographic-regions'),
-                  'path' => 'geographic-regions',
-                  'style' => 'link',
-                ],
-                [
-                  'label' => 'Users',
-                  'url' => site_url('users'),
-                  'path' => 'users',
-                  'style' => 'link',
-                ],
-                [
-                  'label' => 'Imports',
-                  'url' => site_url('imports'),
-                  'path' => 'imports',
-                  'style' => 'link',
-                ],
-                [
-                    'label' => 'Login',
-                    'url' => site_url('login'),
-                    'path' => 'login',
-                    'style' => 'link',
-                ],
-                [
-                    'label' => 'Logout',
-                    'url' => site_url('logout'),
-                    'path' => 'logout',
-                    'style' => 'link',
-                ],
-                [
-                    'label' => 'Docs',
-                    'url' => 'https://codeigniter.com/user_guide/',
-                    'style' => 'outline',
-                    'external' => true,
-                ],
-            ],
+            'navItems' => $this->buildNavItems($isLoggedIn, $isStaff, $isAdmin),
             'features' => [
                 ['value' => 'NBN Atlas', 'label' => 'Data available from the NBN Atlas'],
                 ['value' => 'iRecord', 'label' => 'Data available from iRecord'],
@@ -137,32 +70,87 @@ abstract class BaseController extends Controller
             ],
             'year' => date('Y'),
         ];
-        if ($isLoggedIn) {
-          // Hide login for logged-in users, since it is not relevant.
-          $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
-            return ! isset($item['path']) || ! in_array($item['path'], ['login']);
-          });
-
-          if (! $isStaff) {
-            $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
-              return ! isset($item['path']) || ! in_array($item['path'], ['taxon-groups', 'orders', 'superfamilies', 'families', 'recording-schemes', 'geographic-regions', 'imports', 'users']);
-            });
-          }
-
-          if (! $isAdmin) {
-            $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
-              return ! isset($item['path']) || $item['path'] !== 'users';
-            });
-          }
-        }
-        else {
-          // Hide logout for guests, since it is not relevant.
-          $defaults['navItems'] = array_filter($defaults['navItems'], function ($item) {
-            return ! isset($item['path']) || ! in_array($item['path'], ['logout', 'taxon-groups', 'orders', 'superfamilies', 'families', 'recording-schemes', 'geographic-regions', 'imports', 'users']);
-          });
-        }
 
         return view($view, ['page' => array_replace($defaults, $page)]);
+    }
+
+    /**
+     * Build the primary site navigation for the current user context.
+     *
+     * @param bool $isLoggedIn Whether the current visitor is authenticated.
+     * @param bool $isStaff Whether the current user is a staff member.
+     * @param bool $isAdmin Whether the current user is an admin.
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildNavItems(bool $isLoggedIn, bool $isStaff, bool $isAdmin): array
+    {
+        $navItems = [
+            $this->navLink('Home', site_url('/'), '', 'link'),
+        ];
+
+        if ($isStaff) {
+            $navItems[] = $this->navDropdown('Lookups', [
+                $this->navLink('Data sources', site_url('data-sources'), 'data-sources'),
+                $this->navLink('Geographic regions', site_url('geographic-regions'), 'geographic-regions'),
+                $this->navLink('Recording schemes', site_url('recording-schemes'), 'recording-schemes'),
+            ]);
+            $navItems[] = $this->navDropdown('Taxonomy', [
+                $this->navLink('Taxon groups', site_url('taxon-groups'), 'taxon-groups'),
+                $this->navLink('Taxon ranks', site_url('taxon-ranks'), 'taxon-ranks'),
+                $this->navLink('Taxa', site_url('taxa'), 'taxa'),
+            ]);
+            $navItems[] = $this->navLink('Occurrences', site_url('occurrences'), 'occurrences', 'link');
+            $navItems[] = $this->navLink('Imports', site_url('imports'), 'imports', 'link');
+        }
+
+        if ($isAdmin) {
+            $navItems[] = $this->navLink('Users', site_url('users'), 'users', 'link');
+        }
+
+        $navItems[] = $this->navLink($isLoggedIn ? 'Logout' : 'Login', site_url($isLoggedIn ? 'logout' : 'login'), $isLoggedIn ? 'logout' : 'login', 'link');
+        $navItems[] = [
+            'label' => 'Docs',
+            'url' => 'https://codeigniter.com/user_guide/',
+            'style' => 'outline',
+            'external' => true,
+        ];
+
+        return $navItems;
+    }
+
+    /**
+     * Create a simple navigation link definition.
+     *
+     * @param string $label Display label.
+     * @param string $url Destination URL.
+     * @param string $path Route path used for active state.
+     * @param string $style Visual style token.
+     * @return array<string, mixed>
+     */
+    private function navLink(string $label, string $url, string $path, string $style = 'link'): array
+    {
+        return [
+            'label' => $label,
+            'url' => $url,
+            'path' => $path,
+            'style' => $style,
+        ];
+    }
+
+    /**
+     * Create a dropdown navigation definition.
+     *
+     * @param string $label Display label.
+     * @param array<int, array<string, mixed>> $items Child navigation items.
+     * @return array<string, mixed>
+     */
+    private function navDropdown(string $label, array $items): array
+    {
+        return [
+            'label' => $label,
+            'style' => 'dropdown',
+            'items' => $items,
+        ];
     }
 
     /**

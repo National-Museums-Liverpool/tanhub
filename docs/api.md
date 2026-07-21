@@ -155,7 +155,7 @@ List responses are wrapped with `data`, `meta`, and `links`.
 
 Filtering is available on list endpoints using field-based query parameters.
 
-Filter syntax is designed to be explicit and readable: `field[operator]=value`.
+Filter syntax is designed to be explicit and readable: `field=value` or `field[operator]=value`.
 
 ### 6.1 Operators
 
@@ -280,7 +280,12 @@ This section provides a practical reference for each resource with:
 
 All list endpoints also support `limit`, `offset`, and `sort`.
 
-For endpoints that support include expansions, examples show both:
+Some endpoints allow joining to other resources in order to enrich the response, filtering and
+sorting options with additional fields. To use this feature, provide a parameter `include` with a
+comma separated list of supported resource names to include. Field identifiers used in include
+extensions take the form `<resource>`__`<fieldname>` where hyphens are replaced with underscore in
+the resource name and with 2 underscores separating the resource name from the fieldname. For
+endpoints that support include expansions, examples show both:
 
 - base responses (no include)
 - enriched responses (with include fields)
@@ -358,12 +363,19 @@ Examples:
 - Path: `GET /api/v1/geographic-regions`
 - Item path: `GET /api/v1/geographic-regions/{higher_geography_identifier}`
 - Unique identifier: `higher_geography_identifier`
-- Exposed fields: `higher_geography_identifier`, `higher_geography`, `location_type`, `data_source_abbr`
-- Filterable fields: `higher_geography_identifier`, `higher_geography`, `location_type`, `data_source_abbr`
+- Exposed fields: `higher_geography_identifier`, `higher_geography`, `location_type`
+- Filterable fields: `higher_geography_identifier`, `higher_geography`, `location_type`
+- include:
+  - query parameter: `include`
+	- supported values and added fields:
+	  - `data-source`:
+			- `data_source__abbr`
+			- `data_source__title`
+			- `data_source__url`
 
 Examples:
 
-- Request: `/api/v1/geographic-regions?higher_geography_identifier[in]=12,13,14`
+- Request: `/api/v1/geographic-regions?include=data-source&higher_geography_identifier[in]=12,13,14`
 	Response:
 
 ```json
@@ -373,13 +385,17 @@ Examples:
 			"higher_geography_identifier": 12,
 			"higher_geography": "South Hampshire",
 			"location_type": "Vice County",
-			"data_source_abbr": "IREC"
+			"data__source_abbr": "IREC",
+			"data__source_title": "iRecord",
+			"data__source_url": "https://irecord.org.uk"
 		},
 		{
 			"higher_geography_identifier": 13,
 			"higher_geography": "North Hampshire",
 			"location_type": "Vice County",
-			"data_source_abbr": "IREC"
+			"data__source_abbr": "IREC",
+			"data__source_title": "iRecord",
+			"data__source_url": "https://irecord.org.uk"
 		}
 	],
 	"meta": {
@@ -405,14 +421,12 @@ Examples:
 		{
 			"higher_geography_identifier": 13,
 			"higher_geography": "North Hampshire",
-			"location_type": "Vice County",
-			"data_source_abbr": "IREC"
+			"location_type": "Vice County"
 		},
 		{
 			"higher_geography_identifier": 12,
 			"higher_geography": "South Hampshire",
-			"location_type": "Vice County",
-			"data_source_abbr": "IREC"
+			"location_type": "Vice County"
 		}
 	],
 	"meta": {
@@ -435,30 +449,63 @@ Examples:
 - Item path: `GET /api/v1/occurrences/{unique_key}`
 - Unique identifier: `unique_key`
 - Exposed fields:
-	- `unique_key`, `taxon_identifier`, `taxon_name_uuid`, `from_date`, `to_date`, `grid_ref`, `grid_ref_2km`
+	- `unique_key`, `taxon_identifier`, `from_date`, `to_date`, `grid_ref`, `grid_ref_2km`,
 	- `locality`, `recorded_by`, `identified_by`, `identification_verification_status`
-	- `sex`, `life_stage`, `organism_quantity`, `data_source_abbr`
-	- dynamic taxon rank fields by configured rank identifier (for example `kingdom_taxon_identifier`, `family_taxon_identifier`)
-	- geographic-region helper fields (for example `higher_geography_identifier`) for join-based filtering
+	- `sex`, `life_stage`, `organism_quantity`, `higher_geography_identifier`
+	- dynamic taxon rank fields by configured rank identifier (for example `kingdom__taxon_identifier`, `family__taxon_identifier`)
 - Filterable fields:
 	- all exposed occurrence fields above
 	- excludes: `blocked`, `blocked_reason`, `created_at`, `updated_at`, `deleted_at`
 - Include:
 	- query parameter: `include`
-	- supported values: `taxon`, `taxon_name`, `taxon_rank`, `taxon_group`, `parent_taxa`, `grid_square_stats`
-	- included fields:
-		- `taxon`: `scientific_name`, `scientific_name_authorship`, `scientific_name_identifier`, `vernacular_name`
-		- `taxon_name`: `given_name`, `taxon_name_uuid`
-		- `taxon_rank`: `taxon_rank`
-		- `taxon_group`: `taxon_group_external_key`
-		- `parent_taxa`: parent taxon scientific/vernacular fields by configured rank (for example `family_scientific_name`, `family_vernacular_name`)
-		- `grid_square_stats`: `easting`, `northing`, `lat`, `lon`: include `grid_square_stats` when
-		  the lat/long or easting/northing are required for mapping.
+	- supported values and added fields:
+	  - `data-source`:
+			- `data_source__abbr`
+			- `data_source__title`
+			- `data_source__url`
+		- `geographic-region`:
+			- `geographic_region__higher_geography`
+			-	`geographic_region__location_type`
+		- `grid-square-stats`:
+			- `grid_square_stats__easting`
+			- `grid_square_stats__northing`
+			- `grid_square_stats__lat`
+			- `grid_square_stats__lon`
+
+			Include `grid-square-stats` when the lat/long or easting/northing are required for mapping.
+		- `taxon`:
+			- `taxon__scientific_name`
+			- `taxon__scientific_name_authorship`
+			- `taxon__scientific_name_identifier`
+			- `taxon__vernacular_name`
+
+			Include `taxon` for additional info about the taxon concept.
+		- `taxon-name`
+			- `taxon_name__uuid`
+			- `taxon_name__name`
+			- `taxon_name__given_name_identifier`
+			- `taxon_name__accepted`
+			- `taxon_name__scientific`
+
+			Include for additional info about the given taxon name.
+		- `taxon-rank` -
+			- `taxon_rank__rank`
+			- `taxon_rank__abbr`
+			- `taxon_rank__sort_order`
+		- `taxon-group`:
+			-	`taxon_group__title`
+			-	`taxon_group__friendly`
+			-	`taxon_group__external_key`
+		- `parent-taxa`:
+			- `<rank>__scientific_name`, e.g. `family__scientific_name`
+			- `<rank>__vernacular_name`, e.g. `family__vernacular_name`
+			Include `parent-taxa` for scientific and vernacular names for the configured the taxonomic
+			hierarchy.
 	- include-only sort/filter fields are available when their include is requested
 
 Examples:
 
-- Request: `/api/v1/occurrences?include=taxon,taxon_name,taxon_rank,taxon_group,grid_square_stats&taxon_identifier[eq]=NHMSYS0021054498`
+- Request: `/api/v1/occurrences?include=taxon,taxon-name,taxon-rank,taxon-group,grid-square-stats&taxon_identifier[eq]=NBNORG0021054498`
 	Response:
 
 ```json
@@ -466,17 +513,7 @@ Examples:
 	"data": [
 		{
 			"unique_key": "NBN:123456789",
-			"taxon_identifier": "NHMSYS0021054498",
-			"taxon_name_uuid": "3d77f8e7-e2e8-4d74-9d4d-cff4d11130e8",
-			"scientific_name": "Bombus terrestris",
-			"vernacular_name": "Buff-tailed Bumblebee",
-			"given_name": "Bombus terrestris",
-			"taxon_rank": "Species",
-			"taxon_group_external_key": "bees",
-			"easting": 410000,
-			"northing": 110000,
-			"lat": 50.1234567,
-			"lon": -1.2345678,
+			"taxon_identifier": "NBNORG0021054498",
 			"from_date": "2024-05-11",
 			"to_date": "2024-05-11",
 			"grid_ref": "SU123456",
@@ -488,8 +525,26 @@ Examples:
 			"sex": "female",
 			"life_stage": "adult",
 			"organism_quantity": "1",
-			"data_source_abbr": "NBN",
-			"higher_geography_identifier": 13
+			"higher_geography_identifier": 13,
+			"grid_square_stats__easting": 410000,
+			"grid_square_stats__northing": 110000,
+			"grid_square_stats__lat": 52.8261,
+			"grid_square_stats__lon": 1.4458,
+			"taxon__scientific_name": "Bombus terrestris",
+			"taxon__scientific_name_authorship": "L.",
+			"taxon__scientific_name_identifier": "NHMSYS0073AC441A",
+			"taxon__vernacular_name": "Buff-tailed Bumblebee",
+			"taxon_name__uuid": "3d77f8e7-e2e8-4d74-9d4d-cff4d11130e8",
+			"taxon_name__name": "Buff-tailed Bumblebee",
+			"taxon_name__given_name_identifier": "9876FGH",
+			"taxon_name__accepted": 0,
+			"taxon_name__scientific": 0,
+			"taxon_rank__rank": "Species",
+			"taxon_rank__abbr": "sp",
+			"taxon_rank__sort_order": 300,
+			"taxon_group__title": "insect - hymenoptera",
+			"taxon_group__friendly": "Bees, Wasps and Ants",
+			"taxon_group__external_key": "ABC123"
 		}
 	],
 	"meta": {
@@ -499,8 +554,8 @@ Examples:
 		"total": 57
 	},
 	"links": {
-		"self": "/api/v1/occurrences?include=taxon,taxon_name,taxon_rank,taxon_group&taxon_identifier[eq]=NHMSYS0021054498",
-		"next": "/api/v1/occurrences?include=taxon,taxon_name,taxon_rank,taxon_group&taxon_identifier[eq]=NHMSYS0021054498&limit=1000&offset=1000",
+		"self": "/api/v1/occurrences?include=taxon,taxon-name,taxon-rank,taxon-group&taxon_identifier[eq]=NBNORG0021054498",
+		"next": "/api/v1/occurrences?include=taxon,taxon-name,taxon-rank,taxon-group&taxon_identifier[eq]=NBNORG0021054498&limit=1000&offset=1000",
 		"prev": null
 	}
 }
@@ -515,7 +570,6 @@ Examples:
 		{
 			"unique_key": "iRecord:998877",
 			"taxon_identifier": "NHMSYS0021700001",
-			"taxon_name_uuid": "e8ac2ca7-5cb8-4b74-9b4e-8fd48b6605d5",
 			"from_date": "2022-07-03",
 			"to_date": "2022-07-03",
 			"grid_ref": "SU441100",
@@ -527,7 +581,6 @@ Examples:
 			"sex": null,
 			"life_stage": "larva",
 			"organism_quantity": "3",
-			"data_source_abbr": "iRecord",
 			"higher_geography_identifier": 13
 		}
 	],
@@ -554,7 +607,6 @@ Examples:
 		{
 			"unique_key": "NBN:77001122",
 			"taxon_identifier": "NHMSYS0021900211",
-			"taxon_name_uuid": "afddfae5-743a-4aaf-93f0-b0cbb5941a3a",
 			"from_date": "2025-08-19",
 			"to_date": "2025-08-19",
 			"grid_ref": "SU221870",
@@ -566,7 +618,6 @@ Examples:
 			"sex": "male",
 			"life_stage": "adult",
 			"organism_quantity": "2",
-			"data_source_abbr": "NBN",
 			"higher_geography_identifier": 12
 		}
 	],
@@ -654,12 +705,34 @@ Examples:
 - Item path: `GET /api/v1/taxa/{taxon_identifier}`
 - Unique identifier: `taxon_identifier`
 - Exposed fields:
-	- `taxon_identifier`, `scientific_name_identifier`, `scientific_name`, `scientific_name_authorship`, `vernacular_name`
+	- `taxon_identifier`, `scientific_name_identifier`, `scientific_name`,
+	  `scientific_name_authorship`, `vernacular_name`, `taxon_group_external_key`, `id_difficulty`,
+		`recording_scheme_external_key`, `conservation_status`, `taxon_remarks`, `rarity_group_name`
 	- dynamic taxon rank fields by configured rank identifier
-	- `taxon_group_external_key`, `id_difficulty`, `recording_scheme_external_key`, `conservation_status`, `taxon_remarks`, `rarity_group_name`
 - Filterable fields:
 	- all exposed taxa fields above
 	- excludes: `blocked`, `blocked_reason`, `created_at`, `updated_at`, `deleted_at`
+- Include:
+	- query parameter: `include`
+	- supported values and added fields:
+		- `recording-scheme`:
+			- `recording_scheme__external_key`
+			- `recording_scheme__title`
+		- `taxon-group`:
+			-	`taxon_group__title`
+			-	`taxon_group__friendly`
+			-	`taxon_group__external_key`
+		- `taxon-rank` -
+			- `taxon_rank__rank`
+			- `taxon_rank__abbr`
+			- `taxon_rank__sort_order`
+		- `parent-taxa`:
+			- `<rank>__scientific_name`, e.g. `family__scientific_name`
+			- `<rank>__vernacular_name`, e.g. `family__vernacular_name`
+
+			Include `parent-taxa` for scientific and vernacular names for the configured the taxonomic
+			hierarchy.
+	- include-only sort/filter fields are available when their include is requested
 
 Examples:
 
@@ -836,6 +909,27 @@ Examples:
 - Unique identifier: `uuid`
 - Exposed fields: `uuid`, `taxon_identifier`, `name`, `scientific_name_identifier`, `accepted`, `scientific`
 - Filterable fields: `uuid`, `taxon_identifier`, `name`, `scientific_name_identifier`, `accepted`, `scientific`
+- Include:
+	- query parameter: `include`
+	- supported values and added fields:
+		- `taxon`:
+			- `taxon__scientific_name`
+			- `taxon__scientific_name_authorship`
+			- `taxon__scientific_name_identifier`
+			- `taxon__vernacular_name`
+
+			Include `taxon` for additional info about the taxon concept.
+		- `taxon-rank`:
+			- `taxon_rank__rank`
+			- `taxon_rank__abbr`
+			- `taxon_rank__sort_order`
+		- `taxon-group`:
+			-	`taxon_group__title`
+			-	`taxon_group__friendly`
+			-	`taxon_group__external_key`
+		- `parent-taxa`:
+			- `<rank>__scientific_name`, e.g. `family__scientific_name`
+			- `<rank>__vernacular_name`, e.g. `family__vernacular_name`
 
 Examples:
 
@@ -897,7 +991,7 @@ Examples:
 }
 ```
 
-- Request: `/api/v1/taxon-names?taxon_identifier[eq]=NHMSYS0021054498`
+- Request: `/api/v1/taxon-names?taxon_identifier[eq]=NBNORG0021054498`
 	Response:
 
 ```json
@@ -905,7 +999,7 @@ Examples:
 	"data": [
 		{
 			"uuid": "3d77f8e7-e2e8-4d74-9d4d-cff4d11130e8",
-			"taxon_identifier": "NHMSYS0021054498",
+			"taxon_identifier": "NBNORG0021054498",
 			"name": "Bombus terrestris",
 			"scientific_name_identifier": "TVK-001",
 			"accepted": 1,
@@ -913,7 +1007,7 @@ Examples:
 		},
 		{
 			"uuid": "f54da6a0-5f0b-4de2-a10a-2693b193f5f2",
-			"taxon_identifier": "NHMSYS0021054498",
+			"taxon_identifier": "NBNORG0021054498",
 			"name": "Buff-tailed Bumblebee",
 			"scientific_name_identifier": "TVK-001",
 			"accepted": 1,
@@ -927,7 +1021,7 @@ Examples:
 		"total": 2
 	},
 	"links": {
-		"self": "/api/v1/taxon-names?taxon_identifier[eq]=NHMSYS0021054498",
+		"self": "/api/v1/taxon-names?taxon_identifier[eq]=NBNORG0021054498",
 		"next": null,
 		"prev": null
 	}
@@ -975,17 +1069,21 @@ Examples:
 - Path: `GET /api/v1/grid-square-stats`
 - Item path: `GET /api/v1/grid-square-stats/{uuid}`
 - Unique identifier: `uuid`
-- Exposed fields: `uuid`, `square`, `geographic_region_identifier`, `easting`, `northing`, `partial`, `occurrences_count`, `species_count`
-- Filterable fields: `uuid`, `square`, `geographic_region_identifier`, `easting`, `northing`, `partial`, `occurrences_count`, `species_count`
+- Exposed fields: `uuid`, `square`, `easting`, `northing`, `lon`, `lat`, `partial`,
+  `occurrences_count`, `species_count`, `higher_geography_identifier`
+- Filterable fields: `uuid`, `square`, `easting`, `northing`, `lon`, `lat`, `partial`,
+  `occurrences_count`, `species_count`, `higher_geography_identifier`
 - Include:
 	- query parameter: `include`
-	- supported value: `geographic_region`
-	- included fields: `geographic_region`, `geographic_region_location_type`
-	- include-only sort/filter fields are available when `include=geographic_region`
+	- supported values and added fields:
+		- `geographic-region`:
+			- `geographic_region__higher_geography`
+			-	`geographic_region__location_type`
+	- include-only sort/filter fields are available when `include=geographic-region`
 
 Examples:
 
-- Request: `/api/v1/grid-square-stats?include=geographic_region&partial[eq]=0`
+- Request: `/api/v1/grid-square-stats?include=geographic-region&partial[eq]=0`
 	Response:
 
 ```json
@@ -994,14 +1092,16 @@ Examples:
 		{
 			"uuid": "c5b2d8f0-c8bb-4b03-9be8-f1a6ea02cfd8",
 			"square": "SU41F",
-			"geographic_region_identifier": null,
-			"geographic_region": "South Hampshire",
-			"geographic_region_location_type": "Vice County",
 			"easting": 441000,
 			"northing": 110000,
+			"lon": -1.9343,
+			"lat": 54.241,
+			"higher_geography_identifier": null,
 			"partial": 0,
 			"occurrences_count": 122,
-			"species_count": 84
+			"species_count": 84,
+			"geographic_region__higher_geography": "South Hampshire",
+			"geographic_region__location_type": "Vice County"
 		}
 	],
 	"meta": {
@@ -1011,14 +1111,14 @@ Examples:
 		"total": 628
 	},
 	"links": {
-		"self": "/api/v1/grid-square-stats?include=geographic_region&partial[eq]=0",
+		"self": "/api/v1/grid-square-stats?include=geographic-region&partial[eq]=0",
 		"next": null,
 		"prev": null
 	}
 }
 ```
 
-- Request: `/api/v1/grid-square-stats?geographic_region_identifier[eq]=13&species_count[gte]=50&sort=-species_count`
+- Request: `/api/v1/grid-square-stats?higher_geography_identifier[eq]=13&species_count[gte]=50&sort=-species_count`
 	Response:
 
 ```json
@@ -1027,9 +1127,11 @@ Examples:
 		{
 			"uuid": "8f1af0f3-5140-4ee4-bce5-6efe8b33731c",
 			"square": "SU38K",
-			"geographic_region_identifier": 13,
 			"easting": 438000,
 			"northing": 108000,
+			"lon": -1.5253,
+			"lat": 54.0982,
+			"higher_geography_identifier": 13,
 			"partial": 1,
 			"occurrences_count": 201,
 			"species_count": 133
@@ -1042,7 +1144,7 @@ Examples:
 		"total": 47
 	},
 	"links": {
-		"self": "/api/v1/grid-square-stats?geographic_region_identifier[eq]=13&species_count[gte]=50&sort=-species_count",
+		"self": "/api/v1/grid-square-stats?higher_geography_identifier[eq]=13&species_count[gte]=50&sort=-species_count",
 		"next": null,
 		"prev": null
 	}
@@ -1055,27 +1157,49 @@ Examples:
 - Item path: `GET /api/v1/taxon-stats/{uuid}`
 - Unique identifier: `uuid`
 - Exposed fields:
-	- `uuid`, `taxon_identifier`, `geographic_region_identifier`
-	- `occurrences_count`, `grid_square_count`
-	- `first_record_date`, `last_record_date`, `first_recorder`, `last_recorder`
-	- `first_verified_record_date`, `last_verified_record_date`, `first_verified_recorder`, `last_verified_recorder`
+	- `uuid`, `taxon_identifier`, `higher_geography_identifier`,
+	  `occurrences_count`, `grid_square_count`, `first_record_date`, `last_record_date`,
+		`first_recorder`, `last_recorder`, `first_verified_record_date`, `last_verified_record_date`,
+		`first_verified_recorder`, `last_verified_recorder`
 - Filterable fields:
 	- all exposed taxon-stats fields above
 	- rows for blocked taxa are always excluded
 - Include:
 	- query parameter: `include`
-	- supported values: `taxon`, `taxon_rank`, `taxon_group`, `parent_taxa`, `geographic_region`
-	- included fields:
-		- `taxon`: `taxon_scientific_name`, `taxon_vernacular_name`
-		- `taxon_rank`: `taxon_rank`
-		- `taxon_group`: `taxon_group_external_key`
-		- `parent_taxa`: parent taxon scientific/vernacular fields by configured rank (for example `family_scientific_name`, `family_vernacular_name`)
-		- `geographic_region`: `geographic_region`
+	- supported values and added fields:
+		- `geographic-region`:
+			- `geographic_region__higher_geography`
+			-	`geographic_region__location_type`
+		- `taxon`:
+			- `taxon__scientific_name`
+			- `taxon__scientific_name_authorship`
+			- `taxon__scientific_name_identifier`
+			- `taxon__vernacular_name`
+
+			Include `taxon` for additional info about the taxon concept.
+		- `taxon-rank` -
+			- `taxon_rank__rank`
+			- `taxon_rank__abbr`
+			- `taxon_rank__sort_order`
+
+			`taxon-rank` is only available if taxon included.
+		- `taxon-group`:
+			-	`taxon_group__title`
+			-	`taxon_group__friendly`
+			-	`taxon_group__external_key`
+
+			`taxon-group` is only available if taxon included.
+		- `parent-taxa`:
+			- `<rank>__scientific_name`, e.g. `family__scientific_name`
+			- `<rank>__vernacular_name`, e.g. `family__vernacular_name`
+
+			Include `parent-taxa` for scientific and vernacular names for the configured the taxonomic
+			hierarchy. `parent-taxa` is only available if taxon included.
 	- include-only sort/filter fields are available when their include is requested
 
 Examples:
 
-- Request: `/api/v1/taxon-stats?include=taxon,taxon_rank,taxon_group,geographic_region&taxon_identifier[eq]=NHMSYS0021054498`
+- Request: `/api/v1/taxon-stats?include=taxon,taxon-rank,taxon-group,geographic-region&taxon_identifier[eq]=NBNORG0021054498`
 	Response:
 
 ```json
@@ -1083,13 +1207,8 @@ Examples:
 	"data": [
 		{
 			"uuid": "f1b02df6-6db5-4d0d-b277-7e54b08a4f1c",
-			"taxon_identifier": "NHMSYS0021054498",
-			"geographic_region_identifier": null,
-			"taxon_scientific_name": "Bombus terrestris",
-			"taxon_vernacular_name": "Buff-tailed Bumblebee",
-			"taxon_rank": "Species",
-			"taxon_group_external_key": "bees",
-			"geographic_region": "South Hampshire",
+			"taxon_identifier": "NBNORG0021054498",
+			"higher_geography_identifier": null,
 			"occurrences_count": 374,
 			"grid_square_count": 119,
 			"first_record_date": "1987-06-19",
@@ -1099,7 +1218,19 @@ Examples:
 			"first_verified_record_date": "1988-05-14",
 			"last_verified_record_date": "2025-09-03",
 			"first_verified_recorder": "J. Winter",
-			"last_verified_recorder": "R. Hall"
+			"last_verified_recorder": "R. Hall",
+			"geographic_region__higher_geography": "South Hampshire",
+			"geographic_region__location_type": "Vice County",
+			"taxon__scientific_name": "Bombus terrestris",
+			"taxon__scientific_name_authorship": "L.",
+			"taxon__scientific_name_identifier": "XYZ123",
+			"taxon__vernacular_name": "Buff-tailed Bumblebee",
+			"taxon_rank__rank": "Species",
+			"taxon_rank__abbr": "sp",
+			"taxon_rank__sort_order": 300,
+			"taxon_group__title": "insect - hymenoptera",
+			"taxon_group__friendly": "Bees, Wasps and Ants",
+			"taxon_group__external_key": "ABC123"
 		}
 	],
 	"meta": {
@@ -1109,14 +1240,14 @@ Examples:
 		"total": 1
 	},
 	"links": {
-		"self": "/api/v1/taxon-stats?include=taxon,taxon_rank,taxon_group,geographic_region&taxon_identifier[eq]=NHMSYS0021054498",
+		"self": "/api/v1/taxon-stats?include=taxon,taxon-rank,taxon-group,geographic-region&taxon_identifier[eq]=NBNORG0021054498",
 		"next": null,
 		"prev": null
 	}
 }
 ```
 
-- Request: `/api/v1/taxon-stats?geographic_region_identifier[eq]=13&occurrences_count[gte]=10&sort=-occurrences_count`
+- Request: `/api/v1/taxon-stats?higher_geography_identifier[eq]=13&occurrences_count[gte]=10&sort=-occurrences_count`
 	Response:
 
 ```json
@@ -1124,8 +1255,8 @@ Examples:
 	"data": [
 		{
 			"uuid": "29dd365b-4c63-4f11-ac1f-2d53131d402e",
-			"taxon_identifier": "NHMSYS0021700001",
-			"geographic_region_identifier": 13,
+			"taxon_identifier": "NBNORG0021054498",
+			"higher_geography_identifier": 13,
 			"occurrences_count": 118,
 			"grid_square_count": 34,
 			"first_record_date": "1999-04-12",
@@ -1145,7 +1276,7 @@ Examples:
 		"total": 91
 	},
 	"links": {
-		"self": "/api/v1/taxon-stats?geographic_region_identifier[eq]=13&occurrences_count[gte]=10&sort=-occurrences_count",
+		"self": "/api/v1/taxon-stats?higher_geography_identifier[eq]=13&occurrences_count[gte]=10&sort=-occurrences_count",
 		"next": null,
 		"prev": null
 	}
@@ -1157,24 +1288,46 @@ Examples:
 - Path: `GET /api/v1/taxon-year-stats`
 - Item path: `GET /api/v1/taxon-year-stats/{uuid}`
 - Unique identifier: `uuid`
-- Exposed fields: `uuid`, `taxon_identifier`, `geographic_region_identifier`, `year`, `occurrences_count`, `grid_square_count`
+- Exposed fields: `uuid`, `taxon_identifier`, `higher_geography_identifier`, `year`, `occurrences_count`, `grid_square_count`
 - Filterable fields:
-	- `uuid`, `taxon_identifier`, `geographic_region_identifier`, `year`, `occurrences_count`, `grid_square_count`
+	- `uuid`, `taxon_identifier`, `higher_geography_identifier`, `year`, `occurrences_count`, `grid_square_count`
 	- rows for blocked taxa are always excluded
 - Include:
 	- query parameter: `include`
-	- supported values: `taxon`, `taxon_rank`, `taxon_group`, `parent_taxa`, `geographic_region`
-	- included fields:
-		- `taxon`: `taxon_scientific_name`, `taxon_vernacular_name`
-		- `taxon_rank`: `taxon_rank`
-		- `taxon_group`: `taxon_group_external_key`
-		- `parent_taxa`: parent taxon scientific/vernacular fields by configured rank (for example `family_scientific_name`, `family_vernacular_name`)
-		- `geographic_region`: `geographic_region`
+	- supported values and added fields:
+		- `geographic-region`:
+			- `geographic_region__higher_geography`
+			-	`geographic_region__location_type`
+		- `taxon`:
+			- `taxon__scientific_name`
+			- `taxon__scientific_name_authorship`
+			- `taxon__scientific_name_identifier`
+			- `taxon__vernacular_name`
+
+			Include `taxon` for additional info about the taxon concept.
+		- `taxon-rank` -
+			- `taxon_rank__rank`
+			- `taxon_rank__abbr`
+			- `taxon_rank__sort_order`
+
+			`taxon-rank` is only available if taxon included.
+		- `taxon-group`:
+			-	`taxon_group__title`
+			-	`taxon_group__friendly`
+			-	`taxon_group__external_key`
+
+			`taxon-group` is only available if taxon included.
+		- `parent-taxa`:
+			- `<rank>__scientific_name`, e.g. `family__scientific_name`
+			- `<rank>__vernacular_name`, e.g. `family__vernacular_name`
+
+			Include `parent-taxa` for scientific and vernacular names for the configured the taxonomic
+			hierarchy.
 	- include-only sort/filter fields are available when their include is requested
 
 Examples:
 
-- Request: `/api/v1/taxon-year-stats?include=taxon,taxon_rank,taxon_group,geographic_region&taxon_identifier[eq]=NHMSYS0021054498&year[gte]=2016`
+- Request: `/api/v1/taxon-year-stats?include=taxon,taxon-rank,taxon-group,geographic-region&taxon_identifier[eq]=NBNORG0021054498&year[gte]=2016`
 	Response:
 
 ```json
@@ -1182,29 +1335,43 @@ Examples:
 	"data": [
 		{
 			"uuid": "f4eecddf-c532-4f66-b1b8-3d4245e3b478",
-			"taxon_identifier": "NHMSYS0021054498",
-			"geographic_region_identifier": null,
-			"taxon_scientific_name": "Bombus terrestris",
-			"taxon_vernacular_name": "Buff-tailed Bumblebee",
-			"taxon_rank": "Species",
-			"taxon_group_external_key": "bees",
-			"geographic_region": "South Hampshire",
+			"taxon_identifier": "NBNORG0021054498",
+			"higher_geography_identifier": null,
 			"year": 2024,
 			"occurrences_count": 42,
-			"grid_square_count": 18
+			"grid_square_count": 18,
+			"geographic_region__higher_geography": "South Hampshire",
+			"geographic_region__location_type": "Vice County",
+			"taxon__scientific_name": "Bombus terrestris",
+			"taxon__scientific_name_authorship": "L.",
+			"taxon__scientific_name_identifier": "XYZ123",
+			"taxon__vernacular_name": "Buff-tailed Bumblebee",
+			"taxon_rank__rank": "Species",
+			"taxon_rank__abbr": "sp",
+			"taxon_rank__sort_order": 300,
+			"taxon_group__title": "insect - hymenoptera",
+			"taxon_group__friendly": "Bees, Wasps and Ants",
+			"taxon_group__external_key": "ABC123"
 		},
 		{
 			"uuid": "0d4f09bb-b2b2-4522-a80c-82169f4989c4",
-			"taxon_identifier": "NHMSYS0021054498",
-			"geographic_region_identifier": null,
-			"taxon_scientific_name": "Bombus terrestris",
-			"taxon_vernacular_name": "Buff-tailed Bumblebee",
-			"taxon_rank": "Species",
-			"taxon_group_external_key": "bees",
-			"geographic_region": "South Hampshire",
+			"taxon_identifier": "NBNORG0021054498",
+			"higher_geography_identifier": null,
 			"year": 2025,
 			"occurrences_count": 39,
-			"grid_square_count": 16
+			"grid_square_count": 16,
+			"geographic_region__higher_geography": "South Hampshire",
+			"geographic_region__location_type": "Vice County",
+			"taxon__scientific_name": "Bombus terrestris",
+			"taxon__scientific_name_authorship": "L.",
+			"taxon__scientific_name_identifier": "XYZ123",
+			"taxon__vernacular_name": "Buff-tailed Bumblebee",
+			"taxon_rank__rank": "Species",
+			"taxon_rank__abbr": "sp",
+			"taxon_rank__sort_order": 300,
+			"taxon_group__title": "insect - hymenoptera",
+			"taxon_group__friendly": "Bees, Wasps and Ants",
+			"taxon_group__external_key": "ABC123"
 		}
 	],
 	"meta": {
@@ -1214,14 +1381,14 @@ Examples:
 		"total": 10
 	},
 	"links": {
-		"self": "/api/v1/taxon-year-stats?include=taxon,taxon_rank,taxon_group,geographic_region&taxon_identifier[eq]=NHMSYS0021054498&year[gte]=2016",
+		"self": "/api/v1/taxon-year-stats?include=taxon,taxon-rank,taxon-group,geographic-region&taxon_identifier[eq]=NBNORG0021054498&year[gte]=2016",
 		"next": null,
 		"prev": null
 	}
 }
 ```
 
-- Request: `/api/v1/taxon-year-stats?geographic_region_identifier[eq]=13&year[eq]=2025&sort=-occurrences_count`
+- Request: `/api/v1/taxon-year-stats?higher_geography_identifier[eq]=13&year[eq]=2025&sort=-occurrences_count`
 	Response:
 
 ```json
@@ -1230,7 +1397,7 @@ Examples:
 		{
 			"uuid": "f32f208d-45af-44da-9bb6-5a26f61a95c8",
 			"taxon_identifier": "NHMSYS0021700001",
-			"geographic_region_identifier": 13,
+			"higher_geography_identifier": 13,
 			"year": 2025,
 			"occurrences_count": 26,
 			"grid_square_count": 12
@@ -1243,7 +1410,7 @@ Examples:
 		"total": 280
 	},
 	"links": {
-		"self": "/api/v1/taxon-year-stats?geographic_region_identifier[eq]=13&year[eq]=2025&sort=-occurrences_count",
+		"self": "/api/v1/taxon-year-stats?higher_geography_identifier[eq]=13&year[eq]=2025&sort=-occurrences_count",
 		"next": null,
 		"prev": null
 	}

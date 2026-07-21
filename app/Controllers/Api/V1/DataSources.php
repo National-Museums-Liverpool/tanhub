@@ -33,7 +33,7 @@ class DataSources extends ApiResourceController
     protected function getBuilder(object $db, array $includes = []): BaseBuilder
     {
         return $db->table('data_sources')
-            ->select($this->getFieldSql($includes));
+            ->select($this->getFieldSql($includes), false);
     }
 
     /**

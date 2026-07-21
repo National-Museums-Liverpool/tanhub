@@ -16,15 +16,20 @@ class TaxonStats extends ApiResourceController
      * @return string[]
      *   Resource name list.
      */
-    protected function getAllowedIncludes(): array
+    protected function getAllowedIncludes(array $requested): array
     {
-        return [
+        $includes = [
             'geographic-region',
-            'parent-taxa',
             'taxon',
-            'taxon-group',
-            'taxon-rank',
         ];
+        if (in_array('taxon', $requested, true)) {
+            $includes = array_merge($includes, [
+                'taxon-rank',
+                'taxon-group',
+                'parent-taxa',
+            ]);
+        }
+        return $includes;
     }
 
     /**
@@ -36,19 +41,19 @@ class TaxonStats extends ApiResourceController
     protected function allowedFields(array $includes = []): array
     {
         $fields = [
-            'uuid' => 'uuid',
-            'taxon__taxon_identifier' => 'taxon__taxon_identifier',
-            'geographic_region__higher_geography_identifier' => 'geographic_region__higher_geography_identifier',
-            'occurrences_count' => 'occurrences_count',
-            'grid_square_count' => 'grid_square_count',
-            'first_record_date' => 'first_record_date',
-            'last_record_date' => 'last_record_date',
-            'first_recorder' => 'first_recorder',
-            'last_recorder' => 'last_recorder',
-            'first_verified_record_date' => 'first_verified_record_date',
-            'last_verified_record_date' => 'last_verified_record_date',
-            'first_verified_recorder' => 'first_verified_recorder',
-            'last_verified_recorder' => 'last_verified_recorder',
+            'uuid' => 'ts.uuid',
+            'taxon_identifier' => 't.taxon_identifier',
+            'higher_geography_identifier' => 'gr.higher_geography_identifier',
+            'occurrences_count' => 'ts.occurrences_count',
+            'grid_square_count' => 'ts.grid_square_count',
+            'first_record_date' => 'ts.first_record_date',
+            'last_record_date' => 'ts.last_record_date',
+            'first_recorder' => 'ts.first_recorder',
+            'last_recorder' => 'ts.last_recorder',
+            'first_verified_record_date' => 'ts.first_verified_record_date',
+            'last_verified_record_date' => 'ts.last_verified_record_date',
+            'first_verified_recorder' => 'ts.first_verified_recorder',
+            'last_verified_recorder' => 'ts.last_verified_recorder',
         ];
         if ($this->hasInclude($includes, 'geographic-region')) {
             $fields['geographic_region__higher_geography'] = 'gr.higher_geography';
@@ -63,8 +68,9 @@ class TaxonStats extends ApiResourceController
 
             if ($this->hasInclude($includes, 'parent-taxa')) {
                 foreach ($this->dynamicRankAliases() as $alias) {
-                    $fields[$alias . '__scientific_name'] = $alias . '.scientific_name';
-                    $fields[$alias . '__vernacular_name'] = $alias . '.vernacular_name';
+                    $joinAlias = $this->parentTaxaJoinAlias($alias);
+                    $fields[$alias . '__scientific_name'] = $joinAlias . '.scientific_name';
+                    $fields[$alias . '__vernacular_name'] = $joinAlias . '.vernacular_name';
                 }
             }
 
@@ -93,13 +99,14 @@ class TaxonStats extends ApiResourceController
     protected function getBuilder(object $db, array $includes = []): BaseBuilder
     {
         $builder = $db->table('taxon_stats ts')
-            ->select($this->getFieldSql($includes))
+            ->select($this->getFieldSql($includes), false)
             ->join('taxa t', 't.id = ts.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0')
-            ->join('geographic_regions gr', 'gr.id = t.geographic_region_id AND gr.deleted_at IS NULL', 'left');
+            ->join('geographic_regions gr', 'gr.id = ts.geographic_region_id AND gr.deleted_at IS NULL', 'left');
 
         if ($this->hasInclude($includes, 'parent-taxa')) {
             foreach ($this->dynamicRankAliases() as $alias) {
-                $builder->join("taxa {$alias}", "{$alias}.id = t.{$alias}_id", 'left');
+                $joinAlias = $this->parentTaxaJoinAlias($alias);
+                $builder->join("taxa {$joinAlias}", "{$joinAlias}.id = t.{$alias}_id", 'left');
             }
         }
         if ($this->hasInclude($includes, 'taxon-group')) {

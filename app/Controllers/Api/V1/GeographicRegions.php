@@ -16,7 +16,7 @@ class GeographicRegions extends ApiResourceController
      * @return string[]
      *   Resource name list.
      */
-    protected function getAllowedIncludes(): array
+    protected function getAllowedIncludes(array $requested): array
     {
         return ['data-source'];
     }
@@ -51,8 +51,8 @@ class GeographicRegions extends ApiResourceController
     protected function getBuilder(object $db, array $includes = []): BaseBuilder
     {
         $builder =  $db->table('geographic_regions g')
-            ->select($this->getFieldSql($includes))
-            ->where('g.deleted_at', null);
+            ->select($this->getFieldSql($includes), false)
+            ->where('g.deleted_at', null, false);
         if ($this->hasInclude($includes, 'data-source')) {
             $builder->join('data_sources ds', 'ds.id = g.data_source_id', 'left');
         }

@@ -15,7 +15,7 @@ class GridSquareStats extends ApiResourceController
      * @return string[]
      *   Resource name list.
      */
-    protected function getAllowedIncludes(): array
+    protected function getAllowedIncludes(array $requested): array
     {
         return ['geographic-region'];
     }
@@ -38,7 +38,7 @@ class GridSquareStats extends ApiResourceController
             'partial' => 'gs.partial',
             'occurrences_count' => 'gs.occurrences_count',
             'species_count' => 'gs.species_count',
-            'geographic_region__higher_geography_identifier' => 'gr.higher_geography_identifier',
+            'higher_geography_identifier' => 'gr.higher_geography_identifier',
         ];
 
         if ($this->hasInclude($includes, 'geographic-region')) {
@@ -58,7 +58,7 @@ class GridSquareStats extends ApiResourceController
     protected function getBuilder(object $db, array $includes = []): BaseBuilder
     {
         $builder = $db->table('grid_square_stats gs')
-            ->select($this->getFieldSql($includes))
+            ->select($this->getFieldSql($includes), false)
             ->join('geographic_regions gr', 'gr.id = gs.geographic_region_id AND gr.deleted_at IS NULL', 'left');
 
         return $builder;

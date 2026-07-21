@@ -3,6 +3,7 @@
 namespace App\Controllers\Api\V1;
 
 use CodeIgniter\Database\BaseBuilder;
+use CodeIgniter\Database\RawSql;
 use CodeIgniter\HTTP\ResponseInterface;
 
 /**
@@ -18,7 +19,7 @@ abstract class ApiResourceController extends ApiController
 
     abstract protected function getDefaultSortColumn(): string;
 
-    protected function getAllowedIncludes(): array
+    protected function getAllowedIncludes(array $requested): array
     {
         return [];
     }
@@ -104,9 +105,15 @@ abstract class ApiResourceController extends ApiController
      */
     public function show(string $key): ResponseInterface
     {
+        $includes = $this->getIncludes();
+
+        if ($includes instanceof ResponseInterface) {
+            return $includes;
+        }
+
         $db = db_connect();
 
-        $item = $this->getBuilder($db)
+        $item = $this->getBuilder($db, $includes)
             ->where($this->getDefaultKeyColumn(), $key)
             ->get()
             ->getRowArray();
@@ -393,6 +400,8 @@ abstract class ApiResourceController extends ApiController
      */
     protected function applyFilters(BaseBuilder $builder, array $filters): void
     {
+        $db = db_connect();
+
         foreach ($filters as $filter) {
             $column = (string) $filter['column'];
             $operator = (string) $filter['operator'];
@@ -400,7 +409,12 @@ abstract class ApiResourceController extends ApiController
 
             switch ($operator) {
                 case 'eq':
-                    $builder->where($column, $value);
+                    if ($value === null || $value === 'null') {
+                        $builder->where(new RawSql($column . ' IS NULL'));
+                        break;
+                    }
+
+                    $builder->where(new RawSql($column . ' = ' . $db->escape($value)));
                     break;
 
                 case 'in':
@@ -408,19 +422,20 @@ abstract class ApiResourceController extends ApiController
                         ? $value
                         : array_filter(array_map('trim', explode(',', (string) $value)), static fn (string $v): bool => $v !== '');
 
-                    $builder->whereIn($column, $values === [] ? [''] : $values);
+                    $escapedValues = array_map(static fn ($v) => $db->escape($v), $values === [] ? [''] : $values);
+                    $builder->where(new RawSql($column . ' IN (' . implode(',', $escapedValues) . ')'));
                     break;
 
                 case 'contains':
-                    $builder->like($column, (string) $value, 'both', null, true);
+                    $builder->where(new RawSql('LOWER(' . $column . ') LIKE ' . $db->escape('%' . mb_strtolower((string) $value, 'UTF-8') . '%')));
                     break;
 
                 case 'gte':
-                    $builder->where($column . ' >=', $value);
+                    $builder->where(new RawSql($column . ' >= ' . $db->escape($value)));
                     break;
 
                 case 'lte':
-                    $builder->where($column . ' <=', $value);
+                    $builder->where(new RawSql($column . ' <= ' . $db->escape($value)));
                     break;
             }
         }
@@ -434,7 +449,8 @@ abstract class ApiResourceController extends ApiController
     protected function applySorts(BaseBuilder $builder, array $sorts): void
     {
         foreach ($sorts as $sort) {
-            $builder->orderBy($sort['column'], $sort['direction']);
+            // Sort columns come from allow-lists and may include aliases/expressions.
+            $builder->orderBy($sort['column'], $sort['direction'], false);
         }
     }
 
@@ -473,7 +489,7 @@ abstract class ApiResourceController extends ApiController
         }
 
         $parts = array_filter(array_map('trim', explode(',', strtolower($raw))), static fn (string $item): bool => $item !== '');
-        $supported = $this->getAllowedIncludes();
+        $supported = $this->getAllowedIncludes($parts);
         $includes = [];
 
         foreach ($parts as $part) {
@@ -509,5 +525,13 @@ abstract class ApiResourceController extends ApiController
         $rankStrings = array_map(static fn ($rank): string => (string) $rank, $scalarRanks);
 
         return $this->resolveAvailableTaxonRankAliases($rankStrings);
+    }
+
+    /**
+     * Build a SQL-safe join alias for parent taxa rank joins.
+     */
+    protected function parentTaxaJoinAlias(string $rankAlias): string
+    {
+        return 'pt_' . $rankAlias;
     }
 }

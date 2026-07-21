@@ -16,7 +16,7 @@ class Taxa extends ApiResourceController
      * @return string[]
      *   Resource name list.
      */
-    protected function getAllowedIncludes(): array
+    protected function getAllowedIncludes(array $requested): array
     {
         return [
             'parent-taxa',
@@ -48,8 +48,9 @@ class Taxa extends ApiResourceController
 
         if ($this->hasInclude($includes, 'parent-taxa')) {
             foreach ($this->dynamicRankAliases() as $alias) {
-                $fields[$alias . '__scientific_name'] = $alias . '.scientific_name';
-                $fields[$alias . '__vernacular_name'] = $alias . '.vernacular_name';
+                $joinAlias = $this->parentTaxaJoinAlias($alias);
+                $fields[$alias . '__scientific_name'] = $joinAlias . '.scientific_name';
+                $fields[$alias . '__vernacular_name'] = $joinAlias . '.vernacular_name';
             }
         }
 
@@ -82,12 +83,13 @@ class Taxa extends ApiResourceController
     protected function getBuilder(object $db, array $includes = []): BaseBuilder
     {
         $builder = $db->table('taxa t')
-            ->select($this->getFieldSql($includes))
-            ->where('t.deleted_at', null)
-            ->where('t.blocked', 0);
+                ->select($this->getFieldSql($includes), false)
+            ->where('t.deleted_at', null, false)
+            ->where('t.blocked', 0, false);
         if ($this->hasInclude($includes, 'parent-taxa')) {
             foreach ($this->dynamicRankAliases() as $alias) {
-                $builder->join("taxa {$alias}", "{$alias}.id = t.{$alias}_id", 'left');
+                $joinAlias = $this->parentTaxaJoinAlias($alias);
+                $builder->join("taxa {$joinAlias}", "{$joinAlias}.id = t.{$alias}_id", 'left');
             }
         }
         if ($this->hasInclude($includes, 'recording-scheme')) {

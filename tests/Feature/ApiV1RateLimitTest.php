@@ -31,7 +31,9 @@ final class ApiV1RateLimitTest extends CIUnitTestCase
 
     public function testAnonymousRequestsAreRateLimited(): void
     {
-        for ($i = 0; $i < 20; $i++) {
+        $anonymousLimit = $this->getRateLimitIntEnv('api.rateLimitAnonymousCapacity', 20);
+
+        for ($i = 0; $i < $anonymousLimit; $i++) {
             $result = $this->get('api/v1/data-sources');
             $result->assertStatus(200);
         }
@@ -40,11 +42,13 @@ final class ApiV1RateLimitTest extends CIUnitTestCase
 
         $blocked->assertStatus(429);
         $blocked->assertHeader('Content-Type', 'application/problem+json; charset=UTF-8');
-        $blocked->assertHeader('X-RateLimit-Limit', '20');
+        $blocked->assertHeader('X-RateLimit-Limit', (string) $anonymousLimit);
     }
 
     public function testAuthenticatedRequestsUseHigherLimit(): void
     {
+        $authenticatedLimit = $this->getRateLimitIntEnv('api.rateLimitAuthenticatedCapacity', 60);
+
         $issued = $this->withBody(json_encode([
             'username' => 'api-user@example.com',
             'password' => 'Secret123!',
@@ -60,8 +64,21 @@ final class ApiV1RateLimitTest extends CIUnitTestCase
             ])->get('api/v1/data-sources');
 
             $result->assertStatus(200);
-            $result->assertHeader('X-RateLimit-Limit', '60');
+            $result->assertHeader('X-RateLimit-Limit', (string) $authenticatedLimit);
         }
+    }
+
+    private function getRateLimitIntEnv(string $name, int $default): int
+    {
+        $value = env($name);
+
+        if ($value === null || $value === '') {
+            return $default;
+        }
+
+        $parsed = (int) $value;
+
+        return $parsed > 0 ? $parsed : $default;
     }
 
     private function clearRateLimitBucket(string $path, string $identity): void

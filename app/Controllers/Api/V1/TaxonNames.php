@@ -15,7 +15,7 @@ class TaxonNames extends ApiResourceController
      * @return string[]
      *   Resource name list.
      */
-    protected function getAllowedIncludes(): array
+    protected function getAllowedIncludes(array $requested): array
     {
         return [
             'parent-taxa',
@@ -33,19 +33,21 @@ class TaxonNames extends ApiResourceController
      */
     protected function allowedFields(array $includes = []): array
     {
+        // `uuid`, `taxon_identifier`, `name`, `scientific_name_identifier`, `accepted`, `scientific`
         $fields = [
             'uuid' => 'tn.uuid',
-            'name' => 'tn.name',
+            'taxon_identifier' => 't.taxon_identifier',
             'given_name_identifier' => 'tn.given_name_identifier',
-            'taxon__taxon_identifier' => 't.taxon_identifier',
+            'name' => 'tn.name',
             'accepted' => 'tn.accepted',
             'scientific' => 'tn.scientific',
         ];
 
         if ($this->hasInclude($includes, 'parent-taxa')) {
             foreach ($this->dynamicRankAliases() as $alias) {
-                $fields[$alias . '__scientific_name'] = $alias . '.scientific_name';
-                $fields[$alias . '__vernacular_name'] = $alias . '.vernacular_name';
+                $joinAlias = $this->parentTaxaJoinAlias($alias);
+                $fields[$alias . '__scientific_name'] = $joinAlias . '.scientific_name';
+                $fields[$alias . '__vernacular_name'] = $joinAlias . '.vernacular_name';
             }
         }
 
@@ -80,12 +82,13 @@ class TaxonNames extends ApiResourceController
     protected function getBuilder(object $db, array $includes = []): BaseBuilder
     {
         $builder = $db->table('taxon_names tn')
-            ->select($this->getFieldSql($includes))
+            ->select($this->getFieldSql($includes), false)
             ->join('taxa t', 't.id = tn.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0');
 
         if ($this->hasInclude($includes, 'parent-taxa')) {
             foreach ($this->dynamicRankAliases() as $alias) {
-                $builder->join("taxa {$alias}", "{$alias}.id = t.{$alias}_id", 'left');
+                $joinAlias = $this->parentTaxaJoinAlias($alias);
+                $builder->join("taxa {$joinAlias}", "{$joinAlias}.id = t.{$alias}_id", 'left');
             }
         }
         if ($this->hasInclude($includes, 'taxon-group')) {

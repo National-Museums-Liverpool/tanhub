@@ -126,26 +126,26 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $json = json_decode((string) $result->response()->getBody(), true);
 
         $this->assertSame(1, $json['meta']['count']);
-        $this->assertSame(12, $json['data'][0]['higher_geography_identifier']);
+        $this->assertSame('12', (string) $json['data'][0]['higher_geography_identifier']);
         $this->assertSame('NBN', $json['data'][0]['data_source__abbr']);
     }
 
     public function testGeographicRegionShowReturnsSingleObject(): void
     {
-        $result = $this->get('api/v1/geographic-regions/13');
+        $result = $this->get('api/v1/geographic-regions/13?include=data-source');
 
         $result->assertStatus(200);
 
         $json = json_decode((string) $result->response()->getBody(), true);
 
-        $this->assertSame(13, $json['higher_geography_identifier']);
+        $this->assertSame('13', (string) $json['higher_geography_identifier']);
         $this->assertSame('North Hampshire', $json['higher_geography']);
         $this->assertSame('iRecord', $json['data_source__abbr']);
     }
 
     public function testTaxaListSupportsFiltersAndExcludesBlocked(): void
     {
-        $result = $this->get('api/v1/taxa?scientific_name[contains]=bombus');
+        $result = $this->get('api/v1/taxa?scientific_name[contains]=bombus&include=taxon-group,recording-scheme');
 
         $result->assertStatus(200);
 
@@ -153,8 +153,8 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
         $this->assertSame(1, $json['meta']['count']);
         $this->assertSame('NHMSYS0021054498', $json['data'][0]['taxon_identifier']);
-        $this->assertSame('bees', $json['data'][0]['taxon_group_external_key']);
-        $this->assertSame('SCHEME-0001', $json['data'][0]['recording_scheme_external_key']);
+        $this->assertSame('bees', $json['data'][0]['taxon_group__external_key']);
+        $this->assertSame('SCHEME-0001', $json['data'][0]['recording_scheme__external_key']);
     }
 
     public function testTaxonShowReturnsNotFoundForBlockedTaxon(): void
@@ -225,7 +225,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $json = json_decode((string) $result->response()->getBody(), true);
 
         $this->assertSame(1, $json['meta']['count']);
-        $this->assertSame(12, $json['data'][0]['higher_geography_identifier']);
+        $this->assertSame('12', (string) $json['data'][0]['higher_geography_identifier']);
     }
 
     public function testOccurrenceShowReturnsSingleObject(): void
@@ -237,12 +237,12 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $json = json_decode((string) $result->response()->getBody(), true);
 
         $this->assertSame('NBN:123456789', $json['unique_key']);
-        $this->assertSame('3d77f8e7-e2e8-4d74-9d4d-cff4d11130e8', $json['taxon_name__uuid']);
+        $this->assertSame('NHMSYS0021054498', $json['taxon_identifier']);
     }
 
     public function testOccurrencesListSupportsIncludeExtensions(): void
     {
-        $result = $this->get('api/v1/occurrences?include=taxon,taxon-name,taxon-rank,taxon-group,grid-square-stats');
+        $result = $this->get('api/v1/occurrences?include=taxon,taxon-name,taxon-rank,taxon-group,grid-square-stats,geographic-region');
 
         $result->assertStatus(200);
 
@@ -258,6 +258,12 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertArrayHasKey('grid_square_stats__northing', $first);
         $this->assertArrayHasKey('grid_square_stats__lat', $first);
         $this->assertArrayHasKey('grid_square_stats__lon', $first);
+        $this->assertArrayHasKey('geographic_regions', $first);
+        $this->assertIsArray($first['geographic_regions']);
+        $this->assertNotEmpty($first['geographic_regions']);
+        $this->assertArrayHasKey('higher_geography_identifier', $first['geographic_regions'][0]);
+        $this->assertArrayHasKey('higher_geography', $first['geographic_regions'][0]);
+        $this->assertArrayHasKey('location_type', $first['geographic_regions'][0]);
         $this->assertSame(410000, $first['grid_square_stats__easting']);
         $this->assertSame(110000, $first['grid_square_stats__northing']);
         $this->assertSame('50.1234567', (string) $first['grid_square_stats__lat']);
@@ -298,7 +304,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
         $this->assertSame(1, $json['meta']['count']);
         $this->assertSame('SU1234', $json['data'][0]['square']);
-        $this->assertSame(12, $json['data'][0]['higher_geography_identifier']);
+        $this->assertSame('12', (string) $json['data'][0]['higher_geography_identifier']);
     }
 
     public function testGridSquareStatsShowReturnsSingleObject(): void
@@ -310,7 +316,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $json = json_decode((string) $result->response()->getBody(), true);
 
         $this->assertSame('11111111-1111-4111-8111-111111111111', $json['uuid']);
-        $this->assertSame(12, $json['higher_geography_identifier']);
+        $this->assertSame('12', (string) $json['higher_geography_identifier']);
     }
 
     public function testGridSquareStatsIncludeGeographicRegionAddsFields(): void
@@ -376,9 +382,19 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertArrayHasKey('geographic_region__higher_geography', $first);
     }
 
+    public function testTaxonStatsInvalidIncludeParameter(): void
+    {
+        // Test including a resource with missing taxon dependency.
+        $result = $this->get('api/v1/taxon-stats?include=parent-taxa');
+
+        $result->assertStatus(400);
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $this->assertSame('Invalid include parameter', $json['title']);
+    }
+
     public function testTaxonStatsIncludeParentTaxaAddsParentFields(): void
     {
-        $result = $this->get('api/v1/taxon-stats?include=parent-taxa');
+        $result = $this->get('api/v1/taxon-stats?include=taxon,parent-taxa');
 
         $result->assertStatus(200);
 
@@ -411,7 +427,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
         $this->assertSame(1, $json['meta']['count']);
         $this->assertSame(2024, $json['data'][0]['year']);
-        $this->assertSame(12, $json['data'][0]['higher_geography_identifier']);
+        $this->assertSame('12', (string) $json['data'][0]['higher_geography_identifier']);
     }
 
     public function testTaxonYearStatsShowReturnsSingleObject(): void
@@ -444,8 +460,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
     public function testTaxonYearStatsIncludeParentTaxaAddsParentFields(): void
     {
-        $result = $this->get('api/v1/taxon-year-stats?include=parent-taxa');
-
+        $result = $this->get('api/v1/taxon-year-stats?include=taxon,parent-taxa');
         $result->assertStatus(200);
 
         $json = json_decode((string) $result->response()->getBody(), true);

@@ -15,15 +15,20 @@ class TaxonYearStats extends ApiResourceController
      * @return string[]
      *   Resource name list.
      */
-    protected function getAllowedIncludes(): array
+    protected function getAllowedIncludes(array $requested): array
     {
-        return [
+         $includes = [
             'geographic-region',
-            'parent-taxa',
             'taxon',
-            'taxon-group',
-            'taxon-rank',
         ];
+        if (in_array('taxon', $requested, true)) {
+            $includes = array_merge($includes, [
+                'taxon-rank',
+                'taxon-group',
+                'parent-taxa',
+            ]);
+        }
+        return $includes;
     }
 
     /**
@@ -39,8 +44,8 @@ class TaxonYearStats extends ApiResourceController
             'year' => 'year',
             'occurrences_count' => 'occurrences_count',
             'grid_square_count' => 'grid_square_count',
-            'taxon__taxon_identifier' => 'taxon__taxon_identifier',
-            'geographic_region__higher_geography_identifier' => 'geographic_region__higher_geography_identifier',
+            'taxon_identifier' => 't.taxon_identifier',
+            'higher_geography_identifier' => 'gr.higher_geography_identifier',
         ];
         if ($this->hasInclude($includes, 'geographic-region')) {
             $fields['geographic_region__higher_geography'] = 'gr.higher_geography';
@@ -55,8 +60,9 @@ class TaxonYearStats extends ApiResourceController
 
             if ($this->hasInclude($includes, 'parent-taxa')) {
                 foreach ($this->dynamicRankAliases() as $alias) {
-                    $fields[$alias . '__scientific_name'] = $alias . '.scientific_name';
-                    $fields[$alias . '__vernacular_name'] = $alias . '.vernacular_name';
+                    $joinAlias = $this->parentTaxaJoinAlias($alias);
+                    $fields[$alias . '__scientific_name'] = $joinAlias . '.scientific_name';
+                    $fields[$alias . '__vernacular_name'] = $joinAlias . '.vernacular_name';
                 }
             }
 
@@ -85,13 +91,14 @@ class TaxonYearStats extends ApiResourceController
     protected function getBuilder(object $db, array $includes = []): BaseBuilder
     {
         $builder = $db->table('taxon_year_stats ts')
-            ->select($this->getFieldSql($includes))
+            ->select($this->getFieldSql($includes), false)
             ->join('taxa t', 't.id = ts.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0')
-            ->join('geographic_regions gr', 'gr.id = t.geographic_region_id AND gr.deleted_at IS NULL', 'left');
+            ->join('geographic_regions gr', 'gr.id = ts.geographic_region_id AND gr.deleted_at IS NULL', 'left');
 
         if ($this->hasInclude($includes, 'parent-taxa')) {
             foreach ($this->dynamicRankAliases() as $alias) {
-                $builder->join("taxa {$alias}", "{$alias}.id = t.{$alias}_id", 'left');
+                $joinAlias = $this->parentTaxaJoinAlias($alias);
+                $builder->join("taxa {$joinAlias}", "{$joinAlias}.id = t.{$alias}_id", 'left');
             }
         }
         if ($this->hasInclude($includes, 'taxon-group')) {

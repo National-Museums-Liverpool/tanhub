@@ -452,6 +452,9 @@ Examples:
 	- `unique_key`, `taxon_identifier`, `from_date`, `to_date`, `grid_ref`, `grid_ref_2km`,
 	- `locality`, `recorded_by`, `identified_by`, `identification_verification_status`
 	- `sex`, `life_stage`, `organism_quantity`, `higher_geography_identifier`
+
+	  `higher_geography_identifier` is a helper field used for filtering and sorting and resolves to a
+	  single representative region identifier when an occurrence maps to multiple regions.
 	- dynamic taxon rank fields by configured rank identifier (for example `kingdom__taxon_identifier`, `family__taxon_identifier`)
 - Filterable fields:
 	- all exposed occurrence fields above
@@ -464,8 +467,10 @@ Examples:
 			- `data_source__title`
 			- `data_source__url`
 		- `geographic-region`:
-			- `geographic_region__higher_geography`
-			-	`geographic_region__location_type`
+			- `geographic_regions`: array of geographic region objects with:
+				- `higher_geography_identifier`
+				- `higher_geography`
+				- `location_type`
 		- `grid-square-stats`:
 			- `grid_square_stats__easting`
 			- `grid_square_stats__northing`
@@ -505,7 +510,7 @@ Examples:
 
 Examples:
 
-- Request: `/api/v1/occurrences?include=taxon,taxon-name,taxon-rank,taxon-group,grid-square-stats&taxon_identifier[eq]=NBNORG0021054498`
+- Request: `/api/v1/occurrences?include=taxon,taxon-name,taxon-rank,taxon-group,grid-square-stats,geographic-region&taxon_identifier[eq]=NBNORG0021054498`
 	Response:
 
 ```json
@@ -526,6 +531,13 @@ Examples:
 			"life_stage": "adult",
 			"organism_quantity": "1",
 			"higher_geography_identifier": 13,
+			"geographic_regions": [
+				{
+					"higher_geography_identifier": 13,
+					"higher_geography": "North Hampshire",
+					"location_type": "Vice County"
+				}
+			],
 			"grid_square_stats__easting": 410000,
 			"grid_square_stats__northing": 110000,
 			"grid_square_stats__lat": 52.8261,
@@ -706,8 +718,8 @@ Examples:
 - Unique identifier: `taxon_identifier`
 - Exposed fields:
 	- `taxon_identifier`, `scientific_name_identifier`, `scientific_name`,
-	  `scientific_name_authorship`, `vernacular_name`, `taxon_group_external_key`, `id_difficulty`,
-		`recording_scheme_external_key`, `conservation_status`, `taxon_remarks`, `rarity_group_name`
+	  `scientific_name_authorship`, `vernacular_name`, `id_difficulty`,
+		`conservation_status`, `taxon_remarks`, `rarity_group_name`
 	- dynamic taxon rank fields by configured rank identifier
 - Filterable fields:
 	- all exposed taxa fields above
@@ -907,8 +919,8 @@ Examples:
 - Path: `GET /api/v1/taxon-names`
 - Item path: `GET /api/v1/taxon-names/{uuid}`
 - Unique identifier: `uuid`
-- Exposed fields: `uuid`, `taxon_identifier`, `name`, `scientific_name_identifier`, `accepted`, `scientific`
-- Filterable fields: `uuid`, `taxon_identifier`, `name`, `scientific_name_identifier`, `accepted`, `scientific`
+- Exposed fields: `uuid`, `taxon_identifier`, `given_name_identifier`, `name`,  `accepted`, `scientific`
+- Filterable fields: `uuid`, `taxon_identifier`, `given_name_identifier`, `name`, `accepted`, `scientific`
 - Include:
 	- query parameter: `include`
 	- supported values and added fields:
@@ -942,8 +954,8 @@ Examples:
 		{
 			"uuid": "96fd5b7a-7ed8-4f2f-a84b-aec6fbfa632f",
 			"taxon_identifier": "NHMSYS0022000100",
+			"given_name_identifier": "TVK-ROBIN-01",
 			"name": "European Robin",
-			"scientific_name_identifier": "TVK-ROBIN-01",
 			"accepted": 1,
 			"scientific": 0
 		}
@@ -971,8 +983,8 @@ Examples:
 		{
 			"uuid": "96fd5b7a-7ed8-4f2f-a84b-aec6fbfa632f",
 			"taxon_identifier": "NHMSYS0022000100",
+			"given_name_identifier": "TVK-ROBIN-01",
 			"name": "European Robin",
-			"scientific_name_identifier": "TVK-ROBIN-01",
 			"accepted": 1,
 			"scientific": 0
 		}

@@ -2,116 +2,80 @@
 
 namespace App\Controllers\Api\V1;
 
-use CodeIgniter\HTTP\ResponseInterface;
+use CodeIgniter\Database\BaseBuilder;
 
 /**
  * API endpoints for geographic regions.
  */
-class GeographicRegions extends ApiController
+class GeographicRegions extends ApiResourceController
 {
-    /**
-     * List geographic regions.
-     */
-    public function index(): ResponseInterface
-    {
-        $pagination = $this->getPagination();
-
-        if ($pagination instanceof ResponseInterface) {
-            return $pagination;
-        }
-
-        $sorts = $this->getSorts([
-            'higher_geography_identifier' => 'higher_geography_identifier',
-            'higher_geography' => 'higher_geography',
-            'location_type' => 'location_type',
-            'data_source_abbr' => 'data_source_abbr',
-        ], 'higher_geography');
-
-        if ($sorts instanceof ResponseInterface) {
-            return $sorts;
-        }
-
-        $filters = $this->getFilters([
-            'higher_geography_identifier' => 'higher_geography_identifier',
-            'higher_geography' => 'higher_geography',
-            'location_type' => 'location_type',
-            'data_source_abbr' => '__data_source_abbr__',
-        ]);
-
-        if ($filters instanceof ResponseInterface) {
-            return $filters;
-        }
-
-        $normalFilters = [];
-        $customFilters = [];
-
-        foreach ($filters as $filter) {
-            if (($filter['column'] ?? null) === '__data_source_abbr__') {
-                $customFilters[] = $filter;
-                continue;
-            }
-
-            $normalFilters[] = $filter;
-        }
-
-        $builder = db_connect()->table('geographic_regions')
-            ->select('CAST(higher_geography_identifier AS INTEGER) AS higher_geography_identifier, higher_geography, location_type, data_sources.abbr AS data_source_abbr')
-            ->join('data_sources', 'data_sources.id = geographic_regions.data_source_id', 'left')
-            ->where('geographic_regions.deleted_at', null);
-
-        $this->applyFilters($builder, $normalFilters);
-        $this->applyDataSourceAbbrFilter($builder, $customFilters);
-        $this->applySorts($builder, $sorts);
-
-        $total = (clone $builder)->countAllResults();
-
-        $data = $builder
-            ->limit($pagination['limit'], $pagination['offset'])
-            ->get()
-            ->getResultArray();
-
-        return $this->respondList($data, $total, $pagination['limit'], $pagination['offset']);
-    }
 
     /**
-     * Return a single geographic region by higher geography identifier.
-     */
-    public function show(string $higherGeographyIdentifier): ResponseInterface
-    {
-        $item = db_connect()->table('geographic_regions')
-            ->select('CAST(higher_geography_identifier AS INTEGER) AS higher_geography_identifier, higher_geography, location_type, data_sources.abbr AS data_source_abbr')
-            ->join('data_sources', 'data_sources.id = geographic_regions.data_source_id', 'left')
-            ->where('higher_geography_identifier', $higherGeographyIdentifier)
-            ->where('geographic_regions.deleted_at', null)
-            ->get()
-            ->getRowArray();
-
-        if ($item === null) {
-            return $this->respondProblem(404, 'Resource not found', "No geographic region exists for higher_geography_identifier '{$higherGeographyIdentifier}'.");
-        }
-
-        return $this->respondItem($item);
-    }
-
-    /**
-     * Apply the joined data source abbreviation filter.
+     * Retrieve list of resources that can be included (joined) in requests.
      *
-     * @param object $builder
-     * @param array<int, array<string, mixed>> $filters
-     * @return void
+     * @return string[]
+     *   Resource name list.
      */
-    private function applyDataSourceAbbrFilter(object $builder, array $filters): void
+    protected function getAllowedIncludes(): array
     {
-        foreach ($filters as $filter) {
-            if (($filter['column'] ?? null) !== '__data_source_abbr__') {
-                continue;
-            }
+        return ['data-source'];
+    }
 
-            if (($filter['operator'] ?? null) !== 'eq') {
-                continue;
-            }
-
-            $builder->where('data_sources.abbr', $filter['value']);
+    /**
+     * Retrieve included fields array.
+     *
+     * @return array<string, string>
+     *   Array of field identifiers and their corresponding query columns.
+     */
+    protected function allowedFields(array $includes = []): array
+    {
+        $fields = [
+            'higher_geography_identifier' => 'g.higher_geography_identifier',
+            'higher_geography' => 'g.higher_geography',
+            'location_type' => 'g.location_type',
+        ];
+        if ($this->hasInclude($includes, 'data-source')) {
+            $fields['data_source__abbr'] = 'ds.abbr';
+            $fields['data_source__title'] = 'ds.title';
+            $fields['data_source__url'] = 'ds.url';
         }
+        return $fields;
+    }
+
+    /**
+     * Builds the base query used for the API.
+     *
+     * @return object
+     *   The query builder instance.
+     */
+    protected function getBuilder(object $db, array $includes = []): BaseBuilder
+    {
+        $builder =  $db->table('geographic_regions g')
+            ->select($this->getFieldSql($includes))
+            ->where('g.deleted_at', null);
+        if ($this->hasInclude($includes, 'data-source')) {
+            $builder->join('data_sources ds', 'ds.id = g.data_source_id', 'left');
+        }
+        return $builder;
+    }
+
+    /**
+     * Name of the column for looking up individual items.
+     *
+     * @return string
+     */
+    protected function getDefaultKeyColumn(): string
+    {
+        return 'higher_geography_identifier';
+    }
+
+    /**
+     * Name of the column for sorting if not otherwise specified.
+     *
+     * @return string
+     */
+    protected function getDefaultSortColumn(): string
+    {
+        return 'higher_geography';
     }
 }

@@ -2,75 +2,57 @@
 
 namespace App\Controllers\Api\V1;
 
-use CodeIgniter\HTTP\ResponseInterface;
+use CodeIgniter\Database\BaseBuilder;
 
 /**
  * API endpoints for data sources.
  */
-class DataSources extends ApiController
+class DataSources extends ApiResourceController
 {
     /**
-     * List data sources.
+     * Retrieve included fields array.
+     *
+     * @return array<string, string>
+     *   Array of field identifiers and their corresponding query columns.
      */
-    public function index(): ResponseInterface
+    protected function allowedFields(array $includes = []): array
     {
-        $pagination = $this->getPagination();
-
-        if ($pagination instanceof ResponseInterface) {
-            return $pagination;
-        }
-
-        $sorts = $this->getSorts([
+        return [
             'abbr' => 'abbr',
             'title' => 'title',
             'url' => 'url',
-        ], 'abbr');
-
-        if ($sorts instanceof ResponseInterface) {
-            return $sorts;
-        }
-
-        $filters = $this->getFilters([
-            'abbr' => 'abbr',
-            'title' => 'title',
-            'url' => 'url',
-        ]);
-
-        if ($filters instanceof ResponseInterface) {
-            return $filters;
-        }
-
-        $builder = db_connect()->table('data_sources')
-            ->select('abbr, title, url');
-
-        $this->applyFilters($builder, $filters);
-        $this->applySorts($builder, $sorts);
-
-        $total = (clone $builder)->countAllResults();
-
-        $data = $builder
-            ->limit($pagination['limit'], $pagination['offset'])
-            ->get()
-            ->getResultArray();
-
-        return $this->respondList($data, $total, $pagination['limit'], $pagination['offset']);
+        ];
     }
 
     /**
-     * Return a single data source by abbreviation.
+     * Builds the base query used for the API.
+     *
+     * @return object
+     *   The query builder instance.
      */
-    public function show(string $abbr): ResponseInterface
+    protected function getBuilder(object $db, array $includes = []): BaseBuilder
     {
-        $item = db_connect()->table('data_sources')
-            ->select('abbr, title, url')
-            ->where('abbr', $abbr)
-            ->get()
-            ->getRowArray();
+        return $db->table('data_sources')
+            ->select($this->getFieldSql($includes));
+    }
 
-        if ($item === null) {
-            return $this->respondProblem(404, 'Resource not found', "No data source exists for abbreviation '{$abbr}'.");
-        }
+    /**
+     * Name of the column for looking up individual items.
+     *
+     * @return string
+     */
+    protected function getDefaultKeyColumn(): string
+    {
+        return 'abbr';
+    }
 
-        return $this->respondItem($item);
+    /**
+     * Name of the column for sorting if not otherwise specified.
+     *
+     * @return string
+     */
+    protected function getDefaultSortColumn(): string
+    {
+        return 'abbr';
     }
 }

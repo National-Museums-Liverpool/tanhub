@@ -2,131 +2,119 @@
 
 namespace App\Controllers\Api\V1;
 
-use CodeIgniter\HTTP\ResponseInterface;
+use CodeIgniter\Database\BaseBuilder;
 
 /**
  * API endpoints for taxon names.
  */
-class TaxonNames extends ApiController
+class TaxonNames extends ApiResourceController
 {
     /**
-     * List taxon names.
+     * Retrieve list of resources that can be included (joined) in requests.
+     *
+     * @return string[]
+     *   Resource name list.
      */
-    public function index(): ResponseInterface
+    protected function getAllowedIncludes(): array
     {
-        $db = db_connect();
-        $prefix = $db->getPrefix();
-
-        $pagination = $this->getPagination();
-
-        if ($pagination instanceof ResponseInterface) {
-            return $pagination;
-        }
-
-        $sorts = $this->getSorts([
-            'uuid' => 'uuid',
-            'name' => 'name',
-            'given_name_identifier' => 'given_name_identifier',
-            'accepted' => 'accepted',
-            'scientific' => 'scientific',
-        ], 'name');
-
-        if ($sorts instanceof ResponseInterface) {
-            return $sorts;
-        }
-
-        $filters = $this->getFilters([
-            'uuid' => 'uuid',
-            'taxon_identifier' => '__taxon_identifier__',
-            'name' => 'name',
-            'given_name_identifier' => 'given_name_identifier',
-            'accepted' => 'accepted',
-            'scientific' => 'scientific',
-        ]);
-
-        if ($filters instanceof ResponseInterface) {
-            return $filters;
-        }
-
-        $standardFilters = [];
-        $taxonIdentifierFilters = [];
-
-        foreach ($filters as $filter) {
-            if ($filter['column'] === '__taxon_identifier__') {
-                $taxonIdentifierFilters[] = $filter;
-                continue;
-            }
-
-            $standardFilters[] = $filter;
-        }
-
-        $builder = $db->table('taxon_names')
-            ->select('uuid, (SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id) AS taxon_identifier, name, given_name_identifier, accepted, scientific', false)
-            ->where('deleted_at', null)
-            ->where('taxon_id IN (SELECT id FROM ' . $prefix . 'taxa WHERE deleted_at IS NULL AND blocked = 0)', null, false);
-
-        $this->applyFilters($builder, $standardFilters);
-
-        foreach ($taxonIdentifierFilters as $filter) {
-            $operator = (string) $filter['operator'];
-            $value = $filter['value'];
-
-            if ($operator === 'eq') {
-                $builder->where('taxon_id IN (SELECT id FROM ' . $prefix . 'taxa WHERE taxon_identifier = ' . $db->escape($value) . ' AND deleted_at IS NULL AND blocked = 0)', null, false);
-                continue;
-            }
-
-            if ($operator === 'in') {
-                $values = is_array($value)
-                    ? $value
-                    : array_filter(array_map('trim', explode(',', (string) $value)), static fn (string $v): bool => $v !== '');
-                $escaped = array_map(static fn ($v): string => $db->escape((string) $v), $values);
-
-                if ($escaped !== []) {
-                    $builder->where('taxon_id IN (SELECT id FROM ' . $prefix . 'taxa WHERE taxon_identifier IN (' . implode(',', $escaped) . ') AND deleted_at IS NULL AND blocked = 0)', null, false);
-                }
-
-                continue;
-            }
-
-            if ($operator === 'contains') {
-                $like = '%' . $db->escapeLikeString(strtolower((string) $value)) . '%';
-                $builder->where('taxon_id IN (SELECT id FROM ' . $prefix . 'taxa WHERE LOWER(taxon_identifier) LIKE ' . $db->escape($like) . " ESCAPE '!' AND deleted_at IS NULL AND blocked = 0)", null, false);
-            }
-        }
-
-        $this->applySorts($builder, $sorts);
-
-        $total = (clone $builder)->countAllResults();
-
-        $data = $builder
-            ->limit($pagination['limit'], $pagination['offset'])
-            ->get()
-            ->getResultArray();
-
-        return $this->respondList($data, $total, $pagination['limit'], $pagination['offset']);
+        return [
+            'parent-taxa',
+            'taxon',
+            'taxon-group',
+            'taxon-rank',
+        ];
     }
 
     /**
-     * Return a single taxon name by UUID.
+     * Retrieve included fields array.
+     *
+     * @return array<string, string>
+     *   Array of field identifiers and their corresponding query columns.
      */
-    public function show(string $uuid): ResponseInterface
+    protected function allowedFields(array $includes = []): array
     {
-        $db = db_connect();
-        $prefix = $db->getPrefix();
+        $fields = [
+            'uuid' => 'tn.uuid',
+            'name' => 'tn.name',
+            'given_name_identifier' => 'tn.given_name_identifier',
+            'taxon__taxon_identifier' => 't.taxon_identifier',
+            'accepted' => 'tn.accepted',
+            'scientific' => 'tn.scientific',
+        ];
 
-        $item = $db->table('taxon_names')
-            ->select('uuid, (SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id) AS taxon_identifier, name, given_name_identifier, accepted, scientific', false)
-            ->where('uuid', $uuid)
-            ->where('deleted_at', null)
-            ->where('taxon_id IN (SELECT id FROM ' . $prefix . 'taxa WHERE deleted_at IS NULL AND blocked = 0)', null, false)
-            ->get()
-            ->getRowArray();
-
-        if ($item === null) {
-            return $this->respondProblem(404, 'Resource not found', "No taxon name exists for uuid '{$uuid}'.");
+        if ($this->hasInclude($includes, 'parent-taxa')) {
+            foreach ($this->dynamicRankAliases() as $alias) {
+                $fields[$alias . '__scientific_name'] = $alias . '.scientific_name';
+                $fields[$alias . '__vernacular_name'] = $alias . '.vernacular_name';
+            }
         }
 
-        return $this->respondItem($item);
+        if ($this->hasInclude($includes, 'taxon')) {
+            $fields['taxon__scientific_name'] = 't.scientific_name';
+            $fields['taxon__scientific_name_authorship'] = 't.scientific_name_authorship';
+            $fields['taxon__scientific_name_identifier'] = 't.scientific_name_identifier';
+            $fields['taxon__vernacular_name'] = 't.vernacular_name';
+        }
+
+        if ($this->hasInclude($includes, 'taxon-group')) {
+            $fields['taxon_group__external_key'] = 'tg.external_key';
+            $fields['taxon_group__friendly'] = 'tg.friendly';
+            $fields['taxon_group__title'] = 'tg.title';
+        }
+
+        if ($this->hasInclude($includes, 'taxon-rank')) {
+            $fields['taxon_rank__rank'] = 'tr.rank';
+            $fields['taxon_rank__abbr'] = 'tr.abbr';
+            $fields['taxon_rank__sort_order'] = 'tr.sort_order';
+        }
+
+        return $fields;
+    }
+
+    /**
+     * Builds the base query used for the API.
+     *
+     * @return object
+     *   The query builder instance.
+     */
+    protected function getBuilder(object $db, array $includes = []): BaseBuilder
+    {
+        $builder = $db->table('taxon_names tn')
+            ->select($this->getFieldSql($includes))
+            ->join('taxa t', 't.id = tn.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0');
+
+        if ($this->hasInclude($includes, 'parent-taxa')) {
+            foreach ($this->dynamicRankAliases() as $alias) {
+                $builder->join("taxa {$alias}", "{$alias}.id = t.{$alias}_id", 'left');
+            }
+        }
+        if ($this->hasInclude($includes, 'taxon-group')) {
+            $builder->join('taxon_groups tg', 'tg.id = t.taxon_group_id', 'left');
+        }
+        if ($this->hasInclude($includes, 'taxon-rank')) {
+            $builder->join('taxon_ranks tr', 'tr.id = t.taxon_rank_id', 'left');
+        }
+
+        return $builder;
+    }
+
+    /**
+     * Name of the column for looking up individual items.
+     *
+     * @return string
+     */
+    protected function getDefaultKeyColumn(): string
+    {
+        return 'uuid';
+    }
+
+    /**
+     * Name of the column for sorting if not otherwise specified.
+     *
+     * @return string
+     */
+    protected function getDefaultSortColumn(): string
+    {
+        return 'name';
     }
 }

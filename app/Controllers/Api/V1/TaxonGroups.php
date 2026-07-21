@@ -2,81 +2,61 @@
 
 namespace App\Controllers\Api\V1;
 
-use CodeIgniter\HTTP\ResponseInterface;
+use CodeIgniter\Database\BaseBuilder;
 
 /**
  * API endpoints for taxon groups.
  */
-class TaxonGroups extends ApiController
+class TaxonGroups extends ApiResourceController
 {
-    /**
-     * List taxon groups.
+
+   /**
+     * Retrieve included fields array.
+     *
+     * @return array<string, string>
+     *   Array of field identifiers and their corresponding query columns.
      */
-    public function index(): ResponseInterface
+    protected function allowedFields(array $includes = []): array
     {
-        $pagination = $this->getPagination();
-
-        if ($pagination instanceof ResponseInterface) {
-            return $pagination;
-        }
-
-        $sorts = $this->getSorts([
+        return [
             'external_key' => 'external_key',
             'title' => 'title',
             'friendly' => 'friendly',
             'indicia_taxon_group_id' => 'indicia_taxon_group_id',
             'implied' => 'implied',
-        ], 'title');
-
-        if ($sorts instanceof ResponseInterface) {
-            return $sorts;
-        }
-
-        $filters = $this->getFilters([
-            'external_key' => 'external_key',
-            'title' => 'title',
-            'friendly' => 'friendly',
-            'indicia_taxon_group_id' => 'indicia_taxon_group_id',
-            'implied' => 'implied',
-        ]);
-
-        if ($filters instanceof ResponseInterface) {
-            return $filters;
-        }
-
-        $builder = db_connect()->table('taxon_groups')
-            ->select('external_key, title, friendly, indicia_taxon_group_id, implied')
-            ->where('deleted_at', null);
-
-        $this->applyFilters($builder, $filters);
-        $this->applySorts($builder, $sorts);
-
-        $total = (clone $builder)->countAllResults();
-
-        $data = $builder
-            ->limit($pagination['limit'], $pagination['offset'])
-            ->get()
-            ->getResultArray();
-
-        return $this->respondList($data, $total, $pagination['limit'], $pagination['offset']);
+        ];
     }
 
     /**
-     * Return a single taxon group by external key.
+     * Builds the base query used for the API.
+     *
+     * @return object
+     *   The query builder instance.
      */
-    public function show(string $externalKey): ResponseInterface
+    protected function getBuilder(object $db, array $includes = []): BaseBuilder
     {
-        $item = db_connect()->table('taxon_groups')
-            ->select('external_key, title, friendly, indicia_taxon_group_id, implied')
-            ->where('external_key', $externalKey)
-            ->where('deleted_at', null)
-            ->get()
-            ->getRowArray();
+        return $db->table('taxon_groups')
+            ->select($this->getFieldSql($includes))
+            ->where('deleted_at', null);
+    }
 
-        if ($item === null) {
-            return $this->respondProblem(404, 'Resource not found', "No taxon group exists for external_key '{$externalKey}'.");
-        }
+    /**
+     * Name of the column for looking up individual items.
+     *
+     * @return string
+     */
+    protected function getDefaultKeyColumn(): string
+    {
+        return 'external_key';
+    }
 
-        return $this->respondItem($item);
+    /**
+     * Name of the column for sorting if not otherwise specified.
+     *
+     * @return string
+     */
+    protected function getDefaultSortColumn(): string
+    {
+        return 'title';
     }
 }

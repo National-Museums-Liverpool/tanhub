@@ -2,173 +2,43 @@
 
 namespace App\Controllers\Api\V1;
 
-use CodeIgniter\HTTP\ResponseInterface;
+use CodeIgniter\Database\BaseBuilder;
 
 /**
  * API endpoints for taxon stats.
  */
-class TaxonStats extends ApiController
+class TaxonStats extends ApiResourceController
 {
-    /**
-     * List taxon stats rows.
-     */
-    public function index(): ResponseInterface
-    {
-        $db = db_connect();
-        $prefix = $db->getPrefix();
-        $includes = $this->getIncludes();
-
-        if ($includes instanceof ResponseInterface) {
-            return $includes;
-        }
-
-        $pagination = $this->getPagination();
-        if ($pagination instanceof ResponseInterface) {
-            return $pagination;
-        }
-
-        $sorts = $this->getSorts($this->allowedSorts($includes), 'last_record_date');
-        if ($sorts instanceof ResponseInterface) {
-            return $sorts;
-        }
-
-        $filters = $this->getFilters($this->allowedFilters($includes));
-        if ($filters instanceof ResponseInterface) {
-            return $filters;
-        }
-
-        $usesIncludedBuilder = $this->usesIncludedBuilder($includes);
-
-        $builder = $usesIncludedBuilder
-            ? $this->buildIncludedBuilder($db, $prefix, $includes)
-            : $this->buildDefaultBuilder($db, $prefix);
-
-        $normal = [];
-        $custom = [];
-        foreach ($filters as $filter) {
-            if (str_starts_with((string) $filter['column'], '__')) {
-                $custom[] = $filter;
-                continue;
-            }
-            $normal[] = $filter;
-        }
-        $this->applyFilters($builder, $normal);
-
-        foreach ($custom as $filter) {
-            $column = (string) $filter['column'];
-            $operator = (string) $filter['operator'];
-            $value = $filter['value'];
-
-            if ($column === '__taxon_identifier__') {
-                $this->applyIdentifierFilter($builder, $operator, $value, 'taxon_id', $prefix . 'taxa', 'taxon_identifier', $db, ' AND deleted_at IS NULL AND blocked = 0');
-                continue;
-            }
-
-            if ($column === '__geographic_region_identifier__') {
-                $this->applyIdentifierFilter($builder, $operator, $value, 'geographic_region_id', $prefix . 'geographic_regions', 'higher_geography_identifier', $db, ' AND deleted_at IS NULL');
-            }
-        }
-
-        $this->applySorts($builder, $sorts);
-
-        $total = (clone $builder)->countAllResults();
-        $data = $builder->limit($pagination['limit'], $pagination['offset'])->get()->getResultArray();
-
-        return $this->respondList($data, $total, $pagination['limit'], $pagination['offset']);
-    }
 
     /**
-     * Show a single taxon stats row by UUID.
+     * Retrieve list of resources that can be included (joined) in requests.
+     *
+     * @return string[]
+     *   Resource name list.
      */
-    public function show(string $uuid): ResponseInterface
+    protected function getAllowedIncludes(): array
     {
-        $db = db_connect();
-        $prefix = $db->getPrefix();
-        $includes = $this->getIncludes();
-
-        if ($includes instanceof ResponseInterface) {
-            return $includes;
-        }
-
-        $usesIncludedBuilder = $this->usesIncludedBuilder($includes);
-
-        $item = ($usesIncludedBuilder
-            ? $this->buildIncludedBuilder($db, $prefix, $includes)
-            : $this->buildDefaultBuilder($db, $prefix))
-            ->where('uuid', $uuid)
-            ->get()
-            ->getRowArray();
-
-        if ($item === null) {
-            return $this->respondProblem(404, 'Resource not found', "No taxon stats row exists for uuid '{$uuid}'.");
-        }
-
-        return $this->respondItem($item);
-    }
-
-    /**
-     * @param array<string, bool> $includes
-     * @return array<string, string>
-     */
-    private function allowedSorts(array $includes): array
-    {
-        $usesIncludedBuilder = $this->usesIncludedBuilder($includes);
-
-        $sorts = [
-            'uuid' => 'uuid',
-            'occurrences_count' => 'occurrences_count',
-            'grid_square_count' => 'grid_square_count',
-            'first_record_date' => 'first_record_date',
-            'last_record_date' => 'last_record_date',
-            'first_recorder' => 'first_recorder',
-            'last_recorder' => 'last_recorder',
-            'first_verified_record_date' => 'first_verified_record_date',
-            'last_verified_record_date' => 'last_verified_record_date',
-            'first_verified_recorder' => 'first_verified_recorder',
-            'last_verified_recorder' => 'last_verified_recorder',
-            'taxon_identifier' => 'taxon_identifier',
-            'geographic_region_identifier' => 'geographic_region_identifier',
+        return [
+            'geographic-region',
+            'parent-taxa',
+            'taxon',
+            'taxon-group',
+            'taxon-rank',
         ];
-
-        if ($this->hasInclude($includes, 'taxon')) {
-            $sorts['taxon_scientific_name'] = 'taxon_scientific_name';
-            $sorts['taxon_vernacular_name'] = 'taxon_vernacular_name';
-        }
-
-        if ($this->hasInclude($includes, 'taxon_rank')) {
-            $sorts['taxon_rank'] = 'taxon_rank';
-        }
-
-        if ($this->hasInclude($includes, 'taxon_group')) {
-            $sorts['taxon_group_external_key'] = 'taxon_group_external_key';
-        }
-
-        if ($this->hasInclude($includes, 'parent_taxa')) {
-            foreach ($this->dynamicRankAliases() as $alias) {
-                $sorts[$alias . '_scientific_name'] = $alias . '_scientific_name';
-                $sorts[$alias . '_vernacular_name'] = $alias . '_vernacular_name';
-            }
-        }
-
-        if ($this->hasInclude($includes, 'geographic_region')) {
-            $sorts['geographic_region'] = 'geographic_region';
-        }
-
-        return $sorts;
     }
 
     /**
-     * @param array<string, bool> $includes
+     * Retrieve included fields array.
+     *
      * @return array<string, string>
+     *   Array of field identifiers and their corresponding query columns.
      */
-    private function allowedFilters(array $includes): array
+    protected function allowedFields(array $includes = []): array
     {
-        $usesIncludedBuilder = $this->usesIncludedBuilder($includes);
-
-        $filters = [
+        $fields = [
             'uuid' => 'uuid',
-            'taxon_identifier' => '__taxon_identifier__',
-            'geographic_region_identifier' => '__geographic_region_identifier__',
+            'taxon__taxon_identifier' => 'taxon__taxon_identifier',
+            'geographic_region__higher_geography_identifier' => 'geographic_region__higher_geography_identifier',
             'occurrences_count' => 'occurrences_count',
             'grid_square_count' => 'grid_square_count',
             'first_record_date' => 'first_record_date',
@@ -180,191 +50,85 @@ class TaxonStats extends ApiController
             'first_verified_recorder' => 'first_verified_recorder',
             'last_verified_recorder' => 'last_verified_recorder',
         ];
+        if ($this->hasInclude($includes, 'geographic-region')) {
+            $fields['geographic_region__higher_geography'] = 'gr.higher_geography';
+            $fields['geographic_region__location_type'] = 'gr.location_type';
+        }
 
         if ($this->hasInclude($includes, 'taxon')) {
-            $filters['taxon_scientific_name'] = 'taxon_scientific_name';
-            $filters['taxon_vernacular_name'] = 'taxon_vernacular_name';
-        }
+            $fields['taxon__scientific_name'] = 't.scientific_name';
+            $fields['taxon__scientific_name_authorship'] = 't.scientific_name_authorship';
+            $fields['taxon__scientific_name_identifier'] = 't.scientific_name_identifier';
+            $fields['taxon__vernacular_name'] = 't.vernacular_name';
 
-        if ($this->hasInclude($includes, 'taxon_rank')) {
-            $filters['taxon_rank'] = 'taxon_rank';
-        }
+            if ($this->hasInclude($includes, 'parent-taxa')) {
+                foreach ($this->dynamicRankAliases() as $alias) {
+                    $fields[$alias . '__scientific_name'] = $alias . '.scientific_name';
+                    $fields[$alias . '__vernacular_name'] = $alias . '.vernacular_name';
+                }
+            }
 
-        if ($this->hasInclude($includes, 'taxon_group')) {
-            $filters['taxon_group_external_key'] = 'taxon_group_external_key';
-        }
+            if ($this->hasInclude($includes, 'taxon-group')) {
+                $fields['taxon_group__external_key'] = 'tg.external_key';
+                $fields['taxon_group__friendly'] = 'tg.friendly';
+                $fields['taxon_group__title'] = 'tg.title';
+            }
 
-        if ($this->hasInclude($includes, 'parent_taxa')) {
-            foreach ($this->dynamicRankAliases() as $alias) {
-                $filters[$alias . '_scientific_name'] = $alias . '_scientific_name';
-                $filters[$alias . '_vernacular_name'] = $alias . '_vernacular_name';
+            if ($this->hasInclude($includes, 'taxon-rank')) {
+                $fields['taxon_rank__rank'] = 'tr.rank';
+                $fields['taxon_rank__abbr'] = 'tr.abbr';
+                $fields['taxon_rank__sort_order'] = 'tr.sort_order';
             }
         }
 
-        if ($this->hasInclude($includes, 'geographic_region')) {
-            $filters['geographic_region'] = 'geographic_region';
-        }
-
-        return $filters;
+        return $fields;
     }
 
     /**
-     * Build the base query used when no include expansion is requested.
+     * Builds the base query used for the API.
+     *
+     * @return object
+     *   The query builder instance.
      */
-    private function buildDefaultBuilder($db, string $prefix)
+    protected function getBuilder(object $db, array $includes = []): BaseBuilder
     {
-        return $db->table('taxon_stats')
-            ->select('uuid, (SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id AND deleted_at IS NULL AND blocked = 0) AS taxon_identifier, CAST((SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS INTEGER) AS geographic_region_identifier, occurrences_count, grid_square_count, first_record_date, last_record_date, first_recorder, last_recorder, first_verified_record_date, last_verified_record_date, first_verified_recorder, last_verified_recorder', false)
-            ->where('taxon_id IN (SELECT id FROM ' . $prefix . 'taxa WHERE deleted_at IS NULL AND blocked = 0)', null, false);
-    }
+        $builder = $db->table('taxon_stats ts')
+            ->select($this->getFieldSql($includes))
+            ->join('taxa t', 't.id = ts.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0')
+            ->join('geographic_regions gr', 'gr.id = t.geographic_region_id AND gr.deleted_at IS NULL', 'left');
 
-    /**
-     * @param array<string, bool> $includes
-     */
-    private function buildIncludedBuilder($db, string $prefix, array $includes)
-    {
-        $builder = $db->table('taxon_stats')
-            ->select('uuid, occurrences_count, grid_square_count, first_record_date, last_record_date, first_recorder, last_recorder, first_verified_record_date, last_verified_record_date, first_verified_recorder, last_verified_recorder', false)
-            ->where('taxon_id IN (SELECT id FROM ' . $prefix . 'taxa WHERE deleted_at IS NULL AND blocked = 0)', null, false);
-
-        if ($this->hasInclude($includes, 'taxon')) {
-            $builder->select('(SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id AND deleted_at IS NULL AND blocked = 0) AS taxon_identifier', false);
-            $builder->select('(SELECT scientific_name FROM ' . $prefix . 'taxa WHERE id = taxon_id AND deleted_at IS NULL AND blocked = 0) AS taxon_scientific_name', false);
-            $builder->select('(SELECT vernacular_name FROM ' . $prefix . 'taxa WHERE id = taxon_id AND deleted_at IS NULL AND blocked = 0) AS taxon_vernacular_name', false);
-        } else {
-            $builder->select('(SELECT taxon_identifier FROM ' . $prefix . 'taxa WHERE id = taxon_id AND deleted_at IS NULL AND blocked = 0) AS taxon_identifier', false);
-        }
-
-        if ($this->hasInclude($includes, 'taxon_rank')) {
-            $builder->select('(SELECT tr.rank FROM ' . $prefix . 'taxon_ranks tr WHERE tr.id = (SELECT t.taxon_rank_id FROM ' . $prefix . 'taxa t WHERE t.id = taxon_id)) AS taxon_rank', false);
-        }
-
-        if ($this->hasInclude($includes, 'taxon_group')) {
-            $builder->select('(SELECT tg.external_key FROM ' . $prefix . 'taxon_groups tg WHERE tg.id = (SELECT t.taxon_group_id FROM ' . $prefix . 'taxa t WHERE t.id = taxon_id)) AS taxon_group_external_key', false);
-        }
-
-        if ($this->hasInclude($includes, 'parent_taxa')) {
+        if ($this->hasInclude($includes, 'parent-taxa')) {
             foreach ($this->dynamicRankAliases() as $alias) {
-                $column = $alias . '_id';
-                $builder->select('(SELECT p.scientific_name FROM ' . $prefix . 'taxa p WHERE p.id = (SELECT t.' . $column . ' FROM ' . $prefix . 'taxa t WHERE t.id = taxon_id AND t.deleted_at IS NULL AND t.blocked = 0) AND p.deleted_at IS NULL AND p.blocked = 0) AS ' . $alias . '_scientific_name', false);
-                $builder->select('(SELECT p.vernacular_name FROM ' . $prefix . 'taxa p WHERE p.id = (SELECT t.' . $column . ' FROM ' . $prefix . 'taxa t WHERE t.id = taxon_id AND t.deleted_at IS NULL AND t.blocked = 0) AND p.deleted_at IS NULL AND p.blocked = 0) AS ' . $alias . '_vernacular_name', false);
+                $builder->join("taxa {$alias}", "{$alias}.id = t.{$alias}_id", 'left');
             }
         }
-
-        if ($this->hasInclude($includes, 'geographic_region')) {
-            $builder->select('CAST((SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS INTEGER) AS geographic_region_identifier', false);
-            $builder->select('(SELECT higher_geography FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS geographic_region', false);
-        } else {
-            $builder->select('CAST((SELECT higher_geography_identifier FROM ' . $prefix . 'geographic_regions WHERE id = geographic_region_id AND deleted_at IS NULL) AS INTEGER) AS geographic_region_identifier', false);
+        if ($this->hasInclude($includes, 'taxon-group')) {
+            $builder->join('taxon_groups tg', 'tg.id = t.taxon_group_id', 'left');
+        }
+        if ($this->hasInclude($includes, 'taxon-rank')) {
+            $builder->join('taxon_ranks tr', 'tr.id = t.taxon_rank_id', 'left');
         }
 
         return $builder;
     }
 
     /**
-     * @return array<string, bool>|ResponseInterface
-     */
-    /**
-     * Parse and validate include query parameters.
+     * Name of the column for looking up individual items.
      *
-     * @return array<string, bool>|ResponseInterface
+     * @return string
      */
-    private function getIncludes(): array|ResponseInterface
+    protected function getDefaultKeyColumn(): string
     {
-        $raw = (string) ($this->request->getGet('include') ?? '');
-
-        if (trim($raw) === '') {
-            return [];
-        }
-
-        $parts = array_filter(array_map('trim', explode(',', strtolower($raw))), static fn (string $item): bool => $item !== '');
-        $supported = ['taxon', 'taxon_rank', 'taxon_group', 'parent_taxa', 'geographic_region'];
-        $includes = [];
-
-        foreach ($parts as $part) {
-            if (! in_array($part, $supported, true)) {
-                return $this->respondProblem(400, 'Invalid include parameter', "Unsupported include value '{$part}'.");
-            }
-
-            $includes[$part] = true;
-        }
-
-        return $includes;
+        return 'uuid';
     }
 
     /**
-     * @param array<string, bool> $includes
-     */
-    /**
-     * Check whether a specific include flag is enabled.
+     * Name of the column for sorting if not otherwise specified.
      *
-     * @param array<string, bool> $includes
+     * @return string
      */
-    private function hasInclude(array $includes, string $name): bool
+    protected function getDefaultSortColumn(): string
     {
-        return isset($includes[$name]) && $includes[$name] === true;
-    }
-
-    /**
-     * @param array<string, bool> $includes
-     */
-    /**
-     * Determine whether include-aware query shaping should be used.
-     *
-     * @param array<string, bool> $includes
-     */
-    private function usesIncludedBuilder(array $includes): bool
-    {
-        return $includes !== [];
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    private function dynamicRankAliases(): array
-    {
-        $ranks = config('Import')->taxonRanks ?? [];
-        $ranks = is_array($ranks) ? $ranks : explode(',', (string) $ranks);
-        $scalarRanks = array_values(array_filter($ranks, static fn ($rank): bool => is_scalar($rank)));
-        $rankStrings = array_map(static fn ($rank): string => (string) $rank, $scalarRanks);
-
-        return $this->resolveAvailableTaxonRankAliases($rankStrings);
-    }
-
-    /**
-     * Apply identifier-based filters using subqueries.
-     *
-     * @param mixed $value
-     */
-    private function applyIdentifierFilter($builder, string $operator, $value, string $localColumn, string $relatedTable, string $relatedField, $db, string $extraWhere = ''): void
-    {
-        if ($operator === 'eq') {
-            $builder->where($localColumn . ' IN (SELECT id FROM ' . $relatedTable . ' WHERE ' . $relatedField . ' = ' . $db->escape($value) . $extraWhere . ')', null, false);
-            return;
-        }
-
-        if ($operator === 'in') {
-            $values = is_array($value) ? $value : array_filter(array_map('trim', explode(',', (string) $value)), static fn (string $v): bool => $v !== '');
-            $escaped = array_map(static fn ($v): string => $db->escape((string) $v), $values);
-            if ($escaped !== []) {
-                $builder->where($localColumn . ' IN (SELECT id FROM ' . $relatedTable . ' WHERE ' . $relatedField . ' IN (' . implode(',', $escaped) . ')' . $extraWhere . ')', null, false);
-            }
-            return;
-        }
-
-        if ($operator === 'contains') {
-            $like = '%' . $db->escapeLikeString(strtolower((string) $value)) . '%';
-            $builder->where($localColumn . ' IN (SELECT id FROM ' . $relatedTable . ' WHERE LOWER(CAST(' . $relatedField . ' AS TEXT)) LIKE ' . $db->escape($like) . " ESCAPE '!'" . $extraWhere . ')', null, false);
-            return;
-        }
-
-        if ($operator === 'gte') {
-            $builder->where($localColumn . ' IN (SELECT id FROM ' . $relatedTable . ' WHERE ' . $relatedField . ' >= ' . $db->escape($value) . $extraWhere . ')', null, false);
-            return;
-        }
-
-        if ($operator === 'lte') {
-            $builder->where($localColumn . ' IN (SELECT id FROM ' . $relatedTable . ' WHERE ' . $relatedField . ' <= ' . $db->escape($value) . $extraWhere . ')', null, false);
-        }
+        return 'uuid';
     }
 }

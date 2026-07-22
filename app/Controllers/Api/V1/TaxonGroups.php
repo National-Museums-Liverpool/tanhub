@@ -16,7 +16,7 @@ class TaxonGroups extends ApiResourceController
      * @return array<string, string>
      *   Array of field identifiers and their corresponding query columns.
      */
-    protected function allowedFields(array $includes = []): array
+    protected function getAllowedFields(array $includes = []): array
     {
         return [
             'external_key' => 'external_key',

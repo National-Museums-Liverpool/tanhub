@@ -126,7 +126,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $json = json_decode((string) $result->response()->getBody(), true);
 
         $this->assertSame(1, $json['meta']['count']);
-        $this->assertSame('12', (string) $json['data'][0]['higher_geography_identifier']);
+        $this->assertSame('SH', (string) $json['data'][0]['higher_geography_identifier']);
         $this->assertSame('NBN', $json['data'][0]['data_source__abbr']);
     }
 
@@ -218,14 +218,14 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
     public function testOccurrencesListSupportsHigherGeographyIdentifierFilter(): void
     {
-        $result = $this->get('api/v1/occurrences?higher_geography_identifier[eq]=12');
+        $result = $this->get('api/v1/occurrences?higher_geography_identifier[eq]=SH');
 
         $result->assertStatus(200);
 
         $json = json_decode((string) $result->response()->getBody(), true);
 
         $this->assertSame(1, $json['meta']['count']);
-        $this->assertSame('12', (string) $json['data'][0]['higher_geography_identifier']);
+        $this->assertSame('SH', (string) $json['data'][0]['higher_geography_identifier']);
     }
 
     public function testOccurrenceShowReturnsSingleObject(): void
@@ -296,7 +296,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
     public function testGridSquareStatsListSupportsRegionFilterAndPagination(): void
     {
-        $result = $this->get('api/v1/grid-square-stats?higher_geography_identifier[eq]=12&sort=square&limit=10&offset=0');
+        $result = $this->get('api/v1/grid-square-stats?higher_geography_identifier[eq]=SH&sort=square&limit=10&offset=0');
 
         $result->assertStatus(200);
 
@@ -304,7 +304,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
         $this->assertSame(1, $json['meta']['count']);
         $this->assertSame('SU1234', $json['data'][0]['square']);
-        $this->assertSame('12', (string) $json['data'][0]['higher_geography_identifier']);
+        $this->assertSame('SH', (string) $json['data'][0]['higher_geography_identifier']);
     }
 
     public function testGridSquareStatsShowReturnsSingleObject(): void
@@ -316,7 +316,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $json = json_decode((string) $result->response()->getBody(), true);
 
         $this->assertSame('11111111-1111-4111-8111-111111111111', $json['uuid']);
-        $this->assertSame('12', (string) $json['higher_geography_identifier']);
+        $this->assertSame('SH', (string) $json['higher_geography_identifier']);
     }
 
     public function testGridSquareStatsIncludeGeographicRegionAddsFields(): void
@@ -419,7 +419,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
     public function testTaxonYearStatsListSupportsYearAndRegionFilters(): void
     {
-        $result = $this->get('api/v1/taxon-year-stats?year[eq]=2024&higher_geography_identifier[eq]=12');
+        $result = $this->get('api/v1/taxon-year-stats?year[eq]=2024&higher_geography_identifier[eq]=SH');
 
         $result->assertStatus(200);
 
@@ -427,7 +427,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
         $this->assertSame(1, $json['meta']['count']);
         $this->assertSame(2024, $json['data'][0]['year']);
-        $this->assertSame('12', (string) $json['data'][0]['higher_geography_identifier']);
+        $this->assertSame('SH', (string) $json['data'][0]['higher_geography_identifier']);
     }
 
     public function testTaxonYearStatsShowReturnsSingleObject(): void
@@ -587,7 +587,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $db->table('geographic_regions')->insertBatch([
             [
                 'id' => 1,
-                'higher_geography_identifier' => 12,
+                'higher_geography_identifier' => 'SH',
                 'higher_geography' => 'South Hampshire',
                 'location_type' => 'Vice-county',
                 'data_source_id' => 1,

@@ -453,8 +453,8 @@ Examples:
 	- `locality`, `recorded_by`, `identified_by`, `identification_verification_status`
 	- `sex`, `life_stage`, `organism_quantity`, `higher_geography_identifier`
 
-	  `higher_geography_identifier` is a helper field used for filtering and sorting and resolves to a
-	  single representative region identifier when an occurrence maps to multiple regions.
+	  `higher_geography_identifier` returns a semi-colon separated list if an occurrence spans
+		multiple regions.
 	- dynamic taxon rank fields by configured rank identifier (for example `kingdom__taxon_identifier`, `family__taxon_identifier`)
 - Filterable fields:
 	- all exposed occurrence fields above

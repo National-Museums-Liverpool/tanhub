@@ -4,97 +4,12 @@ namespace App\Controllers\Api\V1;
 
 use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\RawSql;
-use CodeIgniter\HTTP\ResponseInterface;
 
 /**
  * API endpoints for occurrences.
  */
 class Occurrences extends ApiResourceController
 {
-
-    /**
-     * List occurrences.
-     */
-    public function index(): ResponseInterface
-    {
-        $includes = $this->parseRequestedIncludes();
-
-        if ($includes instanceof ResponseInterface) {
-            return $includes;
-        }
-
-        $pagination = $this->getPagination();
-
-        if ($pagination instanceof ResponseInterface) {
-            return $pagination;
-        }
-
-        $sorts = $this->getSorts($this->allowedSorts($includes));
-
-        if ($sorts instanceof ResponseInterface) {
-            return $sorts;
-        }
-
-        $filters = $this->getFilters($this->allowedFilters($includes));
-
-        if ($filters instanceof ResponseInterface) {
-            return $filters;
-        }
-
-        $db = db_connect();
-        $builder = $this->getBuilder($db, $includes);
-
-        $this->applyFilters($builder, $filters);
-        $this->applySorts($builder, $sorts);
-
-        $total = (clone $builder)->countAllResults();
-
-        $data = $builder
-            ->limit($pagination['limit'], $pagination['offset'])
-            ->get()
-            ->getResultArray();
-
-        if ($this->hasInclude($includes, 'geographic-region')) {
-            $this->hydrateGeographicRegions($data);
-        }
-
-        $this->removeInternalFields($data);
-
-        return $this->respondList($data, $total, $pagination['limit'], $pagination['offset']);
-    }
-
-    /**
-     * Return a single occurrence by unique key.
-     */
-    public function show(string $key): ResponseInterface
-    {
-        $includes = $this->parseRequestedIncludes();
-
-        if ($includes instanceof ResponseInterface) {
-            return $includes;
-        }
-
-        $db = db_connect();
-
-        $item = $this->getBuilder($db, $includes)
-            ->where($this->getDefaultKeyColumn(), $key)
-            ->get()
-            ->getRowArray();
-
-        if ($item === null) {
-            return $this->respondProblem(404, 'Resource not found', "No Occurrences exists for key '{$key}'.");
-        }
-
-        $rows = [$item];
-
-        if ($this->hasInclude($includes, 'geographic-region')) {
-            $this->hydrateGeographicRegions($rows);
-        }
-
-        $this->removeInternalFields($rows);
-
-        return $this->respondItem($rows[0]);
-    }
 
     /**
      * Retrieve list of resources that can be included (joined) in requests.
@@ -124,15 +39,14 @@ class Occurrences extends ApiResourceController
     }
 
     /**
-     * Retrieve sortable fields array.
+     * Retrieve API fields array.
      *
      * @return array<string, string>
      *   Array of field identifiers and their corresponding query columns.
      */
-    protected function allowedFields(array $includes = []): array
+    protected function getAllowedFields(array $includes = []): array
     {
         $fields = [
-            '__occurrence_id' => 'o.id',
             'unique_key' => 'o.unique_key',
             'taxon_identifier' => 't.taxon_identifier',
             'from_date' => 'o.from_date',
@@ -201,6 +115,26 @@ class Occurrences extends ApiResourceController
         }
 
         return $fields;
+    }
+
+    /**
+     * Retrieve API fields array.
+     *
+     * @return array<string, string>
+     *   Array of field identifiers and their corresponding query columns.
+     */
+    protected function getInternalFields(array $includes = []): array
+    {
+        return [
+            '__occurrence_id' => 'o.id',
+        ];
+    }
+
+    protected function augmentResponseData(array &$data, array $includes = []): void
+    {
+        if ($this->hasInclude($includes, 'geographic-region')) {
+            $this->hydrateGeographicRegions($data);
+        }
     }
 
     /**
@@ -303,34 +237,6 @@ class Occurrences extends ApiResourceController
     }
 
     /**
-     * Parse include list for the occurrences endpoint.
-     *
-     * @return array<string, bool>|ResponseInterface
-     */
-    private function parseRequestedIncludes(): array|ResponseInterface
-    {
-        $raw = (string) ($this->request->getGet('include') ?? '');
-
-        if (trim($raw) === '') {
-            return [];
-        }
-
-        $parts = array_filter(array_map('trim', explode(',', strtolower($raw))), static fn (string $item): bool => $item !== '');
-        $supported = $this->getAllowedIncludes($parts);
-        $includes = [];
-
-        foreach ($parts as $part) {
-            if (! in_array($part, $supported, true)) {
-                return $this->respondProblem(400, 'Invalid include parameter', "Unsupported include value '{$part}'.");
-            }
-
-            $includes[$part] = true;
-        }
-
-        return $includes;
-    }
-
-    /**
      * Add nested geographic region data for each occurrence.
      *
      * @param array<int, array<string, mixed>> $rows
@@ -362,7 +268,7 @@ class Occurrences extends ApiResourceController
         foreach ($regionRows as $regionRow) {
             $occurrenceId = (int) $regionRow['occurrence_id'];
             $regionsByOccurrence[$occurrenceId][] = [
-                'higher_geography_identifier' => (int) $regionRow['higher_geography_identifier'],
+                'higher_geography_identifier' => $regionRow['higher_geography_identifier'],
                 'higher_geography' => $regionRow['higher_geography'],
                 'location_type' => $regionRow['location_type'],
             ];
@@ -371,18 +277,6 @@ class Occurrences extends ApiResourceController
         foreach ($rows as &$row) {
             $occurrenceId = (int) ($row['__occurrence_id'] ?? 0);
             $row['geographic_regions'] = $regionsByOccurrence[$occurrenceId] ?? [];
-        }
-    }
-
-    /**
-     * Remove helper-only fields from the response payload.
-     *
-     * @param array<int, array<string, mixed>> $rows
-     */
-    private function removeInternalFields(array &$rows): void
-    {
-        foreach ($rows as &$row) {
-            unset($row['__occurrence_id']);
         }
     }
 
@@ -425,6 +319,8 @@ class Occurrences extends ApiResourceController
 
     /**
      * SQL expression for helper higher geography identifier field.
+     *
+     * @return string
      */
     private function buildHigherGeographyIdentifierSql(): string
     {
@@ -432,9 +328,34 @@ class Occurrences extends ApiResourceController
         $groTable = $db->prefixTable('geographic_regions_occurrences');
         $grTable = $db->prefixTable('geographic_regions');
 
-        return '(SELECT MIN(gr.higher_geography_identifier) '
-            . 'FROM ' . $groTable . ' gro '
+        $driver = strtolower((string) $db->DBDriver);
+        $baseFrom = ' FROM ' . $groTable . ' gro '
             . 'INNER JOIN ' . $grTable . ' gr ON gr.id = gro.geographic_region_id '
-            . 'WHERE gro.occurrence_id = o.id AND gr.deleted_at IS NULL)';
+            . 'WHERE gro.occurrence_id = o.id AND gr.deleted_at IS NULL';
+
+        // Use a driver-specific aggregate while keeping consistent DISTINCT semicolon-delimited output.
+        if ($driver === 'mysqli') {
+            return '(SELECT GROUP_CONCAT(DISTINCT gr.higher_geography_identifier '
+                . 'ORDER BY gr.higher_geography_identifier SEPARATOR ";")'
+                . $baseFrom . ')';
+        }
+
+        if ($driver === 'postgre') {
+            return '(SELECT STRING_AGG(DISTINCT gr.higher_geography_identifier::text, ";" '
+                . 'ORDER BY gr.higher_geography_identifier::text)'
+                . $baseFrom . ')';
+        }
+
+        if ($driver === 'sqlsrv') {
+            return '(SELECT STUFF((SELECT DISTINCT ";" + CAST(gr2.higher_geography_identifier AS VARCHAR(255)) '
+                . 'FROM ' . $groTable . ' gro2 '
+                . 'INNER JOIN ' . $grTable . ' gr2 ON gr2.id = gro2.geographic_region_id '
+                . 'WHERE gro2.occurrence_id = o.id AND gr2.deleted_at IS NULL '
+                . 'FOR XML PATH(""), TYPE).value(".", "NVARCHAR(MAX)"), 1, 1, ""))';
+        }
+
+        // SQLite supports DISTINCT in GROUP_CONCAT without a separator argument.
+        return '(SELECT REPLACE(GROUP_CONCAT(DISTINCT gr.higher_geography_identifier), ",", ";")'
+            . $baseFrom . ')';
     }
 }

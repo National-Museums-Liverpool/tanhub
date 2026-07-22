@@ -11,7 +11,7 @@ use CodeIgniter\HTTP\ResponseInterface;
  */
 abstract class ApiResourceController extends ApiController
 {
-    abstract protected function allowedFields(array $includes = []): array;
+    abstract protected function getAllowedFields(array $includes = []): array;
 
     abstract protected function getBuilder(object $db, array $includes = []): BaseBuilder;
 
@@ -22,6 +22,43 @@ abstract class ApiResourceController extends ApiController
     protected function getAllowedIncludes(array $requested): array
     {
         return [];
+    }
+
+    /**
+     * Override to add fields to the query for internal use.
+     *
+     * Fields added are available for internal processing, but not exposed in
+     * the API.
+     *
+     * @param array $includes
+     *   Requested additional included resources.
+     *
+     * @return array
+     *   List of fields.
+     */
+    protected function getInternalFields(array $includes = []): array
+    {
+        return [];
+    }
+
+    /**
+     * Override to augement the response data with additional info.
+     *
+     * If data needed in a response that cannot be derived from the base query,
+     * this function can be overridden to add additional data to the response.
+     *
+     * Fields added are available for internal processing, but not exposed in
+     * the API.
+     *
+     * @param array $includes
+     *   Requested additional included resources.
+     *
+     * @return array
+     *   List of fields.
+     */
+    protected function augmentResponseData(array &$data, array $includes = []): void
+    {
+        // Do nothing by default.
     }
 
     /**
@@ -37,7 +74,7 @@ abstract class ApiResourceController extends ApiController
      */
     protected function allowedFilters(array $includes = []): array
     {
-        return $this->allowedFields($includes);
+        return $this->getAllowedFields($includes);
     }
 
     /**
@@ -52,7 +89,7 @@ abstract class ApiResourceController extends ApiController
      *   Array of field identifiers and their corresponding query columns.
      */    protected function allowedSorts(array $includes = []): array
     {
-        return $this->allowedFields($includes);
+        return $this->getAllowedFields($includes);
     }
 
     /**
@@ -97,6 +134,10 @@ abstract class ApiResourceController extends ApiController
             ->get()
             ->getResultArray();
 
+        $this->augmentResponseData($data, $includes);
+
+        $this->removeInternalFields($data, $includes);
+
         return $this->respondList($data, $total, $pagination['limit'], $pagination['offset']);
     }
 
@@ -124,7 +165,29 @@ abstract class ApiResourceController extends ApiController
             return $this->respondProblem(404, 'Resource not found', "No {$resourceClass} exists for key '{$key}'.");
         }
 
-        return $this->respondItem($item);
+        $rows = [$item];
+
+        $this->augmentResponseData($rows, $includes);
+
+        $this->removeInternalFields($rows, $includes);
+
+        return $this->respondItem($rows[0]);
+    }
+
+
+    /**
+     * Remove helper-only fields from the response payload.
+     *
+     * @param array<int, array<string, mixed>> $rows
+     */
+    protected function removeInternalFields(array &$rows, array $includes = []): void
+    {
+        foreach ($rows as &$row) {
+            // Remove any fields that are present in the internal field list.
+            foreach ($this->getInternalFields($includes) as $field => $column) {
+                unset($row[$field]);
+            }
+        }
     }
 
     /**
@@ -290,7 +353,7 @@ abstract class ApiResourceController extends ApiController
      */
     protected function getFieldSql(array $includes = []): string
     {
-        $fields = $this->allowedFields($includes);
+        $fields = array_merge($this->getInternalFields($includes), $this->getAllowedFields($includes));
         $selects = [];
 
         foreach ($fields as $alias => $column) {

@@ -38,7 +38,7 @@ class GeographicRegionsImportService implements EntityImportServiceInterface
                 $higherGeography = trim((string) ($row['higher_geography'] ?? ''));
                 $locationType = trim((string) ($row['location_type'] ?? ''));
                 $dataSourceAbbr = strtoupper(trim((string) ($row['data_source_abbr'] ?? 'IREC')));
-                $footprintGeometry = $this->nullableString($row['footprint_geometry'] ?? $row['polygon_geometry'] ?? null, 65535);
+                $footprintGeometry = $this->nullableString($row['footprint_geometry'] ?? null);
 
                 if ($higherGeographyIdentifier <= 0 || $higherGeography === '' || $locationType === '') {
                     log_message('debug', 'Geographic region row skipped due to missing required fields: ' . json_encode($row));
@@ -104,8 +104,9 @@ class GeographicRegionsImportService implements EntityImportServiceInterface
 
     /**
      * @param mixed $value
+     * @param ?int $maxLength
      */
-    private function nullableString($value, int $maxLength): ?string
+    private function nullableString($value, ?int $maxLength = null): ?string
     {
         if (! is_scalar($value)) {
             return null;

@@ -62,7 +62,7 @@ final class GeographicRegionsImportServiceTest extends CIUnitTestCase
                 'higher_geography_identifier' => 123,
                 'higher_geography' => 'Region 123',
                 'location_type' => 'Vice County',
-                'polygon_geometry' => 'POLYGON((-1 51,-1 52,0 52,0 51,-1 51))',
+                'footprint_geometry' => 'POLYGON((-1 51,-1 52,0 52,0 51,-1 51))',
                 'data_source_abbr' => 'IREC',
             ],
         ]);

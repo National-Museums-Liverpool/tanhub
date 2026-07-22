@@ -61,8 +61,6 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
         $batchOffset = max(0, $offset);
 
         $rawRows = $this->fetchImportData($entityKey, $batchLimit, $batchOffset);
-        log_message('debug', 'Fetched ' . count($rawRows) . ' rows for entity ' . $entityKey . ' with limit ' . $batchLimit . ' and offset ' . $batchOffset);
-        log_message('debug', 'Raw rows: ' . var_export($rawRows, true));
         $normalisedRows = $this->normaliseRows($entityKey, $rawRows);
 
         return new ImportBatch(

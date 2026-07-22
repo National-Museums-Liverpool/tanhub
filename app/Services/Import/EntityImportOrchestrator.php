@@ -52,9 +52,7 @@ class EntityImportOrchestrator
             throw new InvalidArgumentException('No data_sources row found for abbr: ' . $sourceAbbr);
         }
 
-        log_message('info', 'Offset override: ' . ($offsetOverride === null ? 'null' : (string) $offsetOverride));
         $offset = $offsetOverride === null ? $this->lastSuccessfulOffset($importOffsetModel, $sourceEntityKey) : $offsetOverride;
-        log_message('info', 'Starting import for source: ' . $source . ', entity: ' . $entityKey . ', limit: ' . $limit . ', offset: ' . $offset . ', dry-run: ' . ($dryRun ? 'true' : 'false'));
 
         $runId = (int) $importRunModel->insert([
             'source_key' => $sourceEntityKey,

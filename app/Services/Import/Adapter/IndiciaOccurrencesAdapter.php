@@ -33,7 +33,6 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
 
         $apiQuery = $this->buildApiQuery();
         $requestBody = $this->buildSearchBody($checkpoint, $limit);
-        log_message('debug', 'Indicia request: ' . $endpoint . ' Query: ' . json_encode($apiQuery) . ' Body: ' . json_encode($requestBody));
         $headers = [
             'Accept' => 'application/json',
             'Content-Type' => 'application/json',
@@ -58,7 +57,6 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             'http_errors' => false,
             'timeout' => $this->timeout,
         ]);
-        log_message('debug', 'Indicia response: ' . $response->getStatusCode() . ' Body: ' . (string) $response->getBody());
 
         if ($response->getStatusCode() >= 400) {
             $body = trim((string) $response->getBody());
@@ -66,7 +64,6 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             throw new RuntimeException('Indicia request failed with status ' . $response->getStatusCode() . '.' . $bodyPreview);
         }
 
-        log_message('debug', 'Indicia response body: ' . (string) $response->getBody());
         $payload = json_decode($response->getBody(), true);
 
         if (! is_array($payload)) {

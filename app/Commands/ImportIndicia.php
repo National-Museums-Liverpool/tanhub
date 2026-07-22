@@ -57,9 +57,7 @@ class ImportIndicia extends BaseCommand
 
         $limit = (int) ($params['limit'] ?? CLI::getOption('limit') ?? 5000);
         $offsetOption = $params['offset'] ?? CLI::getOption('offset');
-        log_message('info', 'Offset option: ' . ($offsetOption === null ? 'null' : (string) $offsetOption));
         $offset = $offsetOption !== null ? max(0, (int) $offsetOption) : null;
-        log_message('info', 'Offset: ' . ($offset === null ? 'null' : (string) $offset));
         $dryRun = $this->resolveFlag($params, 'dry-run');
 
         if ($entity === 'occurrences') {

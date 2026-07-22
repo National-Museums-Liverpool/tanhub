@@ -147,8 +147,11 @@ api.rateLimitAuthenticatedSeconds = 20
    projects/tanhub/taxon_ranks.xml
    ```
 
-7. Save the connection.
-8. In TanHub `.env`, configure the Import section to match the connection settings as follows:
+7. Tick "Allow sensitive records" if you want sensitive records at blurred precision. Do not
+   tick "Allow confidential records" or "Full precision sensitive records" as the API for TanHub
+   is public.
+8. Save the connection.
+9. In TanHub `.env`, configure the Import section to match the connection settings as follows:
   - `Config\Import.indiciaWarehouseUrl` - the warehouse URL without trailing slash or `index.php`.
   - `Config\Import.indiciaTaxonListId` - the taxon list on the warehouse which contains the UKSI
    data.

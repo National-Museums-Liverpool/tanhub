@@ -35,7 +35,40 @@ Note that data from iRecord should not be imported, as it will be a duplicate
 and the iRecord copy should be more recent. So, any records with
 dataReourceName contains 'iRecord' will be ignored.
 
-## Running the import
+## Running the imports using the admin user interface
+
+You can run imports by logging into the admin user interface and visiting the Imports page via the
+menu option. Imports are listed along with a Go button for initiating an import batch. Imports are
+limited to a batch of 5000 records so you may need to run each import several times to get it to
+completion. Where an import requires another import to complete before it can be run, the blocking
+import tasks are shown.
+
+The following imports are for simple population of lookup tables and should not need to be run
+again after completion:
+* `recording_schemes`
+* `geographic_regions`
+* `taxon_groups`
+* `taxon_ranks`
+* `taxa`
+* `taxon_names`
+
+The `grid_square_stats` table populates the `grid_square_stats` with all the 2km grid squares that
+intersect your geographic regions. It does not do the actual counting of contained records.
+Therefore it can also be completed once and not run again.
+
+The 2 `occurrences` imports are for importing data from the NBN Atlas and Indicia and can be
+initially run to completion, then periodically run afterwards to pick up updates and new records.
+It can be run from the command-line or from cron if you want to automate this as a background
+process (see below).
+
+The remaining stats related imports are for processing the already collected internal data for
+reporting outputs, e.g. count occurrence data per grid square or year. They should be run after
+any modification of the occurrence data using the `occurrences` imports.
+
+## Running the import using CodeIgniter Spark commands
+
+You may prefer to use command-line Spark commands to run the import, which can be useful for script
+automation or running imports via Cron.
 
 ### Initial Indicia setup
 
@@ -62,8 +95,6 @@ Optional parameters:
 - `--dry-run` to fetch data but not load it into TanHub.
 - `--limit n` to override the default limit of 5000 records per fetch.
 - `--offset n` to override the offset
-
-
 
 ### Occurrence imports
 
@@ -168,8 +199,12 @@ For taxa imports, load related lookup data first (`recording_schemes`,
 `taxon_ranks` and `taxon_groups` at minimum), otherwise taxa rows may be
 skipped due to missing foreign key mappings.
 
-For taxon group imports, the `implied` column from `taxon_groups.xml` is
-persisted as a boolean flag on `taxon_groups.implied`.
+For taxon group imports, groups are imported from the database if they are in the list of
+configured groups, or if they belong to a taxon that belongs to one of the configured taxonomic
+ranks and that is a parent of a taxon in one of the configured groups. For example, if you import
+terrestrial mammals and include Kingdom in your ranks, then you may also see "Unassigned" appear
+in your list of groups because this is the group required to store Kingdom Animalia. Such taxon
+group records have their `implied` flag set to 1.
 
 For grid square stats imports, the `grid_squares.xml` report uses the same
 `geographic_regions` and `location_type` parameters as

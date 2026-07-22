@@ -172,10 +172,12 @@ class TaxaImportService implements EntityImportServiceInterface
      */
     private function prepareLookup(string $table, string $keyColumn = 'external_key', string $valueColumn = 'id'): array
     {
-        $rows = db_connect()->table($table)
+        $db = db_connect();
+
+        $rows = $db->table($table)
             ->select([$valueColumn, $keyColumn])
             ->where('deleted_at', null)
-            ->where("$keyColumn IS NOT NULL", null, false)
+            ->where($db->escape($keyColumn) . ' IS NOT NULL', null, false)
             ->get()
             ->getResultArray();
 

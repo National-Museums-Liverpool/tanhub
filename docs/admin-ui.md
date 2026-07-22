@@ -88,6 +88,7 @@ lookups, taxonomy, occurrences and report stats:
 - Lookups
   - recording_schemes (Indicia)
   - geographic_regions (Indicia)
+  - grid_square_stats (Indicia)
 - taxonomy
   - taxon_groups (Indicia)
   - taxon_ranks (Indicia)
@@ -97,7 +98,6 @@ lookups, taxonomy, occurrences and report stats:
   - occurrences (Indicia)
   - occurrences (NBN, not implemented)
 - report stats:
-  - grid_square_stats
   - grid_square_stats_counts
   - taxon_stats
   - taxon_year_stats

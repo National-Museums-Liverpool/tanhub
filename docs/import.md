@@ -47,12 +47,13 @@ The following imports are for simple population of lookup tables and should not 
 again after completion:
 * `recording_schemes`
 * `geographic_regions`
+* `grid_square_stats`
 * `taxon_groups`
 * `taxon_ranks`
 * `taxa`
 * `taxon_names`
 
-The `grid_square_stats` table populates the `grid_square_stats` with all the 2km grid squares that
+The `grid_square_stats` task populates the `grid_square_stats` with all the 2km grid squares that
 intersect your geographic regions. It does not do the actual counting of contained records.
 Therefore it can also be completed once and not run again.
 
@@ -241,7 +242,7 @@ You cannot import `occurrences` until the following imports are completed:
 - `taxon_ranks`
 - `taxa`
 - `taxon_names`
-You cannot run `stats:grid-square-stats` until the following imports are
+You cannot run `grid_square_stats_counts` until the following imports are
 completed:
 - `grid_square_stats`
 - `occurrences` (indicia)

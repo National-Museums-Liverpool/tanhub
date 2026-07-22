@@ -41,6 +41,15 @@ class Imports extends BaseController
             'source_key' => 'indicia-taxonomy:geographic_regions',
             'supports_run' => true,
         ],
+        'lookup:indicia:grid_square_stats' => [
+            'category' => 'Lookups',
+            'label' => 'grid_square_stats',
+            'source' => 'indicia',
+            'kind' => 'entity',
+            'entity' => 'grid_square_stats',
+            'source_key' => 'indicia-taxonomy:grid_square_stats',
+            'supports_run' => true,
+        ],
         'taxonomy:indicia:taxon_groups' => [
             'category' => 'Taxonomy',
             'label' => 'taxon_groups',
@@ -93,15 +102,6 @@ class Imports extends BaseController
             'source_key' => 'nbn-occurrences:occurrences',
             'supports_run' => false,
         ],
-        'stats:indicia:grid_square_stats' => [
-            'category' => 'Report stats',
-            'label' => 'grid_square_stats',
-            'source' => 'indicia',
-            'kind' => 'entity',
-            'entity' => 'grid_square_stats',
-            'source_key' => 'indicia-taxonomy:grid_square_stats',
-            'supports_run' => true,
-        ],
         'stats:derived:taxon_stats' => [
             'category' => 'Report stats',
             'label' => 'taxon_stats',
@@ -132,7 +132,7 @@ class Imports extends BaseController
      * @var array<string, array<int, string>>
      */
     private const DEPENDENCIES = [
-        'stats:indicia:grid_square_stats' => ['lookup:indicia:geographic_regions'],
+        'lookup:indicia:grid_square_stats' => ['lookup:indicia:geographic_regions'],
         'taxonomy:indicia:taxa' => [
             'lookup:indicia:recording_schemes',
             'lookup:indicia:geographic_regions',
@@ -143,7 +143,7 @@ class Imports extends BaseController
         'occurrence:indicia:occurrences' => [
             'lookup:indicia:recording_schemes',
             'lookup:indicia:geographic_regions',
-            'stats:indicia:grid_square_stats',
+            'lookup:indicia:grid_square_stats',
             'taxonomy:indicia:taxon_groups',
             'taxonomy:indicia:taxon_ranks',
             'taxonomy:indicia:taxa',
@@ -152,7 +152,7 @@ class Imports extends BaseController
         'occurrence:nbn:occurrences' => [
             'lookup:indicia:recording_schemes',
             'lookup:indicia:geographic_regions',
-            'stats:indicia:grid_square_stats',
+            'lookup:indicia:grid_square_stats',
             'taxonomy:indicia:taxon_groups',
             'taxonomy:indicia:taxon_ranks',
             'taxonomy:indicia:taxa',
@@ -161,8 +161,7 @@ class Imports extends BaseController
         'stats:derived:taxon_stats' => ['occurrence:indicia:occurrences'],
         'stats:derived:taxon_year_stats' => ['occurrence:indicia:occurrences'],
         'stats:derived:grid_square_stats_counts' => [
-            'stats:indicia:grid_square_stats',
-            'occurrence:indicia:occurrences',
+            'lookup:indicia:grid_square_stats',
         ],
     ];
 

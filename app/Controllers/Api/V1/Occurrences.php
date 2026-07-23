@@ -29,6 +29,7 @@ class Occurrences extends ApiResourceController
 
         if (in_array('taxon', $requested, true)) {
             $includes = array_merge($includes, [
+                'taxon-media',
                 'taxon-rank',
                 'taxon-group',
                 'parent-taxa',
@@ -125,15 +126,31 @@ class Occurrences extends ApiResourceController
      */
     protected function getInternalFields(array $includes = []): array
     {
-        return [
+        $fields = [
             '__occurrence_id' => 'o.id',
         ];
+
+        if ($this->hasInclude($includes, 'taxon-media')) {
+            $fields['__taxon_id'] = 't.id';
+        }
+
+        return $fields;
     }
 
+    /**
+     * Add include-dependent nested data to each response row.
+     *
+     * @param array<int, array<string, mixed>> $data
+     * @return void
+     */
     protected function augmentResponseData(array &$data, array $includes = []): void
     {
         if ($this->hasInclude($includes, 'geographic-region')) {
             $this->hydrateGeographicRegions($data);
+        }
+
+        if ($this->hasInclude($includes, 'taxon-media')) {
+            $this->hydrateTaxonMedia($data);
         }
     }
 

@@ -597,4 +597,40 @@ abstract class ApiResourceController extends ApiController
     {
         return 'pt_' . $rankAlias;
     }
+
+    /**
+     * Add nested taxon media arrays using the internal __taxon_id helper field.
+     *
+     * @param array<int, array<string, mixed>> $rows
+     * @param string $fieldName
+     * @return void
+     */
+    protected function hydrateTaxonMedia(array &$rows, string $fieldName = 'taxon_media'): void
+    {
+        $taxonIds = [];
+
+        foreach ($rows as $row) {
+            $taxonId = (int) ($row['__taxon_id'] ?? 0);
+            if ($taxonId > 0) {
+                $taxonIds[] = $taxonId;
+            }
+        }
+
+        $taxonIds = array_values(array_unique($taxonIds));
+
+        if ($taxonIds === []) {
+            foreach ($rows as &$row) {
+                $row[$fieldName] = [];
+            }
+
+            return;
+        }
+
+        $mediaByTaxonId = service('taxonMediaReadService')->getByTaxonIds($taxonIds);
+
+        foreach ($rows as &$row) {
+            $taxonId = (int) ($row['__taxon_id'] ?? 0);
+            $row[$fieldName] = $mediaByTaxonId[$taxonId] ?? [];
+        }
+    }
 }

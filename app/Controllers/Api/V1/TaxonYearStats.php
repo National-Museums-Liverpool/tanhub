@@ -23,12 +23,42 @@ class TaxonYearStats extends ApiResourceController
         ];
         if (in_array('taxon', $requested, true)) {
             $includes = array_merge($includes, [
+                'taxon-media',
                 'taxon-rank',
                 'taxon-group',
                 'parent-taxa',
             ]);
         }
         return $includes;
+    }
+
+    /**
+     * Retrieve internal helper fields used for response hydration.
+     *
+     * @return array<string, string>
+     */
+    protected function getInternalFields(array $includes = []): array
+    {
+        if (! $this->hasInclude($includes, 'taxon-media')) {
+            return [];
+        }
+
+        return [
+            '__taxon_id' => 't.id',
+        ];
+    }
+
+    /**
+     * Add include-dependent nested data to each response row.
+     *
+     * @param array<int, array<string, mixed>> $data
+     * @return void
+     */
+    protected function augmentResponseData(array &$data, array $includes = []): void
+    {
+        if ($this->hasInclude($includes, 'taxon-media')) {
+            $this->hydrateTaxonMedia($data);
+        }
     }
 
     /**

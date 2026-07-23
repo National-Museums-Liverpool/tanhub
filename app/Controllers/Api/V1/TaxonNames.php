@@ -20,9 +20,39 @@ class TaxonNames extends ApiResourceController
         return [
             'parent-taxa',
             'taxon',
+            'taxon-media',
             'taxon-group',
             'taxon-rank',
         ];
+    }
+
+    /**
+     * Retrieve internal helper fields used for response hydration.
+     *
+     * @return array<string, string>
+     */
+    protected function getInternalFields(array $includes = []): array
+    {
+        if (! $this->hasInclude($includes, 'taxon-media')) {
+            return [];
+        }
+
+        return [
+            '__taxon_id' => 't.id',
+        ];
+    }
+
+    /**
+     * Add include-dependent nested data to each response row.
+     *
+     * @param array<int, array<string, mixed>> $data
+     * @return void
+     */
+    protected function augmentResponseData(array &$data, array $includes = []): void
+    {
+        if ($this->hasInclude($includes, 'taxon-media')) {
+            $this->hydrateTaxonMedia($data);
+        }
     }
 
     /**

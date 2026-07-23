@@ -88,7 +88,8 @@ cp env .env
    - After setup, open `/users` as an admin to create and manage all other users.
    - Public `/register` self-registration is disabled.
 
-10. For production environments, enable production mode in `.env`:
+10. For production environments, enable production mode in `.env`. Note that this step is important
+    as without it, full stack dumps are shown on errors which may contain credentials:
 
 ```dotenv
 CI_ENVIRONMENT = production
@@ -117,9 +118,11 @@ taxonMedia.variants.large.mode = contain
 taxonMedia.variants.large.quality = 90
 ```
 
-## 3. Optional API Throttling Configuration
+## 3. API Configuration
 
-TanHub supports separate throttle windows for anonymous and authenticated requests.
+If tanhub is configured to serve only publicly viewable data, API access can be allowed without
+authentication, in which case rate limits are applied to prevent misuse or denial-of-service
+attacks. TanHub supports separate throttle windows for anonymous and authenticated requests.
 Add or override these keys in `.env` as required:
 
 ```dotenv
@@ -133,6 +136,26 @@ api.rateLimitAuthenticatedSeconds = 20
 - `api.rateLimitAnonymousSeconds`: anonymous window duration in seconds
 - `api.rateLimitAuthenticatedCapacity`: authenticated requests allowed per window
 - `api.rateLimitAuthenticatedSeconds`: authenticated window duration in seconds
+
+In order to allow access from JavaScript running in a browser, you need to configure the allowed
+origins by adding the following to .env, with a list of allowed domains:
+
+```dotenv
+CORS_ALLOWED_ORIGINS=http://localhost:3000,https://app.example.com
+```
+
+You can also use a pattern match to enable access for a range of similar domains:
+
+```dotenv
+CORS_ALLOWED_ORIGINS_PATTERNS=^https://.*\.staging\.example\.com$
+```
+
+Further CORS configuration options are available as in the following examples if required:
+
+```dotenv
+CORS_SUPPORTS_CREDENTIALS=true
+CORS_ALLOWED_HEADERS=Origin,Content-Type,Accept,Authorization,X-Requested-With
+```
 
 ## 4. Link TanHub to an Indicia Warehouse
 

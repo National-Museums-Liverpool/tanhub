@@ -39,3 +39,9 @@ taxonMedia.maxOriginalHeight = 2048
 
 Set both values greater than 0 to enable downscaling. If either value is omitted (or 0), the
 original image is stored at uploaded dimensions.
+
+# Clear the caches
+
+```bash
+php spark cache:clear
+```

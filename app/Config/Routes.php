@@ -38,7 +38,11 @@ $routes->post('imports/run', 'Imports::run', ['filter' => ['session', 'group:adm
 $routes->get('taxon-media/(:segment)', 'TaxonMediaFiles::show/$1');
 $routes->get('taxon-media/(:segment)/(:segment)', 'TaxonMediaFiles::variant/$1/$2');
 
-$routes->group('api/v1', ['filter' => 'api-rate-limit'], static function ($routes): void {
+$routes->options('api/(:any)', static function () {
+    return service('response')->setStatusCode(204);
+}, ['filter' => 'cors']);
+
+$routes->group('api/v1', ['filter' => ['cors', 'api-rate-limit']], static function ($routes): void {
 	$routes->post('auth/token', 'Api\\V1\\AuthTokens::token');
 	$routes->post('auth/token/refresh', 'Api\\V1\\AuthTokens::refresh');
 	$routes->post('auth/token/revoke', 'Api\\V1\\AuthTokens::revoke');

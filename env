@@ -97,6 +97,10 @@ Config\Import.nbnUrl = ''
 # taxonMedia.autoReorient = true
 # taxonMedia.maxUploadBytes = 10485760
 
+# Optional max dimensions for stored original images. Oversized uploads are downscaled to fit.
+# taxonMedia.maxOriginalWidth = 2048
+# taxonMedia.maxOriginalHeight = 2048
+
 # Comma-separated list of allowed image mime types.
 # taxonMedia.allowedMimeTypes = 'image/jpeg,image/png,image/gif,image/webp'
 

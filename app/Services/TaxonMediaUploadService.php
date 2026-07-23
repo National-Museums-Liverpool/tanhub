@@ -143,6 +143,54 @@ class TaxonMediaUploadService
     }
 
     /**
+     * Rebuild variant files and rows for existing media records.
+     *
+     * @param int|null $mediaId
+     * @param int|null $taxonId
+     * @param bool $dryRun
+     * @return array<string, mixed>
+     */
+    public function rebuildExistingVariants(?int $mediaId = null, ?int $taxonId = null, bool $dryRun = false): array
+    {
+        $builder = $this->mediaModel->where('deleted_at', null);
+
+        if ($mediaId !== null && $mediaId > 0) {
+            $builder = $builder->where('id', $mediaId);
+        }
+
+        if ($taxonId !== null && $taxonId > 0) {
+            $builder = $builder->where('taxon_id', $taxonId);
+        }
+
+        $rows = $builder->findAll();
+
+        $processed = 0;
+        $updated = 0;
+        $errors = 0;
+        $messages = [];
+
+        foreach ($rows as $row) {
+            $processed++;
+
+            try {
+                $this->rebuildVariantsForMediaRow($row, $dryRun);
+                $updated++;
+            } catch (\Throwable $exception) {
+                $errors++;
+                $messages[] = 'Media ID ' . (int) ($row['id'] ?? 0) . ': ' . $exception->getMessage();
+            }
+        }
+
+        return [
+            'processed' => $processed,
+            'updated' => $updated,
+            'errors' => $errors,
+            'messages' => $messages,
+            'dry_run' => $dryRun,
+        ];
+    }
+
+    /**
      * Validate uploaded image constraints.
      *
      * @param UploadedFile $file
@@ -165,6 +213,80 @@ class TaxonMediaUploadService
         }
 
         return $mimeType;
+    }
+
+    /**
+     * Rebuild variants for a single persisted media row.
+     *
+     * @param array<string, mixed> $mediaRow
+     * @param bool $dryRun
+     * @return void
+     */
+    private function rebuildVariantsForMediaRow(array $mediaRow, bool $dryRun = false): void
+    {
+        $mediaId = (int) ($mediaRow['id'] ?? 0);
+        $mediaUuid = (string) ($mediaRow['uuid'] ?? '');
+        $storagePath = (string) ($mediaRow['storage_path'] ?? '');
+        $mimeType = (string) ($mediaRow['mime_type'] ?? '');
+
+        if ($mediaId <= 0 || $mediaUuid === '' || $storagePath === '' || $mimeType === '') {
+            throw new InvalidArgumentException('Media row is missing required fields.');
+        }
+
+        $sourceAbsolutePath = $this->storageAbsolutePath($storagePath);
+        if (! is_file($sourceAbsolutePath)) {
+            throw new RuntimeException('Original file not found: ' . $sourceAbsolutePath);
+        }
+
+        $relativeDirectory = trim((string) dirname($storagePath), '/\\');
+        if ($relativeDirectory === '' || $relativeDirectory === '.') {
+            throw new RuntimeException('Invalid storage directory for media row.');
+        }
+
+        $extension = strtolower(pathinfo($storagePath, PATHINFO_EXTENSION));
+        if ($extension === '') {
+            $extension = ltrim($this->extensionForMimeType($mimeType), '.');
+        }
+
+        $variantSourcePath = $this->prepareVariantSourcePath($sourceAbsolutePath, $mimeType);
+
+        try {
+            $existingVariants = $this->variantModel->where('taxon_media_id', $mediaId)->findAll();
+
+            if (! $dryRun) {
+                foreach ($existingVariants as $variantRow) {
+                    if (isset($variantRow['storage_path']) && is_string($variantRow['storage_path']) && $variantRow['storage_path'] !== '') {
+                        $existingPath = $this->storageAbsolutePath((string) $variantRow['storage_path']);
+                        if (is_file($existingPath)) {
+                            @unlink($existingPath);
+                        }
+                    }
+                }
+
+                $this->variantModel->where('taxon_media_id', $mediaId)->delete();
+            }
+
+            foreach ($this->config->variants as $variantKey => $variantConfig) {
+                if (! is_array($variantConfig) || $dryRun) {
+                    continue;
+                }
+
+                $this->createVariant(
+                    $mediaId,
+                    $mediaUuid,
+                    (string) $variantKey,
+                    $variantSourcePath,
+                    $relativeDirectory,
+                    $variantConfig,
+                    $mimeType,
+                    $extension
+                );
+            }
+        } finally {
+            if ($variantSourcePath !== $sourceAbsolutePath && is_file($variantSourcePath)) {
+                @unlink($variantSourcePath);
+            }
+        }
     }
 
     /**
@@ -516,6 +638,17 @@ class TaxonMediaUploadService
             'image/webp' => '.webp',
             default => '.img',
         };
+    }
+
+    /**
+     * Build absolute path from relative storage path.
+     *
+     * @param string $relativePath
+     * @return string
+     */
+    private function storageAbsolutePath(string $relativePath): string
+    {
+        return $this->baseDirectory() . DIRECTORY_SEPARATOR . ltrim($relativePath, '/\\');
     }
 
     /**

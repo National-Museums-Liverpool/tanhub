@@ -63,6 +63,18 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
             ->getResultArray();
 
         $this->assertNotEmpty($variants);
+
+        $variantsByKey = [];
+        foreach ($variants as $variant) {
+            $variantsByKey[(string) $variant['variant_key']] = $variant;
+        }
+
+        $this->assertArrayHasKey('thumbnail', $variantsByKey);
+        $this->assertArrayHasKey('large', $variantsByKey);
+        $this->assertSame(320, (int) $variantsByKey['thumbnail']['width']);
+        $this->assertSame(320, (int) $variantsByKey['thumbnail']['height']);
+        $this->assertSame(1400, (int) $variantsByKey['large']['width']);
+        $this->assertLessThan(1400, (int) $variantsByKey['large']['height']);
     }
 
     public function testUploadRejectsInvalidMimeType(): void
@@ -204,14 +216,14 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
             $this->fail('Unable to create temporary file for PNG upload.');
         }
 
-        $image = imagecreatetruecolor(32, 32);
+        $image = imagecreatetruecolor(48, 32);
 
         if (! $image) {
             $this->fail('Unable to create GD test image resource.');
         }
 
         $white = imagecolorallocate($image, 255, 255, 255);
-        imagefilledrectangle($image, 0, 0, 31, 31, $white);
+        imagefilledrectangle($image, 0, 0, 47, 31, $white);
         imagepng($image, $path);
         imagedestroy($image);
 

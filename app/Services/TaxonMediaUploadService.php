@@ -55,7 +55,7 @@ class TaxonMediaUploadService
             throw new InvalidArgumentException('taxonId must be a positive integer.');
         }
 
-        $this->assertUploadIsValid($file);
+        $mimeType = $this->assertUploadIsValid($file);
 
         $uuid = $this->createUuidV4();
         $extension = strtolower((string) $file->getExtension());
@@ -83,7 +83,7 @@ class TaxonMediaUploadService
             'taxon_id' => $taxonId,
             'original_filename' => (string) $file->getClientName(),
             'storage_path' => $relativeOriginalPath,
-            'mime_type' => (string) $file->getMimeType(),
+            'mime_type' => $mimeType,
             'bytes' => max(0, (int) filesize($originalAbsolutePath)),
             'width' => $imageSize['width'],
             'height' => $imageSize['height'],
@@ -99,25 +99,32 @@ class TaxonMediaUploadService
         $mediaId = (int) $this->mediaModel->getInsertID();
 
         $variantResults = [];
+        $variantSourcePath = $this->prepareVariantSourcePath($originalAbsolutePath, $mimeType);
 
-        foreach ($this->config->variants as $variantKey => $variantConfig) {
-            if (! is_array($variantConfig)) {
-                continue;
+        try {
+            foreach ($this->config->variants as $variantKey => $variantConfig) {
+                if (! is_array($variantConfig)) {
+                    continue;
+                }
+
+                $result = $this->createVariant(
+                    $mediaId,
+                    $uuid,
+                    (string) $variantKey,
+                    $variantSourcePath,
+                    $relativeDirectory,
+                    $variantConfig,
+                    $mimeType,
+                    $extension
+                );
+
+                if ($result !== null) {
+                    $variantResults[$variantKey] = $result;
+                }
             }
-
-            $result = $this->createVariant(
-                $mediaId,
-                $uuid,
-                (string) $variantKey,
-                $originalAbsolutePath,
-                $relativeDirectory,
-                $variantConfig,
-                (string) $file->getMimeType(),
-                $extension
-            );
-
-            if ($result !== null) {
-                $variantResults[$variantKey] = $result;
+        } finally {
+            if ($variantSourcePath !== $originalAbsolutePath && is_file($variantSourcePath)) {
+                @unlink($variantSourcePath);
             }
         }
 
@@ -127,7 +134,7 @@ class TaxonMediaUploadService
             'id' => $mediaId,
             'uuid' => $uuid,
             'storage_path' => $relativeOriginalPath,
-            'mime_type' => (string) $file->getMimeType(),
+            'mime_type' => $mimeType,
             'bytes' => $mediaData['bytes'],
             'width' => $mediaData['width'],
             'height' => $mediaData['height'],
@@ -139,9 +146,9 @@ class TaxonMediaUploadService
      * Validate uploaded image constraints.
      *
      * @param UploadedFile $file
-     * @return void
+     * @return string
      */
-    private function assertUploadIsValid(UploadedFile $file): void
+    private function assertUploadIsValid(UploadedFile $file): string
     {
         if (! $file->isValid() || $file->hasMoved()) {
             throw new InvalidArgumentException('Uploaded file is not valid.');
@@ -156,6 +163,8 @@ class TaxonMediaUploadService
         if ($size <= 0 || $size > $this->config->maxUploadBytes) {
             throw new InvalidArgumentException('Uploaded file size exceeds configured limits.');
         }
+
+        return $mimeType;
     }
 
     /**
@@ -196,15 +205,9 @@ class TaxonMediaUploadService
             . DIRECTORY_SEPARATOR . $variantFilename;
         $relativeTargetPath = $relativeDirectory . DIRECTORY_SEPARATOR . $variantFilename;
 
-        $image = service('image')
-            ->withFile($sourceAbsolutePath)
-            ->reorient();
+        $image = service('image')->withFile($sourceAbsolutePath);
 
-        if ($mode === 'contain') {
-            $image->resize($width, $height, true, 'auto');
-        } else {
-            $image->fit($width, $height, 'center');
-        }
+        $this->applyResizeMode($image, $mode, $width, $height, $sourceAbsolutePath);
 
         $image->save($absoluteTargetPath, $quality);
 
@@ -229,6 +232,290 @@ class TaxonMediaUploadService
             'height' => $size['height'],
             'url' => site_url('taxon-media/' . rawurlencode($mediaUuid) . '/' . rawurlencode($variantKey)),
         ];
+    }
+
+    /**
+     * Apply a configured resize mode to an image handler.
+     *
+     * Supported modes:
+     * - fit: crop to exact dimensions, centered.
+     * - contain: scale to fit inside dimensions preserving aspect ratio.
+     *
+     * @param object $image
+     * @param string $mode
+     * @param int $targetWidth
+     * @param int $targetHeight
+     * @param string $sourceAbsolutePath
+     * @return void
+     */
+    private function applyResizeMode(
+        object $image,
+        string $mode,
+        int $targetWidth,
+        int $targetHeight,
+        string $sourceAbsolutePath
+    ): void {
+        if ($mode === 'contain') {
+            $dimensions = $this->containDimensions($sourceAbsolutePath, $targetWidth, $targetHeight);
+            $image->resize($dimensions['width'], $dimensions['height'], false);
+
+            return;
+        }
+
+        $image->fit($targetWidth, $targetHeight, 'center');
+    }
+
+    /**
+     * Calculate contained dimensions preserving source aspect ratio.
+     *
+     * @param string $sourceAbsolutePath
+     * @param int $maxWidth
+     * @param int $maxHeight
+     * @return array{width:int,height:int}
+     */
+    private function containDimensions(string $sourceAbsolutePath, int $maxWidth, int $maxHeight): array
+    {
+        $sourceSize = $this->readImageSize($sourceAbsolutePath);
+        $sourceWidth = (int) ($sourceSize['width'] ?? 0);
+        $sourceHeight = (int) ($sourceSize['height'] ?? 0);
+
+        if ($sourceWidth <= 0 || $sourceHeight <= 0) {
+            return [
+                'width' => $maxWidth,
+                'height' => $maxHeight,
+            ];
+        }
+
+        $ratio = min($maxWidth / $sourceWidth, $maxHeight / $sourceHeight);
+        $ratio = $ratio > 0 ? $ratio : 1;
+
+        $width = max(1, (int) round($sourceWidth * $ratio));
+        $height = max(1, (int) round($sourceHeight * $ratio));
+
+        return [
+            'width' => $width,
+            'height' => $height,
+        ];
+    }
+
+    /**
+     * Determine whether EXIF-based reorientation should be applied.
+     *
+     * @param string $sourceAbsolutePath
+     * @param string $mimeType
+     * @return bool
+     */
+    private function shouldReorient(string $sourceAbsolutePath, string $mimeType): bool
+    {
+        if (! $this->config->autoReorient) {
+            return false;
+        }
+
+        if (! function_exists('exif_read_data')) {
+            return false;
+        }
+
+        if (! in_array($mimeType, ['image/jpeg', 'image/tiff'], true)) {
+            return false;
+        }
+
+        $orientation = $this->readExifOrientation($sourceAbsolutePath);
+
+        return $orientation > 1;
+    }
+
+    /**
+     * Build the source path used for variant generation.
+     *
+     * @param string $sourceAbsolutePath
+     * @param string $mimeType
+     * @return string
+     */
+    private function prepareVariantSourcePath(string $sourceAbsolutePath, string $mimeType): string
+    {
+        if (! $this->shouldReorient($sourceAbsolutePath, $mimeType)) {
+            return $sourceAbsolutePath;
+        }
+
+        $orientation = $this->readExifOrientation($sourceAbsolutePath);
+        if ($orientation <= 1) {
+            return $sourceAbsolutePath;
+        }
+
+        $tempPath = tempnam(sys_get_temp_dir(), 'taxon_media_orient_');
+        if ($tempPath === false) {
+            return $sourceAbsolutePath;
+        }
+
+        $normalizedPath = $tempPath . $this->extensionForMimeType($mimeType);
+
+        if ($this->normalizeOrientationWithGd($sourceAbsolutePath, $normalizedPath, $mimeType, $orientation)) {
+            @unlink($tempPath);
+
+            return $normalizedPath;
+        }
+
+        @unlink($tempPath);
+        @unlink($normalizedPath);
+
+        return $sourceAbsolutePath;
+    }
+
+    /**
+     * Read EXIF orientation value.
+     *
+     * @param string $sourceAbsolutePath
+     * @return int
+     */
+    private function readExifOrientation(string $sourceAbsolutePath): int
+    {
+        $exif = @exif_read_data($sourceAbsolutePath);
+
+        if (! is_array($exif) || ! isset($exif['Orientation'])) {
+            return 1;
+        }
+
+        $orientation = (int) $exif['Orientation'];
+
+        return $orientation >= 1 && $orientation <= 8 ? $orientation : 1;
+    }
+
+    /**
+     * Convert EXIF orientation to a physically-normalized image using GD.
+     *
+     * @param string $sourceAbsolutePath
+     * @param string $targetAbsolutePath
+     * @param string $mimeType
+     * @param int $orientation
+     * @return bool
+     */
+    private function normalizeOrientationWithGd(
+        string $sourceAbsolutePath,
+        string $targetAbsolutePath,
+        string $mimeType,
+        int $orientation
+    ): bool {
+        $source = $this->createGdImageFromPath($sourceAbsolutePath, $mimeType);
+        if (! $source) {
+            return false;
+        }
+
+        $result = $source;
+
+        switch ($orientation) {
+            case 2:
+                imageflip($result, IMG_FLIP_HORIZONTAL);
+                break;
+            case 3:
+                $rotated = imagerotate($result, 180, 0);
+                if ($rotated === false) {
+                    imagedestroy($source);
+
+                    return false;
+                }
+                imagedestroy($result);
+                $result = $rotated;
+                break;
+            case 4:
+                imageflip($result, IMG_FLIP_VERTICAL);
+                break;
+            case 5:
+                $rotated = imagerotate($result, 270, 0);
+                if ($rotated === false) {
+                    imagedestroy($source);
+
+                    return false;
+                }
+                imagedestroy($result);
+                $result = $rotated;
+                imageflip($result, IMG_FLIP_HORIZONTAL);
+                break;
+            case 6:
+                $rotated = imagerotate($result, 270, 0);
+                if ($rotated === false) {
+                    imagedestroy($source);
+
+                    return false;
+                }
+                imagedestroy($result);
+                $result = $rotated;
+                break;
+            case 7:
+                $rotated = imagerotate($result, 90, 0);
+                if ($rotated === false) {
+                    imagedestroy($source);
+
+                    return false;
+                }
+                imagedestroy($result);
+                $result = $rotated;
+                imageflip($result, IMG_FLIP_HORIZONTAL);
+                break;
+            case 8:
+                $rotated = imagerotate($result, 90, 0);
+                if ($rotated === false) {
+                    imagedestroy($source);
+
+                    return false;
+                }
+                imagedestroy($result);
+                $result = $rotated;
+                break;
+        }
+
+        $saved = $this->saveGdImageToPath($result, $targetAbsolutePath, $mimeType);
+
+        imagedestroy($result);
+
+        return $saved;
+    }
+
+    /**
+     * @param string $path
+     * @param string $mimeType
+     * @return resource|false
+     */
+    private function createGdImageFromPath(string $path, string $mimeType)
+    {
+        return match ($mimeType) {
+            'image/jpeg' => @imagecreatefromjpeg($path),
+            'image/png' => @imagecreatefrompng($path),
+            'image/gif' => @imagecreatefromgif($path),
+            'image/webp' => function_exists('imagecreatefromwebp') ? @imagecreatefromwebp($path) : false,
+            default => false,
+        };
+    }
+
+    /**
+     * @param resource $image
+     * @param string $path
+     * @param string $mimeType
+     * @return bool
+     */
+    private function saveGdImageToPath($image, string $path, string $mimeType): bool
+    {
+        return match ($mimeType) {
+            'image/jpeg' => @imagejpeg($image, $path, 100),
+            'image/png' => @imagepng($image, $path, 6),
+            'image/gif' => @imagegif($image, $path),
+            'image/webp' => function_exists('imagewebp') ? @imagewebp($image, $path, 100) : false,
+            default => false,
+        };
+    }
+
+    /**
+     * @param string $mimeType
+     * @return string
+     */
+    private function extensionForMimeType(string $mimeType): string
+    {
+        return match ($mimeType) {
+            'image/jpeg' => '.jpg',
+            'image/png' => '.png',
+            'image/gif' => '.gif',
+            'image/webp' => '.webp',
+            default => '.img',
+        };
     }
 
     /**

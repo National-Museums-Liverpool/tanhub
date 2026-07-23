@@ -36,6 +36,13 @@ class TaxonMedia extends BaseConfig
     ];
 
     /**
+     * Apply EXIF orientation transforms to uploaded images when available.
+     *
+     * @var bool
+     */
+    public bool $autoReorient = true;
+
+    /**
      * Configured derivative image sizes keyed by variant name.
      *
      * @var array<string, array<string, mixed>>
@@ -83,6 +90,11 @@ class TaxonMedia extends BaseConfig
             if ($parts !== []) {
                 $this->allowedMimeTypes = array_values(array_unique($parts));
             }
+        }
+
+        $autoReorient = env('taxonMedia.autoReorient');
+        if ($autoReorient !== null && $autoReorient !== '') {
+            $this->autoReorient = filter_var($autoReorient, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? $this->autoReorient;
         }
 
         $this->applyVariantEnvOverrides();

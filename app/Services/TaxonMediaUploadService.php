@@ -73,6 +73,7 @@ class TaxonMediaUploadService
 
         $originalAbsolutePath = $absoluteDirectory . DIRECTORY_SEPARATOR . $originalBasename;
         $relativeOriginalPath = $relativeDirectory . DIRECTORY_SEPARATOR . $originalBasename;
+        $this->enforceOriginalDimensionLimits($originalAbsolutePath, $mimeType);
         $imageSize = $this->readImageSize($originalAbsolutePath);
         $db = null;
         $transactionStarted = false;
@@ -678,6 +679,50 @@ class TaxonMediaUploadService
             'image/webp' => function_exists('imagewebp') ? @imagewebp($image, $path, 100) : false,
             default => false,
         };
+    }
+
+    /**
+     * Downscale the stored original image when configured max dimensions are exceeded.
+     *
+     * @param string $originalAbsolutePath
+     * @param string $mimeType
+     * @return void
+     */
+    private function enforceOriginalDimensionLimits(string $originalAbsolutePath, string $mimeType): void
+    {
+        $maxWidth = (int) $this->config->maxOriginalWidth;
+        $maxHeight = (int) $this->config->maxOriginalHeight;
+
+        if ($maxWidth <= 0 || $maxHeight <= 0) {
+            return;
+        }
+
+        $sourceSize = $this->readImageSize($originalAbsolutePath);
+        $sourceWidth = (int) ($sourceSize['width'] ?? 0);
+        $sourceHeight = (int) ($sourceSize['height'] ?? 0);
+
+        if ($sourceWidth <= 0 || $sourceHeight <= 0) {
+            return;
+        }
+
+        if ($sourceWidth <= $maxWidth && $sourceHeight <= $maxHeight) {
+            return;
+        }
+
+        $variantSourcePath = $this->prepareVariantSourcePath($originalAbsolutePath, $mimeType);
+
+        try {
+            $target = $this->containDimensions($variantSourcePath, $maxWidth, $maxHeight);
+
+            service('image')
+                ->withFile($variantSourcePath)
+                ->resize($target['width'], $target['height'], false)
+                ->save($originalAbsolutePath, 95);
+        } finally {
+            if ($variantSourcePath !== $originalAbsolutePath && is_file($variantSourcePath)) {
+                @unlink($variantSourcePath);
+            }
+        }
     }
 
     /**

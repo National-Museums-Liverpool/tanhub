@@ -104,6 +104,35 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         $service->uploadForTaxon(1, $upload);
     }
 
+    public function testUploadDownscalesOriginalWhenMaxDimensionsConfigured(): void
+    {
+        $config = config(TaxonMedia::class);
+        $config->maxOriginalWidth = 100;
+        $config->maxOriginalHeight = 100;
+
+        $service = $this->makeService($config);
+        $sourcePath = $this->createPngSourceFile(400, 200);
+        $upload = $this->makeUploadedFileMock($sourcePath, 'oversized.png', 'image/png', true);
+
+        $result = $service->uploadForTaxon(1, $upload);
+
+        $row = db_connect()->table('taxon_media')->where('id', (int) $result['id'])->get()->getRowArray();
+
+        $this->assertNotNull($row);
+        $this->assertSame(100, (int) $row['width']);
+        $this->assertSame(50, (int) $row['height']);
+
+        $absolutePath = rtrim((string) WRITEPATH, DIRECTORY_SEPARATOR)
+            . DIRECTORY_SEPARATOR . 'uploads'
+            . DIRECTORY_SEPARATOR . trim($config->uploadSubdirectory, '/\\')
+            . DIRECTORY_SEPARATOR . ltrim((string) $row['storage_path'], '/\\');
+
+        $savedSize = @getimagesize($absolutePath);
+        $this->assertIsArray($savedSize);
+        $this->assertSame(100, (int) $savedSize[0]);
+        $this->assertSame(50, (int) $savedSize[1]);
+    }
+
     public function testUpdateMetadataForExistingMediaRow(): void
     {
         $service = $this->makeService();
@@ -304,7 +333,7 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         $db->table($table)->insert($filteredData);
     }
 
-    private function createPngSourceFile(): string
+    private function createPngSourceFile(int $width = 48, int $height = 32): string
     {
         if (! function_exists('imagecreatetruecolor')) {
             $this->markTestSkipped('GD extension is required for image variant generation tests.');
@@ -316,14 +345,14 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
             $this->fail('Unable to create temporary file for PNG upload.');
         }
 
-        $image = imagecreatetruecolor(48, 32);
+        $image = imagecreatetruecolor($width, $height);
 
         if (! $image) {
             $this->fail('Unable to create GD test image resource.');
         }
 
         $white = imagecolorallocate($image, 255, 255, 255);
-        imagefilledrectangle($image, 0, 0, 47, 31, $white);
+        imagefilledrectangle($image, 0, 0, $width - 1, $height - 1, $white);
         imagepng($image, $path);
         imagedestroy($image);
 

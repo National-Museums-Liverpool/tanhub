@@ -24,6 +24,20 @@ class TaxonMedia extends BaseConfig
     public int $maxUploadBytes = 10485760;
 
     /**
+     * Maximum stored original image width in pixels (0 disables downscaling).
+     *
+     * @var int
+     */
+    public int $maxOriginalWidth = 0;
+
+    /**
+     * Maximum stored original image height in pixels (0 disables downscaling).
+     *
+     * @var int
+     */
+    public int $maxOriginalHeight = 0;
+
+    /**
      * Allowed upload mime types.
      *
      * @var array<int, string>
@@ -81,6 +95,22 @@ class TaxonMedia extends BaseConfig
             $max = (int) $maxUploadBytes;
             if ($max > 0) {
                 $this->maxUploadBytes = $max;
+            }
+        }
+
+        $maxOriginalWidth = env('taxonMedia.maxOriginalWidth');
+        if ($maxOriginalWidth !== null && $maxOriginalWidth !== '') {
+            $width = (int) $maxOriginalWidth;
+            if ($width > 0) {
+                $this->maxOriginalWidth = $width;
+            }
+        }
+
+        $maxOriginalHeight = env('taxonMedia.maxOriginalHeight');
+        if ($maxOriginalHeight !== null && $maxOriginalHeight !== '') {
+            $height = (int) $maxOriginalHeight;
+            if ($height > 0) {
+                $this->maxOriginalHeight = $height;
             }
         }
 

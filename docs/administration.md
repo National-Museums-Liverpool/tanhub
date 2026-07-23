@@ -23,3 +23,19 @@ Rebuild one media row:
 ```bash
 php spark media:rebuild-taxon-media-variants --media-id=123
 ```
+
+## Limit original upload dimensions
+
+To reduce disk usage on shared hosting, you can cap the dimensions of stored original images.
+Oversized uploads will be downscaled to fit inside the configured width/height while preserving
+aspect ratio.
+
+Set in .env:
+
+```ini
+taxonMedia.maxOriginalWidth = 2048
+taxonMedia.maxOriginalHeight = 2048
+```
+
+Set both values greater than 0 to enable downscaling. If either value is omitted (or 0), the
+original image is stored at uploaded dimensions.

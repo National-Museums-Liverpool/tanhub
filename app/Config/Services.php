@@ -20,6 +20,44 @@ use CodeIgniter\Config\BaseService;
 class Services extends BaseService
 {
     /**
+     * Taxon media read service.
+        *
+        * @param bool $getShared
+        * @return \App\Services\TaxonMediaReadService
+     */
+    public static function taxonMediaReadService(bool $getShared = true): \App\Services\TaxonMediaReadService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('taxonMediaReadService');
+        }
+
+        return new \App\Services\TaxonMediaReadService(
+            model(\App\Models\TaxonMediaModel::class),
+            model(\App\Models\TaxonMediaVariantModel::class),
+            config(\Config\TaxonMedia::class),
+        );
+    }
+
+    /**
+     * Taxon media upload service.
+        *
+        * @param bool $getShared
+        * @return \App\Services\TaxonMediaUploadService
+     */
+    public static function taxonMediaUploadService(bool $getShared = true): \App\Services\TaxonMediaUploadService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('taxonMediaUploadService');
+        }
+
+        return new \App\Services\TaxonMediaUploadService(
+            model(\App\Models\TaxonMediaModel::class),
+            model(\App\Models\TaxonMediaVariantModel::class),
+            config(\Config\TaxonMedia::class),
+        );
+    }
+
+    /**
      * Grid square stats derived counts service.
      */
     public static function gridSquareStatsCountsService(bool $getShared = true): \App\Services\Stats\GridSquareStatsCountsService

@@ -225,6 +225,74 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->assertSame(0, $mediaCount);
     }
 
+    public function testManagerCanUpdateExistingTaxonMediaMetadata(): void
+    {
+        $this->authenticateAs('taxa-manager-media-edit@example.com', 'manager');
+
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $now = date('Y-m-d H:i:s');
+
+        db_connect()->table('taxon_media')->insert([
+            'uuid' => $uuid,
+            'taxon_id' => 1,
+            'original_filename' => 'editable-photo.jpg',
+            'storage_path' => '1/' . $uuid . '/original.jpg',
+            'mime_type' => 'image/jpeg',
+            'bytes' => 100,
+            'width' => 100,
+            'height' => 100,
+            'alt_text' => 'Old alt',
+            'caption' => 'Old caption',
+            'attribution' => 'Old attribution',
+            'license' => 'Old license',
+            'sort_order' => 1,
+            'is_primary' => 0,
+            'created_at' => $now,
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ]);
+
+        $result = $this->post('taxa/1/media/update', [
+            'media_uuid' => $uuid,
+            'edit_alt_text' => 'New alt text',
+            'edit_caption' => 'New caption',
+            'edit_attribution' => 'New attribution',
+            'edit_license' => 'CC BY 4.0',
+            'edit_sort_order' => '5',
+            'edit_is_primary' => '1',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirect();
+
+        $row = db_connect()->table('taxon_media')
+            ->where('uuid', $uuid)
+            ->where('taxon_id', 1)
+            ->get()
+            ->getRowArray();
+
+        $this->assertNotNull($row);
+        $this->assertSame('New alt text', (string) $row['alt_text']);
+        $this->assertSame('New caption', (string) $row['caption']);
+        $this->assertSame('New attribution', (string) $row['attribution']);
+        $this->assertSame('CC BY 4.0', (string) $row['license']);
+        $this->assertSame(5, (int) $row['sort_order']);
+        $this->assertSame(1, (int) $row['is_primary']);
+    }
+
+    public function testStandardUserCannotUpdateTaxonMediaMetadata(): void
+    {
+        $this->authenticateAs('taxa-standard-media-edit@example.com', 'user');
+
+        $result = $this->post('taxa/1/media/update', [
+            'media_uuid' => '11111111-1111-4111-8111-111111111111',
+            'edit_alt_text' => 'Should not save',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirect();
+    }
+
     private function authenticateAs(string $email, string $group): void
     {
         $this->actingAs($this->makeUser($email, $group));

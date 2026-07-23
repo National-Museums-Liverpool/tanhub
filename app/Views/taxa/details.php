@@ -171,6 +171,18 @@
         </div>
 
         <?php $mediaErrors = session('mediaErrors') ?? []; ?>
+        <?php $mediaEditErrors = session('mediaEditErrors') ?? []; ?>
+
+        <?php
+        $mediaByUuid = [];
+        foreach ($page['taxonMedia'] as $mediaItem) {
+            $mediaByUuid[(string) $mediaItem['uuid']] = $mediaItem;
+        }
+
+        $defaultMediaUuid = $page['taxonMedia'][0]['uuid'] ?? '';
+        $selectedMediaUuid = old('media_uuid', (string) (session('mediaEditSelectedUuid') ?? $defaultMediaUuid));
+        $selectedMedia = $mediaByUuid[$selectedMediaUuid] ?? null;
+        ?>
 
         <?php if ($page['canEditDetails']): ?>
             <form action="<?= esc(site_url('taxa/' . $page['taxon']['id'] . '/media')) ?>" method="post" enctype="multipart/form-data" novalidate>
@@ -235,6 +247,122 @@
                     <span class="text-muted small">Allowed: JPEG, PNG, GIF, WEBP.</span>
                 </div>
             </form>
+
+            <?php if ($page['taxonMedia'] !== []): ?>
+                <hr class="my-4">
+                <h3 class="h5 mb-3">Edit existing media metadata</h3>
+                <form action="<?= esc(site_url('taxa/' . $page['taxon']['id'] . '/media/update')) ?>" method="post" novalidate>
+                    <?= csrf_field() ?>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label" for="media_uuid">Select media file</label>
+                            <select class="form-select<?= isset($mediaEditErrors['media_uuid']) ? ' is-invalid' : '' ?>" id="media_uuid" name="media_uuid">
+                                <?php foreach ($page['taxonMedia'] as $media): ?>
+                                    <?php
+                                    $mediaUuid = (string) $media['uuid'];
+                                    $filename = (string) $media['original_filename'];
+                                    ?>
+                                    <option
+                                        value="<?= esc($mediaUuid) ?>"
+                                        data-alt-text="<?= esc((string) ($media['alt_text'] ?? '')) ?>"
+                                        data-caption="<?= esc((string) ($media['caption'] ?? '')) ?>"
+                                        data-attribution="<?= esc((string) ($media['attribution'] ?? '')) ?>"
+                                        data-license="<?= esc((string) ($media['license'] ?? '')) ?>"
+                                        data-sort-order="<?= esc((string) ($media['sort_order'] ?? 0)) ?>"
+                                        data-is-primary="<?= ! empty($media['is_primary']) ? '1' : '0' ?>"
+                                        <?= $selectedMediaUuid === $mediaUuid ? 'selected' : '' ?>
+                                    >
+                                        <?= esc($filename) ?> (<?= esc($mediaUuid) ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <?php if (isset($mediaEditErrors['media_uuid'])): ?>
+                                <div class="invalid-feedback d-block"><?= esc($mediaEditErrors['media_uuid']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="edit_alt_text">Alt text</label>
+                            <input class="form-control<?= isset($mediaEditErrors['edit_alt_text']) ? ' is-invalid' : '' ?>" id="edit_alt_text" name="edit_alt_text" type="text" maxlength="500" value="<?= esc(old('edit_alt_text', (string) ($selectedMedia['alt_text'] ?? ''))) ?>">
+                            <?php if (isset($mediaEditErrors['edit_alt_text'])): ?>
+                                <div class="invalid-feedback d-block"><?= esc($mediaEditErrors['edit_alt_text']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="edit_attribution">Attribution</label>
+                            <input class="form-control<?= isset($mediaEditErrors['edit_attribution']) ? ' is-invalid' : '' ?>" id="edit_attribution" name="edit_attribution" type="text" maxlength="255" value="<?= esc(old('edit_attribution', (string) ($selectedMedia['attribution'] ?? ''))) ?>">
+                            <?php if (isset($mediaEditErrors['edit_attribution'])): ?>
+                                <div class="invalid-feedback d-block"><?= esc($mediaEditErrors['edit_attribution']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="edit_license">License</label>
+                            <input class="form-control<?= isset($mediaEditErrors['edit_license']) ? ' is-invalid' : '' ?>" id="edit_license" name="edit_license" type="text" maxlength="100" value="<?= esc(old('edit_license', (string) ($selectedMedia['license'] ?? ''))) ?>">
+                            <?php if (isset($mediaEditErrors['edit_license'])): ?>
+                                <div class="invalid-feedback d-block"><?= esc($mediaEditErrors['edit_license']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="edit_sort_order">Sort order</label>
+                            <input class="form-control<?= isset($mediaEditErrors['edit_sort_order']) ? ' is-invalid' : '' ?>" id="edit_sort_order" name="edit_sort_order" type="number" min="0" step="1" value="<?= esc(old('edit_sort_order', (string) ($selectedMedia['sort_order'] ?? 0))) ?>">
+                            <?php if (isset($mediaEditErrors['edit_sort_order'])): ?>
+                                <div class="invalid-feedback d-block"><?= esc($mediaEditErrors['edit_sort_order']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="edit_is_primary">Primary image</label>
+                            <?php $editIsPrimary = old('edit_is_primary', ! empty($selectedMedia['is_primary']) ? '1' : '0'); ?>
+                            <select class="form-select<?= isset($mediaEditErrors['edit_is_primary']) ? ' is-invalid' : '' ?>" id="edit_is_primary" name="edit_is_primary">
+                                <option value="0" <?= $editIsPrimary === '0' ? 'selected' : '' ?>>No</option>
+                                <option value="1" <?= $editIsPrimary === '1' ? 'selected' : '' ?>>Yes</option>
+                            </select>
+                            <?php if (isset($mediaEditErrors['edit_is_primary'])): ?>
+                                <div class="invalid-feedback d-block"><?= esc($mediaEditErrors['edit_is_primary']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="edit_caption">Caption</label>
+                            <textarea class="form-control<?= isset($mediaEditErrors['edit_caption']) ? ' is-invalid' : '' ?>" id="edit_caption" name="edit_caption" rows="3"><?= esc(old('edit_caption', (string) ($selectedMedia['caption'] ?? ''))) ?></textarea>
+                            <?php if (isset($mediaEditErrors['edit_caption'])): ?>
+                                <div class="invalid-feedback d-block"><?= esc($mediaEditErrors['edit_caption']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-column flex-sm-row gap-3 align-items-sm-center justify-content-between mt-4">
+                        <button class="btn btn-outline-brand" type="submit">Update metadata</button>
+                    </div>
+                </form>
+
+                <script>
+                    (() => {
+                        const select = document.getElementById('media_uuid');
+                        if (!select) {
+                            return;
+                        }
+
+                        const setValue = (id, value) => {
+                            const field = document.getElementById(id);
+                            if (field) {
+                                field.value = value;
+                            }
+                        };
+
+                        select.addEventListener('change', () => {
+                            const option = select.options[select.selectedIndex];
+                            if (!option) {
+                                return;
+                            }
+
+                            setValue('edit_alt_text', option.dataset.altText || '');
+                            setValue('edit_caption', option.dataset.caption || '');
+                            setValue('edit_attribution', option.dataset.attribution || '');
+                            setValue('edit_license', option.dataset.license || '');
+                            setValue('edit_sort_order', option.dataset.sortOrder || '0');
+                            setValue('edit_is_primary', option.dataset.isPrimary || '0');
+                        });
+                    })();
+                </script>
+            <?php endif; ?>
         <?php endif; ?>
 
         <?php if ($page['taxonMedia'] === []): ?>

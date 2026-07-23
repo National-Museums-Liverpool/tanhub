@@ -74,34 +74,37 @@ class TaxonMediaUploadService
         $originalAbsolutePath = $absoluteDirectory . DIRECTORY_SEPARATOR . $originalBasename;
         $relativeOriginalPath = $relativeDirectory . DIRECTORY_SEPARATOR . $originalBasename;
         $imageSize = $this->readImageSize($originalAbsolutePath);
-
-        $db = db_connect();
-        $db->transException(true)->transStart();
-
-        $mediaData = [
-            'uuid' => $uuid,
-            'taxon_id' => $taxonId,
-            'original_filename' => (string) $file->getClientName(),
-            'storage_path' => $relativeOriginalPath,
-            'mime_type' => $mimeType,
-            'bytes' => max(0, (int) filesize($originalAbsolutePath)),
-            'width' => $imageSize['width'],
-            'height' => $imageSize['height'],
-            'alt_text' => $this->nullableString($metadata['alt_text'] ?? null),
-            'caption' => $this->nullableString($metadata['caption'] ?? null),
-            'attribution' => $this->nullableString($metadata['attribution'] ?? null),
-            'license' => $this->nullableString($metadata['license'] ?? null),
-            'sort_order' => max(0, (int) ($metadata['sort_order'] ?? 0)),
-            'is_primary' => (int) (! empty($metadata['is_primary'])),
-        ];
-
-        $this->mediaModel->insert($mediaData);
-        $mediaId = (int) $this->mediaModel->getInsertID();
-
-        $variantResults = [];
-        $variantSourcePath = $this->prepareVariantSourcePath($originalAbsolutePath, $mimeType);
+        $db = null;
+        $transactionStarted = false;
+        $variantSourcePath = $originalAbsolutePath;
 
         try {
+            $db = db_connect();
+            $db->transException(true)->transStart();
+            $transactionStarted = true;
+
+            $mediaData = [
+                'uuid' => $uuid,
+                'taxon_id' => $taxonId,
+                'original_filename' => (string) $file->getClientName(),
+                'storage_path' => $relativeOriginalPath,
+                'mime_type' => $mimeType,
+                'bytes' => max(0, (int) filesize($originalAbsolutePath)),
+                'width' => $imageSize['width'],
+                'height' => $imageSize['height'],
+                'alt_text' => $this->nullableString($metadata['alt_text'] ?? null),
+                'caption' => $this->nullableString($metadata['caption'] ?? null),
+                'attribution' => $this->nullableString($metadata['attribution'] ?? null),
+                'license' => $this->nullableString($metadata['license'] ?? null),
+                'sort_order' => max(0, (int) ($metadata['sort_order'] ?? 0)),
+                'is_primary' => (int) (! empty($metadata['is_primary'])),
+            ];
+
+            $this->mediaModel->insert($mediaData);
+            $mediaId = (int) $this->mediaModel->getInsertID();
+            $variantResults = [];
+            $variantSourcePath = $this->prepareVariantSourcePath($originalAbsolutePath, $mimeType);
+
             foreach ($this->config->variants as $variantKey => $variantConfig) {
                 if (! is_array($variantConfig)) {
                     continue;
@@ -122,24 +125,76 @@ class TaxonMediaUploadService
                     $variantResults[$variantKey] = $result;
                 }
             }
+
+            $db->transComplete();
+            $transactionStarted = false;
+
+            return [
+                'id' => $mediaId,
+                'uuid' => $uuid,
+                'storage_path' => $relativeOriginalPath,
+                'mime_type' => $mimeType,
+                'bytes' => $mediaData['bytes'],
+                'width' => $mediaData['width'],
+                'height' => $mediaData['height'],
+                'variants' => $variantResults,
+            ];
+        } catch (\Throwable $exception) {
+            if ($transactionStarted && $db !== null) {
+                $db->transRollback();
+            }
+
+            $this->cleanupUploadDirectory($absoluteDirectory);
+
+            throw $exception;
         } finally {
             if ($variantSourcePath !== $originalAbsolutePath && is_file($variantSourcePath)) {
                 @unlink($variantSourcePath);
             }
         }
+    }
 
-        $db->transComplete();
+    /**
+     * Update metadata fields for an existing media item linked to a taxon.
+     *
+     * @param int $taxonId
+     * @param string $uuid
+     * @param array<string, mixed> $metadata
+     * @return array<string, mixed>
+     */
+    public function updateMetadataForTaxonMedia(int $taxonId, string $uuid, array $metadata): array
+    {
+        if ($taxonId <= 0) {
+            throw new InvalidArgumentException('taxonId must be a positive integer.');
+        }
 
-        return [
-            'id' => $mediaId,
-            'uuid' => $uuid,
-            'storage_path' => $relativeOriginalPath,
-            'mime_type' => $mimeType,
-            'bytes' => $mediaData['bytes'],
-            'width' => $mediaData['width'],
-            'height' => $mediaData['height'],
-            'variants' => $variantResults,
+        $uuid = trim($uuid);
+        if ($uuid === '') {
+            throw new InvalidArgumentException('A media UUID is required.');
+        }
+
+        $row = $this->mediaModel
+            ->where('taxon_id', $taxonId)
+            ->where('uuid', $uuid)
+            ->where('deleted_at', null)
+            ->first();
+
+        if (! is_array($row)) {
+            throw new InvalidArgumentException('The selected media file was not found for this taxon.');
+        }
+
+        $updateData = [
+            'alt_text' => $this->nullableString($metadata['alt_text'] ?? null),
+            'caption' => $this->nullableString($metadata['caption'] ?? null),
+            'attribution' => $this->nullableString($metadata['attribution'] ?? null),
+            'license' => $this->nullableString($metadata['license'] ?? null),
+            'sort_order' => max(0, (int) ($metadata['sort_order'] ?? 0)),
+            'is_primary' => (int) (! empty($metadata['is_primary'])),
         ];
+
+        $this->mediaModel->update((int) $row['id'], $updateData);
+
+        return $updateData;
     }
 
     /**
@@ -649,6 +704,64 @@ class TaxonMediaUploadService
     private function storageAbsolutePath(string $relativePath): string
     {
         return $this->baseDirectory() . DIRECTORY_SEPARATOR . ltrim($relativePath, '/\\');
+    }
+
+    /**
+     * Remove upload files and directory after a failed upload attempt.
+     *
+     * @param string $absoluteDirectory
+     * @return void
+     */
+    private function cleanupUploadDirectory(string $absoluteDirectory): void
+    {
+        $basePath = realpath($this->baseDirectory());
+        $targetPath = realpath($absoluteDirectory);
+
+        if ($basePath === false || $targetPath === false) {
+            return;
+        }
+
+        $basePrefix = rtrim($basePath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        if (! str_starts_with($targetPath, $basePrefix)) {
+            return;
+        }
+
+        $this->removeDirectoryRecursive($targetPath);
+    }
+
+    /**
+     * Remove all files/directories recursively, then remove the root directory.
+     *
+     * @param string $directory
+     * @return void
+     */
+    private function removeDirectoryRecursive(string $directory): void
+    {
+        if (! is_dir($directory)) {
+            return;
+        }
+
+        $entries = scandir($directory);
+        if (! is_array($entries)) {
+            return;
+        }
+
+        foreach ($entries as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+
+            $path = $directory . DIRECTORY_SEPARATOR . $entry;
+
+            if (is_dir($path)) {
+                $this->removeDirectoryRecursive($path);
+                continue;
+            }
+
+            @unlink($path);
+        }
+
+        @rmdir($directory);
     }
 
     /**

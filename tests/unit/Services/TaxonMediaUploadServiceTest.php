@@ -104,6 +104,106 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         $service->uploadForTaxon(1, $upload);
     }
 
+    public function testUpdateMetadataForExistingMediaRow(): void
+    {
+        $service = $this->makeService();
+        $uuid = '99999999-9999-4999-8999-999999999999';
+        $now = date('Y-m-d H:i:s');
+
+        db_connect()->table('taxon_media')->insert([
+            'uuid' => $uuid,
+            'taxon_id' => 1,
+            'original_filename' => 'metadata-update.jpg',
+            'storage_path' => '1/' . $uuid . '/original.jpg',
+            'mime_type' => 'image/jpeg',
+            'bytes' => 123,
+            'width' => 50,
+            'height' => 50,
+            'alt_text' => 'Old alt',
+            'caption' => 'Old caption',
+            'attribution' => 'Old attribution',
+            'license' => 'Old license',
+            'sort_order' => 0,
+            'is_primary' => 0,
+            'created_at' => $now,
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ]);
+
+        $service->updateMetadataForTaxonMedia(1, $uuid, [
+            'alt_text' => 'New alt',
+            'caption' => 'New caption',
+            'attribution' => 'New attribution',
+            'license' => 'CC BY',
+            'sort_order' => 4,
+            'is_primary' => 1,
+        ]);
+
+        $row = db_connect()->table('taxon_media')->where('uuid', $uuid)->get()->getRowArray();
+
+        $this->assertNotNull($row);
+        $this->assertSame('New alt', (string) $row['alt_text']);
+        $this->assertSame('New caption', (string) $row['caption']);
+        $this->assertSame('New attribution', (string) $row['attribution']);
+        $this->assertSame('CC BY', (string) $row['license']);
+        $this->assertSame(4, (int) $row['sort_order']);
+        $this->assertSame(1, (int) $row['is_primary']);
+    }
+
+    public function testUploadFailureRemovesOrphanedFilesAndDirectory(): void
+    {
+        $config = config(TaxonMedia::class);
+        $baseDirectory = rtrim((string) WRITEPATH, DIRECTORY_SEPARATOR)
+            . DIRECTORY_SEPARATOR . 'uploads'
+            . DIRECTORY_SEPARATOR . trim($config->uploadSubdirectory, '/\\');
+        $taxonDirectory = $baseDirectory . DIRECTORY_SEPARATOR . '1';
+
+        if (! is_dir($taxonDirectory) && ! mkdir($taxonDirectory, 0775, true) && ! is_dir($taxonDirectory)) {
+            $this->fail('Unable to create taxon media fixture directory.');
+        }
+
+        $beforeDirectories = glob($taxonDirectory . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR);
+        if ($beforeDirectories === false) {
+            $beforeDirectories = [];
+        }
+
+        $variantModel = new class extends TaxonMediaVariantModel {
+            public function insert($row = null, bool $returnID = true)
+            {
+                throw new RuntimeException('Forced variant persistence failure.');
+            }
+        };
+
+        $service = new TaxonMediaUploadService(
+            model(TaxonMediaModel::class),
+            $variantModel,
+            $config
+        );
+
+        $sourcePath = $this->createPngSourceFile();
+        $upload = $this->makeUploadedFileMock($sourcePath, 'forced-failure.png', 'image/png', true);
+
+        try {
+            $service->uploadForTaxon(1, $upload, []);
+            $this->fail('Expected uploadForTaxon to fail when variant insert throws.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Forced variant persistence failure.', $exception->getMessage());
+        }
+
+        $afterDirectories = glob($taxonDirectory . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR);
+        if ($afterDirectories === false) {
+            $afterDirectories = [];
+        }
+
+        $this->assertCount(count($beforeDirectories), $afterDirectories);
+
+        $mediaCount = db_connect()->table('taxon_media')->countAllResults();
+        $variantCount = db_connect()->table('taxon_media_variants')->countAllResults();
+
+        $this->assertSame(0, $mediaCount);
+        $this->assertSame(0, $variantCount);
+    }
+
     private function makeService(?TaxonMedia $config = null): TaxonMediaUploadService
     {
         if ($config === null) {

@@ -138,14 +138,7 @@ class Taxa extends BaseController
             return redirect()->back()->withInput()->with('mediaErrors', ['media_file' => 'Please choose an image file to upload.']);
         }
 
-        $rules = [
-            'alt_text' => 'permit_empty|max_length[500]',
-            'caption' => 'permit_empty|max_length[65535]',
-            'attribution' => 'permit_empty|max_length[255]',
-            'license' => 'permit_empty|max_length[100]',
-            'sort_order' => 'permit_empty|is_natural',
-            'is_primary' => 'permit_empty|in_list[0,1]',
-        ];
+        $rules = $this->mediaMetadataRules();
 
         if (! $this->validate($rules)) {
             return redirect()->back()->withInput()->with('mediaErrors', $this->validator->getErrors());
@@ -171,6 +164,81 @@ class Taxa extends BaseController
         }
 
         return redirect()->to(site_url('taxa/' . $id))->with('message', 'Taxon media uploaded.');
+    }
+
+    /**
+     * Update metadata for an existing media file on a taxon.
+     *
+     * @param int $id
+     * @return RedirectResponse
+     */
+    public function updateMedia(int $id): RedirectResponse
+    {
+        $user = auth()->user();
+        $canEditMedia = $user !== null && $user->inGroup('admin', 'manager');
+
+        if (! $canEditMedia) {
+            return redirect()->back()->with('error', 'You are not authorised to edit media for this taxon.');
+        }
+
+        /** @var TaxonModel $model */
+        $model = model(TaxonModel::class);
+        $taxon = $model->find($id);
+
+        if ($taxon === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        $mediaUuid = trim((string) $this->request->getPost('media_uuid'));
+
+        if ($mediaUuid === '') {
+            return redirect()->back()
+                ->withInput()
+                ->with('mediaEditErrors', ['media_uuid' => 'Please select a media file to edit.']);
+        }
+
+        $rules = [
+            'edit_alt_text' => 'permit_empty|max_length[500]',
+            'edit_caption' => 'permit_empty|max_length[65535]',
+            'edit_attribution' => 'permit_empty|max_length[255]',
+            'edit_license' => 'permit_empty|max_length[100]',
+            'edit_sort_order' => 'permit_empty|is_natural',
+            'edit_is_primary' => 'permit_empty|in_list[0,1]',
+        ];
+
+        if (! $this->validate($rules)) {
+            return redirect()->back()
+                ->withInput()
+                ->with('mediaEditSelectedUuid', $mediaUuid)
+                ->with('mediaEditErrors', $this->validator->getErrors());
+        }
+
+        try {
+            $metadata = [
+                'alt_text' => $this->request->getPost('edit_alt_text'),
+                'caption' => $this->request->getPost('edit_caption'),
+                'attribution' => $this->request->getPost('edit_attribution'),
+                'license' => $this->request->getPost('edit_license'),
+                'sort_order' => $this->request->getPost('edit_sort_order'),
+                'is_primary' => $this->request->getPost('edit_is_primary'),
+            ];
+
+            service('taxonMediaUploadService')->updateMetadataForTaxonMedia($id, $mediaUuid, $metadata);
+        } catch (\InvalidArgumentException $exception) {
+            return redirect()->back()
+                ->withInput()
+                ->with('mediaEditSelectedUuid', $mediaUuid)
+                ->with('mediaEditErrors', ['media_uuid' => $exception->getMessage()]);
+        } catch (\Throwable $exception) {
+            log_message('error', 'Taxon media metadata update failed: ' . $exception->getMessage());
+
+            return redirect()->back()
+                ->withInput()
+                ->with('mediaEditSelectedUuid', $mediaUuid)
+                ->with('error', 'Media metadata update failed. Please try again.');
+        }
+
+        return redirect()->to(site_url('taxa/' . $id))->with('message', 'Taxon media metadata updated.');
     }
 
     /**
@@ -346,5 +414,22 @@ class Taxa extends BaseController
         }
 
         return $labels;
+    }
+
+    /**
+     * Validation rules for shared media metadata fields.
+     *
+     * @return array<string, string>
+     */
+    private function mediaMetadataRules(): array
+    {
+        return [
+            'alt_text' => 'permit_empty|max_length[500]',
+            'caption' => 'permit_empty|max_length[65535]',
+            'attribution' => 'permit_empty|max_length[255]',
+            'license' => 'permit_empty|max_length[100]',
+            'sort_order' => 'permit_empty|is_natural',
+            'is_primary' => 'permit_empty|in_list[0,1]',
+        ];
     }
 }

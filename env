@@ -86,6 +86,29 @@ Config\Import.indiciaOccurrencesEsEndpoint= 'es'
 
 Config\Import.nbnUrl = ''
 
+#--------------------------------------------------------------------
+# TAXON MEDIA
+#--------------------------------------------------------------------
+
+# Relative path below writable/uploads used for taxon media files.
+# taxonMedia.uploadSubdirectory = 'taxon-media'
+
+# Max upload size in bytes (default 10 MiB).
+# taxonMedia.maxUploadBytes = 10485760
+
+# Comma-separated list of allowed image mime types.
+# taxonMedia.allowedMimeTypes = 'image/jpeg,image/png,image/gif,image/webp'
+
+# Optional per-variant overrides.
+# taxonMedia.variants.thumbnail.width = 320
+# taxonMedia.variants.thumbnail.height = 320
+# taxonMedia.variants.thumbnail.mode = 'fit'
+# taxonMedia.variants.thumbnail.quality = 85
+# taxonMedia.variants.large.width = 1400
+# taxonMedia.variants.large.height = 1400
+# taxonMedia.variants.large.mode = 'contain'
+# taxonMedia.variants.large.quality = 90
+
 # Uncomment to alter the taxonomic ranks used in the reporting hieararchy.
 # Do not change this after initial installation.
 # import.taxonRanks = 'Order,Superfamily,Family,Genus,Species'

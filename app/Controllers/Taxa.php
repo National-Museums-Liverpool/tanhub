@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Models\TaxonModel;
 use CodeIgniter\Exceptions\PageNotFoundException;
+use CodeIgniter\HTTP\Files\UploadedFile;
 use CodeIgniter\HTTP\RedirectResponse;
 
 /**
@@ -65,6 +66,9 @@ class Taxa extends BaseController
 
     /**
      * Show taxon details with associated taxon names.
+        *
+        * @param int $id
+        * @return string
      */
     public function details(int $id): string
     {
@@ -86,6 +90,7 @@ class Taxa extends BaseController
             ->getResultArray();
 
         $referenceLabels = $this->referenceLabels($taxon);
+        $taxonMedia = service('taxonMediaReadService')->getByTaxonId($id);
         $user = auth()->user();
         $canEditDetails = $user !== null && $user->inGroup('admin', 'manager');
         $canModerate = $user !== null && $user->inGroup('admin');
@@ -96,11 +101,76 @@ class Taxa extends BaseController
             'bodyClass' => 'app-shell',
             'taxon' => $taxon,
             'taxonNames' => $taxonNames,
+            'taxonMedia' => $taxonMedia,
             'referenceLabels' => $referenceLabels,
             'canEditDetails' => $canEditDetails,
             'canModerate' => $canModerate,
             'classificationColumns' => $this->classificationColumns($taxon),
         ]);
+    }
+
+    /**
+     * Upload media for the given taxon.
+     *
+     * @param int $id
+     * @return RedirectResponse
+     */
+    public function uploadMedia(int $id): RedirectResponse
+    {
+        $user = auth()->user();
+        $canUploadMedia = $user !== null && $user->inGroup('admin', 'manager');
+
+        if (! $canUploadMedia) {
+            return redirect()->back()->with('error', 'You are not authorised to upload media for this taxon.');
+        }
+
+        /** @var TaxonModel $model */
+        $model = model(TaxonModel::class);
+        $taxon = $model->find($id);
+
+        if ($taxon === null) {
+            throw PageNotFoundException::forPageNotFound();
+        }
+
+        $mediaFile = $this->request->getFile('media_file');
+
+        if (! $mediaFile instanceof UploadedFile || $mediaFile->getError() === UPLOAD_ERR_NO_FILE) {
+            return redirect()->back()->withInput()->with('mediaErrors', ['media_file' => 'Please choose an image file to upload.']);
+        }
+
+        $rules = [
+            'alt_text' => 'permit_empty|max_length[500]',
+            'caption' => 'permit_empty|max_length[65535]',
+            'attribution' => 'permit_empty|max_length[255]',
+            'license' => 'permit_empty|max_length[100]',
+            'sort_order' => 'permit_empty|is_natural',
+            'is_primary' => 'permit_empty|in_list[0,1]',
+        ];
+
+        if (! $this->validate($rules)) {
+            return redirect()->back()->withInput()->with('mediaErrors', $this->validator->getErrors());
+        }
+
+        try {
+            $metadata = [
+                'alt_text' => $this->request->getPost('alt_text'),
+                'caption' => $this->request->getPost('caption'),
+                'attribution' => $this->request->getPost('attribution'),
+                'license' => $this->request->getPost('license'),
+                'sort_order' => $this->request->getPost('sort_order'),
+                'is_primary' => $this->request->getPost('is_primary'),
+            ];
+
+            service('taxonMediaUploadService')->uploadForTaxon($id, $mediaFile, $metadata);
+        } catch (\InvalidArgumentException $exception) {
+            return redirect()->back()->withInput()->with('mediaErrors', ['media_file' => $exception->getMessage()]);
+        } catch (\Throwable $exception) {
+            log_message('error', 'Taxon media upload failed: ' . $exception->getMessage());
+
+            return redirect()->back()->withInput()->with('error', 'Media upload failed. Please try again.');
+        }
+
+        return redirect()->to(site_url('taxa/' . $id))->with('message', 'Taxon media uploaded.');
     }
 
     /**

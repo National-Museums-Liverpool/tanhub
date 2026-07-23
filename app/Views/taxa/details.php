@@ -162,6 +162,110 @@
 </section>
 
 <section class="page-section pt-0">
+    <div class="auth-card p-4 p-lg-5 mb-4">
+        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
+            <div>
+                <span class="eyebrow">Taxonomy</span>
+                <h2 class="section-heading mb-0">Taxon media</h2>
+            </div>
+        </div>
+
+        <?php $mediaErrors = session('mediaErrors') ?? []; ?>
+
+        <?php if ($page['canEditDetails']): ?>
+            <form action="<?= esc(site_url('taxa/' . $page['taxon']['id'] . '/media')) ?>" method="post" enctype="multipart/form-data" novalidate>
+                <?= csrf_field() ?>
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label" for="media_file">Image file</label>
+                        <input class="form-control<?= isset($mediaErrors['media_file']) ? ' is-invalid' : '' ?>" id="media_file" name="media_file" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
+                        <?php if (isset($mediaErrors['media_file'])): ?>
+                            <div class="invalid-feedback d-block"><?= esc($mediaErrors['media_file']) ?></div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="alt_text">Alt text</label>
+                        <input class="form-control<?= isset($mediaErrors['alt_text']) ? ' is-invalid' : '' ?>" id="alt_text" name="alt_text" type="text" maxlength="500" value="<?= esc(old('alt_text', '')) ?>">
+                        <?php if (isset($mediaErrors['alt_text'])): ?>
+                            <div class="invalid-feedback d-block"><?= esc($mediaErrors['alt_text']) ?></div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="attribution">Attribution</label>
+                        <input class="form-control<?= isset($mediaErrors['attribution']) ? ' is-invalid' : '' ?>" id="attribution" name="attribution" type="text" maxlength="255" value="<?= esc(old('attribution', '')) ?>">
+                        <?php if (isset($mediaErrors['attribution'])): ?>
+                            <div class="invalid-feedback d-block"><?= esc($mediaErrors['attribution']) ?></div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" for="license">License</label>
+                        <input class="form-control<?= isset($mediaErrors['license']) ? ' is-invalid' : '' ?>" id="license" name="license" type="text" maxlength="100" value="<?= esc(old('license', '')) ?>">
+                        <?php if (isset($mediaErrors['license'])): ?>
+                            <div class="invalid-feedback d-block"><?= esc($mediaErrors['license']) ?></div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="sort_order">Sort order</label>
+                        <input class="form-control<?= isset($mediaErrors['sort_order']) ? ' is-invalid' : '' ?>" id="sort_order" name="sort_order" type="number" min="0" step="1" value="<?= esc(old('sort_order', '0')) ?>">
+                        <?php if (isset($mediaErrors['sort_order'])): ?>
+                            <div class="invalid-feedback d-block"><?= esc($mediaErrors['sort_order']) ?></div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="is_primary">Primary image</label>
+                        <select class="form-select<?= isset($mediaErrors['is_primary']) ? ' is-invalid' : '' ?>" id="is_primary" name="is_primary">
+                            <option value="0" <?= old('is_primary', '0') === '0' ? 'selected' : '' ?>>No</option>
+                            <option value="1" <?= old('is_primary', '0') === '1' ? 'selected' : '' ?>>Yes</option>
+                        </select>
+                        <?php if (isset($mediaErrors['is_primary'])): ?>
+                            <div class="invalid-feedback d-block"><?= esc($mediaErrors['is_primary']) ?></div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" for="caption">Caption</label>
+                        <textarea class="form-control<?= isset($mediaErrors['caption']) ? ' is-invalid' : '' ?>" id="caption" name="caption" rows="3"><?= esc(old('caption', '')) ?></textarea>
+                        <?php if (isset($mediaErrors['caption'])): ?>
+                            <div class="invalid-feedback d-block"><?= esc($mediaErrors['caption']) ?></div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-column flex-sm-row gap-3 align-items-sm-center justify-content-between mt-4">
+                    <button class="btn btn-brand" type="submit">Upload media</button>
+                    <span class="text-muted small">Allowed: JPEG, PNG, GIF, WEBP.</span>
+                </div>
+            </form>
+        <?php endif; ?>
+
+        <?php if ($page['taxonMedia'] === []): ?>
+            <p class="text-muted mb-0 mt-4">No media uploaded for this taxon.</p>
+        <?php else: ?>
+            <div class="taxon-media-grid mt-4">
+                <?php foreach ($page['taxonMedia'] as $media): ?>
+                    <?php
+                    $thumbUrl = $media['variants']['thumbnail']['url'] ?? $media['url'];
+                    $dimension = $media['width'] !== null && $media['height'] !== null
+                        ? $media['width'] . ' x ' . $media['height']
+                        : 'Unknown dimensions';
+                    ?>
+                    <article class="taxon-media-card">
+                        <a href="<?= esc((string) $media['url']) ?>" target="_blank" rel="noopener noreferrer" class="taxon-media-image-link">
+                            <img src="<?= esc((string) $thumbUrl) ?>" class="taxon-media-image" alt="<?= esc((string) ($media['alt_text'] ?? $media['original_filename'])) ?>">
+                        </a>
+                        <div class="taxon-media-body">
+                            <p class="taxon-media-title mb-1"><?= esc((string) $media['original_filename']) ?></p>
+                            <p class="taxon-media-meta mb-1"><?= esc((string) $dimension) ?>, <?= esc((string) $media['bytes']) ?> bytes</p>
+                            <?php if (! empty($media['caption'])): ?>
+                                <p class="taxon-media-caption mb-1"><?= esc((string) $media['caption']) ?></p>
+                            <?php endif; ?>
+                            <p class="taxon-media-meta mb-0">Primary: <?= ! empty($media['is_primary']) ? 'Yes' : 'No' ?> | Sort: <?= esc((string) $media['sort_order']) ?></p>
+                        </div>
+                    </article>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+
     <div class="auth-card p-4 p-lg-5">
         <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
             <div>

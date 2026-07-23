@@ -14,6 +14,7 @@ $routes->get('taxon-ranks/(:num)', 'TaxonRanks::details/$1', ['filter' => ['sess
 $routes->get('taxa', 'Taxa::index', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('taxa/(:num)', 'Taxa::details/$1', ['filter' => ['session', 'group:admin,manager']]);
 $routes->post('taxa/(:num)', 'Taxa::update/$1', ['filter' => ['session', 'group:admin,manager']]);
+$routes->post('taxa/(:num)/media', 'Taxa::uploadMedia/$1', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('recording-schemes', 'RecordingSchemes::index', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('recording-schemes/(:num)', 'RecordingSchemes::details/$1', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('geographic-regions', 'GeographicRegions::index', ['filter' => ['session', 'group:admin,manager']]);

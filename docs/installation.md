@@ -14,6 +14,7 @@ Before installing, ensure you have:
 - Composer (https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos)
 - Git (optional) - (https://git-scm.com/install/)
 - a web server (or local dev stack) with PHP 8.2 or higher and MySQL
+- PHP GD extension enabled for image resizing and variant generation
 - access to an Indicia warehouse with rights to configure REST API connections. The warehouse
   should have a taxon list populated with the contents of the UKSI species list as well as
   occurrence data that you will import into TanHub.
@@ -91,6 +92,29 @@ cp env .env
 
 ```dotenv
 CI_ENVIRONMENT = production
+```
+
+11. Ensure writable media directories exist and are writable by the web server user:
+
+```bash
+mkdir -p writable/uploads/taxon-media
+chmod -R ug+rwX writable/uploads
+```
+
+12. Optional taxon media configuration in `.env`:
+
+```dotenv
+taxonMedia.uploadSubdirectory = taxon-media
+taxonMedia.maxUploadBytes = 10485760
+taxonMedia.allowedMimeTypes = image/jpeg,image/png,image/gif,image/webp
+taxonMedia.variants.thumbnail.width = 320
+taxonMedia.variants.thumbnail.height = 320
+taxonMedia.variants.thumbnail.mode = fit
+taxonMedia.variants.thumbnail.quality = 85
+taxonMedia.variants.large.width = 1400
+taxonMedia.variants.large.height = 1400
+taxonMedia.variants.large.mode = contain
+taxonMedia.variants.large.quality = 90
 ```
 
 ## 3. Optional API Throttling Configuration

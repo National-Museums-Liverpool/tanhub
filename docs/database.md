@@ -45,6 +45,16 @@ erDiagram
     BIGINT recording_scheme_id FK
   }
 
+  taxon_media {
+    BIGINT id PK
+    BIGINT taxon_id FK
+  }
+
+  taxon_media_variants {
+    BIGINT id PK
+    BIGINT taxon_media_id FK
+  }
+
   taxon_groups {
     BIGINT id PK
   }
@@ -56,6 +66,8 @@ erDiagram
 
   recording_schemes |o--o{ taxa: records
   taxa ||--|{ taxon_names: has
+  taxa ||--o{ taxon_media: has
+  taxon_media ||--o{ taxon_media_variants: has
   taxa }o--o| taxa: "rank parent(s)"
   taxa }o--|| taxon_groups: "belongs to"
   occurrences }o--|| data_sources: "was provided by"
@@ -198,6 +210,62 @@ Note that when TanHub is linked to UKSI as its source of taxonomic data, the fol
 - scientific_name_identifier will contain the unique identifier of the accepted taxon name, the
   `TAXON_VERSION_KEY`.
 - conservation_status will hold the GB Red List designation's abbreviation, e.g. LC or VU.
+
+### taxon_media
+
+Uploaded media assets attached to a taxon. The `storage_path` is relative to
+`writable/uploads/taxon-media` and `uuid` is the stable identifier used by media delivery URLs.
+
+| Column            | Type         | Null | Key | Default           | Description                                      |
+| ----------------- | ------------ | ---- | --- | ----------------- | ------------------------------------------------ |
+| id                | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                      |
+| uuid              | CHAR(36)     | NO   | UQ  |                   | Stable media identifier used in delivery routes  |
+| taxon_id          | BIGINT       | NO   | FK  |                   | Foreign key to `taxa.id`                         |
+| original_filename | VARCHAR(255) | NO   |     |                   | Original client filename                         |
+| storage_path      | VARCHAR(255) | NO   |     |                   | Relative path to stored original image           |
+| mime_type         | VARCHAR(100) | NO   |     |                   | Uploaded MIME type                               |
+| bytes             | INT          | NO   |     |                   | File size in bytes                               |
+| width             | INT          | YES  |     |                   | Pixel width (if detected)                        |
+| height            | INT          | YES  |     |                   | Pixel height (if detected)                       |
+| alt_text          | TEXT         | YES  |     |                   | Accessibility alt text                           |
+| caption           | TEXT         | YES  |     |                   | Optional public caption                          |
+| attribution       | VARCHAR(255) | YES  |     |                   | Attribution/credit text                          |
+| license           | VARCHAR(100) | YES  |     |                   | License label                                    |
+| sort_order        | INT          | NO   |     | 0                 | Display ordering within a taxon                  |
+| is_primary        | TINYINT(1)   | NO   |     | 0                 | 1 if primary image for a taxon, otherwise 0      |
+| created_at        | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                    |
+| updated_at        | DATETIME     | YES  |     |                   | Update date                                      |
+| deleted_at        | DATETIME     | YES  |     |                   | Soft delete date                                 |
+
+Indexes and constraints:
+
+- Unique index on `uuid`.
+- Index on `taxon_id`.
+- Composite index on `taxon_id, sort_order`.
+- FK `taxon_id` references `taxa.id` with cascade delete.
+
+### taxon_media_variants
+
+Derived image sizes for each row in `taxon_media` (for example `thumbnail` and `large`).
+
+| Column         | Type         | Null | Key    | Default        | Description                                      |
+| -------------- | ------------ | ---- | ------ | -------------- | ------------------------------------------------ |
+| id             | BIGINT       | NO   | PK     | AUTO_INCREMENT | Primary key                                      |
+| taxon_media_id | BIGINT       | NO   | FK, UQ*|                | FK to `taxon_media.id`                           |
+| variant_key    | VARCHAR(50)  | NO   | UQ*    |                | Variant name, e.g. `thumbnail`, `large`         |
+| storage_path   | VARCHAR(255) | NO   |        |                | Relative path to derived file                    |
+| mime_type      | VARCHAR(100) | NO   |        |                | MIME type of the derived file                    |
+| bytes          | INT          | NO   |        |                | File size in bytes                               |
+| width          | INT          | YES  |        |                | Pixel width of derived file                      |
+| height         | INT          | YES  |        |                | Pixel height of derived file                     |
+| created_at     | DATETIME     | NO   |        | CURRENT_TIMESTAMP | Creation date                                 |
+
+UQ* indicates a composite unique index across `taxon_media_id` and `variant_key`.
+
+Additional constraints:
+
+- Index on `taxon_media_id`.
+- FK `taxon_media_id` references `taxon_media.id` with cascade delete.
 
 ### taxon_groups
 

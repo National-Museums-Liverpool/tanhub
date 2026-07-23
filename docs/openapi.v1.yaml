@@ -140,6 +140,7 @@ paths:
       tags: [taxa]
       summary: List taxa
       parameters:
+        - $ref: '#/components/parameters/TaxaInclude'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Sort'
@@ -196,6 +197,7 @@ paths:
       tags: [taxon-names]
       summary: List taxon names
       parameters:
+        - $ref: '#/components/parameters/TaxonNamesInclude'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Sort'
@@ -423,10 +425,32 @@ components:
     OccurrencesInclude:
       name: include
       in: query
-      description: Comma-separated related fields to include. Supported values are taxon, taxon_name, taxon_rank, taxon_group, parent_taxa, grid_square_stats.
+      description: >-
+        Comma-separated related fields to include. Supported values are data-source,
+        geographic-region, grid-square-stats, taxon, taxon-name, taxon-media,
+        taxon-rank, taxon-group, parent-taxa. taxon-media, taxon-rank,
+        taxon-group and parent-taxa require taxon.
       schema:
         type: string
-        example: taxon,taxon_name,grid_square_stats
+        example: taxon,taxon-media,grid-square-stats
+    TaxaInclude:
+      name: include
+      in: query
+      description: >-
+        Comma-separated related fields to include. Supported values are
+        parent-taxa, recording-scheme, taxon-media, taxon-group, taxon-rank.
+      schema:
+        type: string
+        example: taxon-media,taxon-group
+    TaxonNamesInclude:
+      name: include
+      in: query
+      description: >-
+        Comma-separated related fields to include. Supported values are
+        parent-taxa, taxon, taxon-media, taxon-group, taxon-rank.
+      schema:
+        type: string
+        example: taxon,taxon-media
     GridSquareStatsInclude:
       name: include
       in: query
@@ -437,17 +461,25 @@ components:
     TaxonStatsInclude:
       name: include
       in: query
-      description: Comma-separated related fields to include. Supported values are taxon, taxon_rank, taxon_group, parent_taxa, geographic_region.
+      description: >-
+        Comma-separated related fields to include. Supported values are
+        geographic-region, taxon, taxon-media, taxon-rank, taxon-group,
+        parent-taxa. taxon-media, taxon-rank, taxon-group and parent-taxa
+        require taxon.
       schema:
         type: string
-        example: taxon,geographic_region
+        example: taxon,taxon-media,geographic-region
     TaxonYearStatsInclude:
       name: include
       in: query
-      description: Comma-separated related fields to include. Supported values are taxon, taxon_rank, taxon_group, parent_taxa, geographic_region.
+      description: >-
+        Comma-separated related fields to include. Supported values are
+        geographic-region, taxon, taxon-media, taxon-rank, taxon-group,
+        parent-taxa. taxon-media, taxon-rank, taxon-group and parent-taxa
+        require taxon.
       schema:
         type: string
-        example: taxon,geographic_region
+        example: taxon,taxon-media,geographic-region
   responses:
     ListResponse:
       description: Paginated list response

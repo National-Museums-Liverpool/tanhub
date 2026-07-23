@@ -727,6 +727,10 @@ Examples:
 - Include:
 	- query parameter: `include`
 	- supported values and added fields:
+		- `taxon-media`:
+			- `taxon_media` (array of media objects)
+
+			Include `taxon-media` to return uploaded media metadata and variant URLs.
 		- `recording-scheme`:
 			- `recording_scheme__external_key`
 			- `recording_scheme__title`
@@ -850,6 +854,58 @@ Examples:
 }
 ```
 
+- Request: `/api/v1/taxa?taxon_identifier[eq]=NHMSYS0021054498&include=taxon-media`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"taxon_identifier": "NHMSYS0021054498",
+			"scientific_name": "Bombus terrestris",
+			"taxon_media": [
+				{
+					"uuid": "99999999-9999-4999-8999-999999999999",
+					"original_filename": "specimen.jpg",
+					"mime_type": "image/jpeg",
+					"bytes": 12345,
+					"width": 1200,
+					"height": 900,
+					"alt_text": "Bombus terrestris specimen",
+					"caption": "Specimen image",
+					"attribution": "Recorder",
+					"license": "CC BY 4.0",
+					"sort_order": 0,
+					"is_primary": true,
+					"url": "https://example.org/taxon-media/99999999-9999-4999-8999-999999999999",
+					"variants": {
+						"thumbnail": {
+							"variant_key": "thumbnail",
+							"mime_type": "image/jpeg",
+							"bytes": 2345,
+							"width": 320,
+							"height": 320,
+							"url": "https://example.org/taxon-media/99999999-9999-4999-8999-999999999999/thumbnail"
+						}
+					}
+				}
+			]
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 1
+	},
+	"links": {
+		"self": "/api/v1/taxa?taxon_identifier[eq]=NHMSYS0021054498&include=taxon-media",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
 ### 13.6 taxon-groups
 
 - Path: `GET /api/v1/taxon-groups`
@@ -931,6 +987,10 @@ Examples:
 			- `taxon__vernacular_name`
 
 			Include `taxon` for additional info about the taxon concept.
+		- `taxon-media`:
+			- `taxon_media` (array of media objects)
+
+			Include `taxon-media` for media metadata and variant URLs.
 		- `taxon-rank`:
 			- `taxon_rank__rank`
 			- `taxon_rank__abbr`
@@ -1189,6 +1249,10 @@ Examples:
 			- `taxon__vernacular_name`
 
 			Include `taxon` for additional info about the taxon concept.
+		- `taxon-media`:
+			- `taxon_media` (array of media objects)
+
+			`taxon-media` is only available if `taxon` is included.
 		- `taxon-rank` -
 			- `taxon_rank__rank`
 			- `taxon_rank__abbr`
@@ -1295,6 +1359,45 @@ Examples:
 }
 ```
 
+- Request: `/api/v1/taxon-stats?include=taxon,taxon-media&taxon_identifier[eq]=NBNORG0021054498`
+	Response:
+
+```json
+{
+	"data": [
+		{
+			"uuid": "f1b02df6-6db5-4d0d-b277-7e54b08a4f1c",
+			"taxon_identifier": "NBNORG0021054498",
+			"taxon__scientific_name": "Bombus terrestris",
+			"taxon_media": [
+				{
+					"uuid": "99999999-9999-4999-8999-999999999999",
+					"original_filename": "specimen.jpg",
+					"is_primary": true,
+					"url": "https://example.org/taxon-media/99999999-9999-4999-8999-999999999999",
+					"variants": {
+						"thumbnail": {
+							"url": "https://example.org/taxon-media/99999999-9999-4999-8999-999999999999/thumbnail"
+						}
+					}
+				}
+			]
+		}
+	],
+	"meta": {
+		"limit": 1000,
+		"offset": 0,
+		"count": 1,
+		"total": 1
+	},
+	"links": {
+		"self": "/api/v1/taxon-stats?include=taxon,taxon-media&taxon_identifier[eq]=NBNORG0021054498",
+		"next": null,
+		"prev": null
+	}
+}
+```
+
 ### 13.11 taxon-year-stats
 
 - Path: `GET /api/v1/taxon-year-stats`
@@ -1317,6 +1420,10 @@ Examples:
 			- `taxon__vernacular_name`
 
 			Include `taxon` for additional info about the taxon concept.
+		- `taxon-media`:
+			- `taxon_media` (array of media objects)
+
+			`taxon-media` is only available if `taxon` is included.
 		- `taxon-rank` -
 			- `taxon_rank__rank`
 			- `taxon_rank__abbr`

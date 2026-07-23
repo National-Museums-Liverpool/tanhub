@@ -42,6 +42,17 @@ This is the fastest regression check for the lookup endpoints, including taxon s
 vendor/bin/phpunit -c phpunit.dist.xml tests/Feature/ApiV1LookupResourcesTest.php
 ```
 
+## Run only taxon media focused tests
+
+Use these during media upload and include refactors:
+
+```bash
+vendor/bin/phpunit -c phpunit.dist.xml tests/unit/Services/TaxonMediaUploadServiceTest.php
+vendor/bin/phpunit -c phpunit.dist.xml tests/Feature/TaxonMediaFilesDeliveryTest.php
+vendor/bin/phpunit -c phpunit.dist.xml tests/Feature/TaxaPagesTest.php --filter 'testUploadMedia|testDetailsShowsSeededTaxonMediaCard'
+vendor/bin/phpunit -c phpunit.dist.xml tests/Feature/ApiV1LookupResourcesTest.php --filter 'testTaxaIncludeTaxonMedia|testTaxonNamesIncludeTaxonMedia|testOccurrencesIncludeTaxonMedia|testTaxonStatsIncludeTaxonMedia|testTaxonYearStatsIncludeTaxonMedia'
+```
+
 ## Run only taxon-stats related tests
 
 Use PHPUnit `--filter` to run a narrow set while refactoring.
@@ -75,6 +86,15 @@ Example sequence:
 ```bash
 vendor/bin/phpunit -c phpunit.dist.xml tests/Feature/ApiV1LookupResourcesTest.php --filter 'testTaxon(Year)?Stats'
 vendor/bin/phpunit -c phpunit.dist.xml tests/Feature/ApiV1LookupResourcesTest.php
+composer test
+```
+
+Media-specific sequence:
+
+```bash
+vendor/bin/phpunit -c phpunit.dist.xml tests/unit/Services/TaxonMediaUploadServiceTest.php
+vendor/bin/phpunit -c phpunit.dist.xml tests/Feature/TaxonMediaFilesDeliveryTest.php
+vendor/bin/phpunit -c phpunit.dist.xml tests/Feature/ApiV1LookupResourcesTest.php --filter 'TaxonMedia'
 composer test
 ```
 

@@ -237,6 +237,13 @@ for rarity calculations, so they are only compared to similarly recorded taxa.
 - Read-only table: associated taxon names (name, given_name_identifier, accepted, scientific).
 - Editable: blocked, blocked_reason (admin only), taxon_remarks, rarity_group_name (manager or
   admin only).
+- Taxon media upload:
+  - Route: POST /taxa/{id}/media.
+  - Roles allowed: admin and manager.
+  - Allowed uploads: image/jpeg, image/png, image/gif, image/webp.
+  - Validation: file is required, metadata fields are optional with server-side length checks.
+  - Display: the details page shows existing media with metadata and variant links.
+  - Public delivery URLs: /taxon-media/{uuid} and /taxon-media/{uuid}/{variant_key}.
 
 ### Taxon names
 

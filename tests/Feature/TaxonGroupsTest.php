@@ -197,6 +197,8 @@ final class TaxonGroupsTest extends CIUnitTestCase
     {
         $model = model(TaxonGroupModel::class);
 
+        $model->db->table('taxon_media_variants')->truncate();
+        $model->db->table('taxon_media')->truncate();
         $model->db->table('occurrences')->truncate();
         $model->db->table('taxon_names')->truncate();
         $model->db->table('taxon_stats')->truncate();

@@ -261,6 +261,8 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
     {
         $db = db_connect();
 
+        $db->table('taxon_media_variants')->emptyTable();
+        $db->table('taxon_media')->emptyTable();
         $db->table('taxa')->emptyTable();
         $db->table('taxon_groups')->emptyTable();
         $db->table('taxon_ranks')->emptyTable();

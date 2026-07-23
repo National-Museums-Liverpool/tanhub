@@ -166,6 +166,8 @@ final class DataSourcesOccurrencesPagesTest extends CIUnitTestCase
 
         $db->query('PRAGMA foreign_keys = OFF');
 
+        $db->table('taxon_media_variants')->emptyTable();
+        $db->table('taxon_media')->emptyTable();
         $db->table('geographic_regions_occurrences')->emptyTable();
         $db->table('occurrences')->emptyTable();
         $db->table('taxon_names')->emptyTable();

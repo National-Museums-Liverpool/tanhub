@@ -89,6 +89,39 @@ final class TaxaPagesTest extends CIUnitTestCase
         $result->assertSee('Alpha scheme');
     }
 
+    public function testDetailsShowsSeededTaxonMediaCard(): void
+    {
+        $this->authenticateAs('taxa-detail-media@example.com', 'manager');
+
+        $now = date('Y-m-d H:i:s');
+        db_connect()->table('taxon_media')->insert([
+            'uuid' => '77777777-7777-4777-8777-777777777777',
+            'taxon_id' => 1,
+            'original_filename' => 'details-photo.jpg',
+            'storage_path' => '1/77777777-7777-4777-8777-777777777777/original.jpg',
+            'mime_type' => 'image/jpeg',
+            'bytes' => 100,
+            'width' => 100,
+            'height' => 100,
+            'alt_text' => 'Details image',
+            'caption' => 'Details caption',
+            'attribution' => null,
+            'license' => null,
+            'sort_order' => 0,
+            'is_primary' => 1,
+            'created_at' => $now,
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ]);
+
+        $result = $this->get('taxa/1');
+
+        $result->assertStatus(200);
+        $result->assertSee('Taxon media');
+        $result->assertSee('details-photo.jpg');
+        $result->assertSee('Details caption');
+    }
+
     public function testManagerCanUpdateRarityGroupNameAndRemarks(): void
     {
         $this->authenticateAs('taxa-manager-update-text@example.com', 'manager');
@@ -165,6 +198,33 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->assertNull($taxon['blocked_reason']);
     }
 
+    public function testUploadMediaRequiresFile(): void
+    {
+        $this->authenticateAs('taxa-manager-media-required@example.com', 'manager');
+
+        $result = $this->post('taxa/1/media', [
+            'alt_text' => 'No file test',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirect();
+        $result->assertSessionHas('mediaErrors');
+    }
+
+    public function testStandardUserCannotUploadTaxonMedia(): void
+    {
+        $this->authenticateAs('taxa-standard-user@example.com', 'user');
+
+        $result = $this->post('taxa/1/media', []);
+
+        $result->assertStatus(302);
+        $result->assertRedirect();
+
+        $mediaCount = db_connect()->table('taxon_media')->where('taxon_id', 1)->countAllResults();
+
+        $this->assertSame(0, $mediaCount);
+    }
+
     private function authenticateAs(string $email, string $group): void
     {
         $this->actingAs($this->makeUser($email, $group));
@@ -176,6 +236,8 @@ final class TaxaPagesTest extends CIUnitTestCase
         $db = db_connect();
         $now = date('Y-m-d H:i:s');
 
+        $db->table('taxon_media_variants')->emptyTable();
+        $db->table('taxon_media')->emptyTable();
         $db->table('geographic_regions_occurrences')->emptyTable();
         $db->table('occurrences')->emptyTable();
         $db->table('taxon_stats')->emptyTable();
@@ -297,6 +359,7 @@ final class TaxaPagesTest extends CIUnitTestCase
             ],
         ]);
     }
+
 
     private function makeUser(string $email, string $group)
     {

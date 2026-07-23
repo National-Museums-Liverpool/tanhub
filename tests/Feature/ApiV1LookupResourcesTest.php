@@ -157,6 +157,23 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame('SCHEME-0001', $json['data'][0]['recording_scheme__external_key']);
     }
 
+    public function testTaxaIncludeTaxonMediaAddsNestedMediaRows(): void
+    {
+        $result = $this->get('api/v1/taxa?taxon_identifier[eq]=NHMSYS0021054498&include=taxon-media');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $first = $json['data'][0];
+
+        $this->assertArrayHasKey('taxon_media', $first);
+        $this->assertIsArray($first['taxon_media']);
+        $this->assertCount(1, $first['taxon_media']);
+        $this->assertSame('99999999-9999-4999-8999-999999999999', $first['taxon_media'][0]['uuid']);
+        $this->assertArrayHasKey('variants', $first['taxon_media'][0]);
+        $this->assertArrayHasKey('thumbnail', $first['taxon_media'][0]['variants']);
+    }
+
     public function testTaxonShowReturnsNotFoundForBlockedTaxon(): void
     {
         $result = $this->get('api/v1/taxa/NHMSYS0099999999');
@@ -201,6 +218,21 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $json = json_decode((string) $result->response()->getBody(), true);
 
         $this->assertSame(0, $json['meta']['count']);
+    }
+
+    public function testTaxonNamesIncludeTaxonMediaAddsNestedMediaRows(): void
+    {
+        $result = $this->get('api/v1/taxon-names?taxon_identifier[eq]=NHMSYS0021054498&include=taxon-media');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $first = $json['data'][0];
+
+        $this->assertArrayHasKey('taxon_media', $first);
+        $this->assertIsArray($first['taxon_media']);
+        $this->assertCount(1, $first['taxon_media']);
+        $this->assertSame('Specimen image', (string) $first['taxon_media'][0]['caption']);
     }
 
     public function testOccurrencesListSupportsTaxonFilterAndExcludesBlocked(): void
@@ -281,6 +313,30 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
         $this->assertSame(400, $json['status']);
         $this->assertSame('Invalid include parameter', $json['title']);
+    }
+
+    public function testOccurrencesIncludeTaxonMediaRequiresTaxonInclude(): void
+    {
+        $result = $this->get('api/v1/occurrences?include=taxon-media');
+
+        $result->assertStatus(400);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame('Invalid include parameter', $json['title']);
+    }
+
+    public function testOccurrencesIncludeTaxonMediaHydratesWhenTaxonIncluded(): void
+    {
+        $result = $this->get('api/v1/occurrences?include=taxon,taxon-media');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $first = $json['data'][0];
+
+        $this->assertArrayHasKey('taxon_media', $first);
+        $this->assertCount(1, $first['taxon_media']);
     }
 
     public function testOccurrenceShowReturnsNotFoundForBlockedOccurrence(): void
@@ -392,6 +448,30 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame('Invalid include parameter', $json['title']);
     }
 
+    public function testTaxonStatsIncludeTaxonMediaRequiresTaxonInclude(): void
+    {
+        $result = $this->get('api/v1/taxon-stats?include=taxon-media');
+
+        $result->assertStatus(400);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame('Invalid include parameter', $json['title']);
+    }
+
+    public function testTaxonStatsIncludeTaxonMediaHydratesWhenTaxonIncluded(): void
+    {
+        $result = $this->get('api/v1/taxon-stats?include=taxon,taxon-media');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $first = $json['data'][0];
+
+        $this->assertArrayHasKey('taxon_media', $first);
+        $this->assertCount(1, $first['taxon_media']);
+    }
+
     public function testTaxonStatsIncludeParentTaxaAddsParentFields(): void
     {
         $result = $this->get('api/v1/taxon-stats?include=taxon,parent-taxa');
@@ -471,6 +551,30 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame('Apidae', $first['family__scientific_name']);
     }
 
+    public function testTaxonYearStatsIncludeTaxonMediaRequiresTaxonInclude(): void
+    {
+        $result = $this->get('api/v1/taxon-year-stats?include=taxon-media');
+
+        $result->assertStatus(400);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame('Invalid include parameter', $json['title']);
+    }
+
+    public function testTaxonYearStatsIncludeTaxonMediaHydratesWhenTaxonIncluded(): void
+    {
+        $result = $this->get('api/v1/taxon-year-stats?include=taxon,taxon-media');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $first = $json['data'][0];
+
+        $this->assertArrayHasKey('taxon_media', $first);
+        $this->assertCount(1, $first['taxon_media']);
+    }
+
     public function testTaxonYearStatsRejectsInvalidInclude(): void
     {
         $result = $this->get('api/v1/taxon-year-stats?include=foo');
@@ -510,6 +614,8 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
     {
         $db = db_connect();
 
+        $db->table('taxon_media_variants')->emptyTable();
+        $db->table('taxon_media')->emptyTable();
         $db->table('taxon_stats')->emptyTable();
         $db->table('taxon_year_stats')->emptyTable();
         $db->table('geographic_regions')->emptyTable();
@@ -890,6 +996,39 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'grid_square_count' => 1,
             ],
         ]);
+
+        $db->table('taxon_media')->insert([
+            'id' => 1,
+            'uuid' => '99999999-9999-4999-8999-999999999999',
+            'taxon_id' => 1,
+            'original_filename' => 'specimen.jpg',
+            'storage_path' => '1/99999999-9999-4999-8999-999999999999/original.jpg',
+            'mime_type' => 'image/jpeg',
+            'bytes' => 12345,
+            'width' => 1200,
+            'height' => 900,
+            'alt_text' => 'Bombus terrestris specimen',
+            'caption' => 'Specimen image',
+            'attribution' => 'Recorder',
+            'license' => 'CC BY 4.0',
+            'sort_order' => 0,
+            'is_primary' => 1,
+            'created_at' => $now,
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ]);
+
+        $db->table('taxon_media_variants')->insert([
+            'id' => 1,
+            'taxon_media_id' => 1,
+            'variant_key' => 'thumbnail',
+            'storage_path' => '1/99999999-9999-4999-8999-999999999999/thumbnail.jpg',
+            'mime_type' => 'image/jpeg',
+            'bytes' => 2345,
+            'width' => 320,
+            'height' => 320,
+            'created_at' => $now,
+        ]);
     }
 
     private function ensureLookupTables(): void
@@ -1049,6 +1188,39 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             year INTEGER NOT NULL,
             occurrences_count INTEGER NOT NULL DEFAULT 0,
             grid_square_count INTEGER NOT NULL DEFAULT 0
+        )');
+
+        $db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'taxon_media (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid VARCHAR(36) NOT NULL,
+            taxon_id INTEGER NOT NULL,
+            original_filename VARCHAR(255) NOT NULL,
+            storage_path VARCHAR(255) NOT NULL,
+            mime_type VARCHAR(100) NOT NULL,
+            bytes INTEGER NOT NULL,
+            width INTEGER NULL,
+            height INTEGER NULL,
+            alt_text TEXT NULL,
+            caption TEXT NULL,
+            attribution VARCHAR(255) NULL,
+            license VARCHAR(100) NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            is_primary INTEGER NOT NULL DEFAULT 0,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NULL,
+            deleted_at DATETIME NULL
+        )');
+
+        $db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'taxon_media_variants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            taxon_media_id INTEGER NOT NULL,
+            variant_key VARCHAR(50) NOT NULL,
+            storage_path VARCHAR(255) NOT NULL,
+            mime_type VARCHAR(100) NOT NULL,
+            bytes INTEGER NOT NULL,
+            width INTEGER NULL,
+            height INTEGER NULL,
+            created_at DATETIME NOT NULL
         )');
     }
 }

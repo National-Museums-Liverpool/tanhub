@@ -15,7 +15,7 @@ class ImportIndicia extends BaseCommand
     /**
      * @var string
      */
-    protected $group = 'TanHub';
+    protected $group = 'tanhub';
 
     /**
      * @var string

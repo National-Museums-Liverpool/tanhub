@@ -90,7 +90,7 @@ tables.
 
 ## Unprocessed data table details
 
-The following data tables contain the unprocessed raw data imported into TanHub.
+The following data tables contain the unprocessed raw data imported into tanhub.
 
 ### data_sources
 
@@ -204,7 +204,7 @@ directly to a Darwin Core concept, this is indicated in the description.
 | updated_at                 | DATETIME     | YES  |     |                   | Update date                                                            |
 | deleted_at                 | DATETIME     | YES  |     |                   | Deletion date                                                          |
 
-Note that when TanHub is linked to UKSI as its source of taxonomic data, the following applies:
+Note that when tanhub is linked to UKSI as its source of taxonomic data, the following applies:
 - taxon_identifier will contain `ORGANISM_KEY`, the UKSI provided unique identifier of the organism
   and unique ID for the API.
 - scientific_name_identifier will contain the unique identifier of the accepted taxon name, the
@@ -270,7 +270,7 @@ Additional constraints:
 ### taxon_groups
 
 Taxon reporting categories. The friendly field allows a local override for taxon groups imported
-from other databases such as UKSI. Groups covered by this installation of TanHub are defined in
+from other databases such as UKSI. Groups covered by this installation of tanhub are defined in
 configuration.
 
 | Column                 | Type         | Null | Key | Default           | Description                                                                                                  |
@@ -287,7 +287,7 @@ configuration.
 
 ### taxon_ranks
 
-Taxonomic ranks such as Species, Family, Order. Ranks covered by this installation of TanHub are
+Taxonomic ranks such as Species, Family, Order. Ranks covered by this installation of tanhub are
 defined in configuration.
 
 | Column     | Type        | Null | Key | Default           | Description                              |
@@ -326,7 +326,7 @@ simplicity as this avoids the need for an additional join table.
 * `UQ*` indicates a compound unique index across
   `taxon_id, scientific_name_identifier`.
 
-Note that when TanHub is linked to UKSI as its source of taxonomic data, the following applies:
+Note that when tanhub is linked to UKSI as its source of taxonomic data, the following applies:
 - scientific_name_identifier will contain the unique identifier of this taxon name, the
   `TAXON_VERSION_KEY`.
 

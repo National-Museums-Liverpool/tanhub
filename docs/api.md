@@ -1,8 +1,8 @@
-# TanHub REST API Specification (v1)
+# Tanhub REST API Specification (v1)
 
 ## 1. Overview
 
-TanHub provides a read-only REST API for reporting and discovery use cases.
+Tanhub provides a read-only REST API for reporting and discovery use cases.
 
 For new integrators, the most common flow is:
 
@@ -34,13 +34,13 @@ Practical guidance:
 
 ### 2.1 JWT endpoints
 
-TanHub should expose conventional JWT lifecycle endpoints under the API base path:
+Tanhub should expose conventional JWT lifecycle endpoints under the API base path:
 
 - `POST /api/v1/auth/token` to obtain an access token (and optional refresh token)
 - `POST /api/v1/auth/token/refresh` to refresh an access token
 - `POST /api/v1/auth/token/revoke` to revoke token(s)
 
-Request and response payload shapes can follow standard OAuth2/JWT-compatible patterns used by the TanHub auth layer.
+Request and response payload shapes can follow standard OAuth2/JWT-compatible patterns used by the tanhub auth layer.
 
 For `POST /api/v1/auth/token`, the request uses `username` and `password`; `username` should contain the account email address.
 

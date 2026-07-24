@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<ruleset name="TanHub PHPDoc Rules">
+<ruleset name="Tanhub PHPDoc Rules">
     <description>Require PHPDoc docblocks for classes, functions/methods, and class properties in custom application code.</description>
 
     <file>app/Controllers</file>

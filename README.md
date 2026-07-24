@@ -1,8 +1,8 @@
-# TanHub
+# tanhub
 
 ## About
 
-TanHub is a wildlife observation management platform that aggregates and organizes wildlife data from multiple sources into a centralized database. It provides a RESTful API that enables users to query, analyze, and visualize ecological observation data for research, reporting, and conservation purposes. Tanhub uses technology commonly found on shared web-servers so is easy to install and low-cost to run.
+Tanhub is a wildlife observation management platform that aggregates and organizes wildlife data from multiple sources into a centralized database. It provides a RESTful API that enables users to query, analyze, and visualize ecological observation data for research, reporting, and conservation purposes. Tanhub uses technology commonly found on shared web-servers so is easy to install and low-cost to run.
 
 ## Installation
 

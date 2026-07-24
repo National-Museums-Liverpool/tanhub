@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The admin user interface allows authenticated staff to manage TanHub reference
+The admin user interface allows authenticated staff to manage tanhub reference
 data and moderate imported biological records safely.
 
 This document defines the intended UI behaviour and access rules for the first

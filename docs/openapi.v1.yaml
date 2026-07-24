@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
-  title: TanHub API
+  title: Tanhub API
   version: 1.0.0
   description: >-
-    Starter OpenAPI specification for the TanHub read-only REST API.
+    Starter OpenAPI specification for the tanhub read-only REST API.
 servers:
   - url: /api/v1
     description: API v1

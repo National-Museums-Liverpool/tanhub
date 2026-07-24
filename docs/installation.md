@@ -1,11 +1,11 @@
 ## Installation Guide
 
-This guide is intended for a first-time TanHub setup. It covers:
+This guide is intended for a first-time tanhub setup. It covers:
 
 - local application setup
 - first-run database setup
 - optional API throttling configuration
-- linking TanHub to an Indicia warehouse
+- linking tanhub to an Indicia warehouse
 
 ## 1. Prerequisites
 
@@ -17,7 +17,7 @@ Before installing, ensure you have:
 - PHP GD extension enabled for image resizing and variant generation
 - access to an Indicia warehouse with rights to configure REST API connections. The warehouse
   should have a taxon list populated with the contents of the UKSI species list as well as
-  occurrence data that you will import into TanHub.
+  occurrence data that you will import into tanhub.
 
 ## 2. Application Setup
 
@@ -74,7 +74,7 @@ cp env .env
       data. Should align with UKSI group names. Note that other group names may also be imported
       into the taxon_groups table if required to complete the taxonomic hierarchy for imported
       taxa (a higher taxon may have a group called "unassigned" for example).
-   - `import.geographicRegions` - set to the names of the regions you want to include in TanHub.
+   - `import.geographicRegions` - set to the names of the regions you want to include in tanhub.
       These should be indexed locations in the Indicia warehouse.
    - `import.geographicRegionLocationType` - set to the name of the Location Type in Indicia that
      the regions belong to, for example "Vice County".
@@ -122,7 +122,7 @@ taxonMedia.variants.large.quality = 90
 
 If tanhub is configured to serve only publicly viewable data, API access can be allowed without
 authentication, in which case rate limits are applied to prevent misuse or denial-of-service
-attacks. TanHub supports separate throttle windows for anonymous and authenticated requests.
+attacks. Tanhub supports separate throttle windows for anonymous and authenticated requests.
 Add or override these keys in `.env` as required:
 
 ```dotenv
@@ -157,13 +157,13 @@ CORS_SUPPORTS_CREDENTIALS=true
 CORS_ALLOWED_HEADERS=Origin,Content-Type,Accept,Authorization,X-Requested-With
 ```
 
-## 4. Link TanHub to an Indicia Warehouse
+## 4. Link tanhub to an Indicia Warehouse
 
 1. In the warehouse, open `Admin > REST API Clients` from the menu. If you don't have privileges to
    see this menu item then you will have to request that the warehouse administrator does this for
    you.
 2. Create a REST API client:
-   - Title: `TanHub`
+   - Title: `tanhub`
    - Username: `tanhub`
    - Website: select the source website which holds the records you want to be able to import.
      Other websites which share their data for reporting to the chosen website will also be
@@ -171,11 +171,11 @@ CORS_ALLOWED_HEADERS=Origin,Content-Type,Accept,Authorization,X-Requested-With
    - Secret: enter a strong secret and keep a copy of it securely.
 3. Save, then open the new client and go to the `Connections` tab.
 4. Create a new client connection with:
-   - Title: `TanHub`
+   - Title: `tanhub`
    - Proj ID: `TANHUB`
    - Sharing mode: `Reporting`
    - Filter: you can optionally point this to a filter saved in the Indicia warehouse which
-     enforces access to the correct occurrence data. The TanHub import routine will apply its own
+     enforces access to the correct occurrence data. The tanhub import routine will apply its own
      filtering so this option is only required if access to disallowed data is a concern.
    - Allow confidential records: unticked
    - Allow sensitive records: ticked
@@ -195,10 +195,10 @@ CORS_ALLOWED_HEADERS=Origin,Content-Type,Accept,Authorization,X-Requested-With
    ```
 
 7. Tick "Allow sensitive records" if you want sensitive records at blurred precision. Do not
-   tick "Allow confidential records" or "Full precision sensitive records" as the API for TanHub
+   tick "Allow confidential records" or "Full precision sensitive records" as the API for tanhub
    is public.
 8. Save the connection.
-9. In TanHub `.env`, configure the Import section to match the connection settings as follows:
+9. In tanhub `.env`, configure the Import section to match the connection settings as follows:
   - `Config\Import.indiciaWarehouseUrl` - the warehouse URL without trailing slash or `index.php`.
   - `Config\Import.indiciaTaxonListId` - the taxon list on the warehouse which contains the UKSI
    data.
@@ -209,7 +209,7 @@ CORS_ALLOWED_HEADERS=Origin,Content-Type,Accept,Authorization,X-Requested-With
 
 ## 5. Prepare the Indicia Warehouse
 
-1. Ensure required TanHub reports are present in the warehouse.
+1. Ensure required tanhub reports are present in the warehouse.
 2. In pgAdmin, grant read access for reporting:
 
 ```sql

@@ -93,7 +93,7 @@ Mandatory parameters:
   the examples above.
 
 Optional parameters:
-- `--dry-run` to fetch data but not load it into TanHub.
+- `--dry-run` to fetch data but not load it into tanhub.
 - `--limit n` to override the default limit of 5000 records per fetch.
 - `--offset n` to override the offset
 

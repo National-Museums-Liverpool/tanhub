@@ -53,8 +53,8 @@ abstract class BaseController extends Controller
         }
 
         $defaults = [
-            'siteName' => 'TanHub',
-            'pageTitle' => 'TanHub',
+            'siteName' => 'tanhub',
+            'pageTitle' => 'tanhub',
             'metaDescription' => 'Centralised wildlife observation reporting hub.',
             'tagline' => 'Centralised wildlife observation reporting hub.',
             'bodyClass' => 'app-shell',
@@ -65,7 +65,7 @@ abstract class BaseController extends Controller
                 ['value' => 'Reporting API', 'label' => 'Combined data available via the Reporting API'],
             ],
             'footer' => [
-                'headline' => 'TanHub',
+                'headline' => 'tanhub',
                 'copy' => 'Built with CodeIgniter ' . \CodeIgniter\CodeIgniter::CI_VERSION . ' and Bootstrap 5.',
             ],
             'year' => date('Y'),

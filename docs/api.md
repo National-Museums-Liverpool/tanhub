@@ -7,8 +7,8 @@ TanHub provides a read-only REST API for reporting and discovery use cases.
 For new integrators, the most common flow is:
 
 1. Choose a resource endpoint (for example `/api/v1/taxa` or `/api/v1/occurrences`).
-2. Add filters and sorting using query parameters.
-3. Add include expansions where supported.
+2. Use the `include` parameter to add information from other related resources.
+3. Add filters and sorting using query parameters.
 4. Page through result sets using `limit` and `offset`.
 5. Follow `links.next` until no additional page is available.
 
@@ -58,12 +58,9 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOi...
 
 ## 3. Rate Limiting
 
-- Unauthenticated default limit: `20 requests per 20 seconds` per IP
-- Authenticated default limit: `60 requests per 20 seconds` per authenticated user token identity
-- Limits must be configurable
-- Authenticated request limits must be configurable and can be higher than anonymous limits
-
-Rate-limit headers are returned by the API throttling filter:
+The tanhub API has rate limits which were configured by the person who installed it. Typically an
+authenticated request will have higher rate limits than an anonymous request. Rate-limit headers
+are returned by the API throttling filter:
 
 - `X-RateLimit-Limit`
 - `X-RateLimit-Reset`
@@ -73,24 +70,6 @@ When throttled, the API returns HTTP `429 Too Many Requests` with:
 - `Retry-After`
 - `application/problem+json` body describing the rate-limit condition
 
-### 3.1 Environment configuration
-
-These environment keys control throttling behavior:
-
-- `api.rateLimitAnonymousCapacity` (default `20`)
-- `api.rateLimitAnonymousSeconds` (default `20`)
-- `api.rateLimitAuthenticatedCapacity` (default `60`)
-- `api.rateLimitAuthenticatedSeconds` (default `20`)
-
-Example:
-
-```dotenv
-api.rateLimitAnonymousCapacity = 30
-api.rateLimitAnonymousSeconds = 60
-api.rateLimitAuthenticatedCapacity = 120
-api.rateLimitAuthenticatedSeconds = 60
-```
-
 ## 4. Resource Model
 
 Each resource supports:
@@ -98,7 +77,27 @@ Each resource supports:
 - List endpoint: `GET /api/v1/<resource>`
 - Single endpoint: `GET /api/v1/<resource>/{unique_identifier}`
 
+As well as targetting single resources, each resource can define other related resources which can
+be added to the response. Use the include query parameter with a comma-separated list of related
+resource names (for example `include=taxon,taxon-media`).
+
+- List endpoint: `GET /api/v1/<resource>?include=<related resource list>`
+- Single endpoint: `GET /api/v1/<resource>/{unique_identifier}?include=<related_resource list>`
+
+When an included resource supplies extra fields, those fields use the form
+`<resource_name_with_hyphens_as_underscores>__<fieldname>` (two underscores). Example:
+`taxon__scientific_name` or `grid_square_stats__lat`.
+
+Some includes return arrays of objects named after the included resource (for example `taxon_media`
+or `geographic_regions`).
+
+Filters and sort keys for include-only fields use the same prefixed form (for example
+`taxon__scientific_name[contains]=bombus` or `sort=taxon__scientific_name`).
+
 ### 4.1 Resources and unique identifiers
+
+The following list shows the available resources and the field used as a unique identifier when
+using the single endpoint to fetch one instance:
 
 - `data-sources`: `abbr`
 - `geographic-regions`: `higher_geography_identifier`
@@ -280,12 +279,9 @@ This section provides a practical reference for each resource with:
 
 All list endpoints also support `limit`, `offset`, and `sort`.
 
-Some endpoints allow joining to other resources in order to enrich the response, filtering and
-sorting options with additional fields. To use this feature, provide a parameter `include` with a
-comma separated list of supported resource names to include. Field identifiers used in include
-extensions take the form `<resource>`__`<fieldname>` where hyphens are replaced with underscore in
-the resource name and with 2 underscores separating the resource name from the fieldname. For
-endpoints that support include expansions, examples show both:
+See the canonical description of include and included field naming in
+[4. Resource Model](#resource-model). For endpoints that support `include` expansions,
+examples show both:
 
 - base responses (no include)
 - enriched responses (with include fields)

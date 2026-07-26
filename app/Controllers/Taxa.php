@@ -349,6 +349,7 @@ class Taxa extends BaseController
         $taxonRankId = (int) ($taxon['taxon_rank_id'] ?? 0);
         $taxonGroupId = (int) ($taxon['taxon_group_id'] ?? 0);
         $recordingSchemeId = (int) ($taxon['recording_scheme_id'] ?? 0);
+        $rarityCategory = (int) ($taxon['rarity_category']);
 
         if ($taxonRankId > 0) {
             $row = db_connect()
@@ -384,6 +385,10 @@ class Taxa extends BaseController
                 ->getRowArray();
 
             $labels['recording_scheme_id'] = $row['title'] ?? '';
+        }
+
+        if ($rarityCategory !== null) {
+            $labels['rarity_category'] = Config('Rarity')->labels[$rarityCategory] ?? '';
         }
 
         $classificationIds = [];

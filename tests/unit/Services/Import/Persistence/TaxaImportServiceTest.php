@@ -57,6 +57,7 @@ final class TaxaImportServiceTest extends CIUnitTestCase
             recording_scheme_id INTEGER NULL,
             conservation_status VARCHAR(10) NULL,
             rarity_group_name VARCHAR(100) NOT NULL,
+            rarity_category INTEGER NULL,
             blocked INTEGER NOT NULL DEFAULT 0,
             blocked_reason TEXT NULL,
             deleted_at DATETIME NULL' . $rankColumnsSql . '

@@ -127,7 +127,7 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->authenticateAs('taxa-manager-update-text@example.com', 'manager');
 
         $result = $this->post('taxa/1', [
-            'rarity_group_name' => 'locally-rare',
+            'rarity_group_name' => 'Marine mammals',
             'taxon_remarks' => 'Manager edited remarks',
         ]);
 
@@ -136,7 +136,7 @@ final class TaxaPagesTest extends CIUnitTestCase
 
         $taxon = model(TaxonModel::class)->find(1);
 
-        $this->assertSame('locally-rare', $taxon['rarity_group_name']);
+        $this->assertSame('Marine mammals', $taxon['rarity_group_name']);
         $this->assertSame('Manager edited remarks', $taxon['taxon_remarks']);
     }
 
@@ -145,7 +145,7 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->authenticateAs('taxa-manager-update@example.com', 'manager');
 
         $result = $this->post('taxa/1', [
-            'rarity_group_name' => 'locally-common',
+            'rarity_group_name' => 'Terrestrial mammals',
             'taxon_remarks' => 'Manager note',
             'blocked' => '1',
             'blocked_reason' => 'Sensitive record',
@@ -156,7 +156,7 @@ final class TaxaPagesTest extends CIUnitTestCase
 
         $taxon = model(TaxonModel::class)->find(1);
 
-        $this->assertSame('locally-common', $taxon['rarity_group_name']);
+        $this->assertSame('Terrestrial mammals', $taxon['rarity_group_name']);
         $this->assertSame('Manager note', $taxon['taxon_remarks']);
         $this->assertSame(0, (int) $taxon['blocked']);
         $this->assertNull($taxon['blocked_reason']);
@@ -366,7 +366,8 @@ final class TaxaPagesTest extends CIUnitTestCase
                 'recording_scheme_id' => 1,
                 'conservation_status' => 'LC',
                 'taxon_remarks' => null,
-                'rarity_group_name' => 'common',
+                'rarity_group_name' => 'Bees, Wasps and Ants',
+                'rarity_category' => 4,
                 'blocked' => 0,
                 'blocked_reason' => null,
                 'created_at' => $now,
@@ -391,7 +392,8 @@ final class TaxaPagesTest extends CIUnitTestCase
                 'recording_scheme_id' => 1,
                 'conservation_status' => 'LC',
                 'taxon_remarks' => null,
-                'rarity_group_name' => 'common',
+                'rarity_group_name' => 'Bees, Wasps and Ants',
+                'rarity_category' => 4,
                 'blocked' => 1,
                 'blocked_reason' => 'Existing reason',
                 'created_at' => $now,

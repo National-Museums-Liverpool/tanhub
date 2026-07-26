@@ -183,26 +183,27 @@ Details of species concepts. May also contain other reportable taxonomic levels 
 Taxa are generally imported but species account text may be added locally. Where a field maps
 directly to a Darwin Core concept, this is indicated in the description.
 
-| Column                     | Type         | Null | Key | Default           | Description                                                            |
-| -------------------------- | ------------ | ---- | --- | ----------------- | ---------------------------------------------------------------------- |
-| id                         | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                            |
-| taxon_identifier           | VARCHAR(100) | NO   | UQ  |                   | Taxon identifier, DwC taxonID, Unique key for the API.                 |
-| scientific_name_identifier | VARCHAR(100) | NO   |     |                   | Unique identifier of the accepted name, DwC scientificNameID           |
-| scientific_name            | VARCHAR(200) | NO   |     |                   | Accepted scientific taxon name, DwC scientificName                     |
-| scientific_name_authorship | VARCHAR(100) | YES  |     |                   | Taxon name author, DwC scientificNameAuthorship                        |
-| vernacular_name            | VARCHAR(200) | NO   |     |                   | Common taxon name, DwC vernacularName                                  |
-| <rank>_id                  | BIGINT       | YES  | FK  |                   | Dynamic taxon-rank FK (for each configured rank), references `taxa.id` |
-| taxon_group_id             | BIGINT       | NO   | FK  |                   | ID of the taxon reporting group                                        |
-| id_difficulty              | TINYINT      | YES  |     |                   | Record Cleaner ID difficulty (1-5)                                     |
-| recording_scheme_id        | BIGINT       | YES  | FK  |                   | ID of the associated recording scheme                                  |
-| conservation_status        | VARCHAR(10)  | YES  |     |                   | Abbreviation of the taxon's conservation designation                   |
-| taxon_remarks              | TEXT         | YES  |     |                   | Species account text if provided, DwC taxonRemarks                     |
-| rarity_group_name          | VARCHAR(100) | NO   |     |                   |                                                                        |
-| blocked                    | TINYINT(1)   | NO   |     |                   | 1 = species is blocked from searches, 0 otherwise                      |
-| blocked_reason             | TEXT         | YES  |     |                   | Reason given for blocking the record                                   |
-| created_at                 | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                          |
-| updated_at                 | DATETIME     | YES  |     |                   | Update date                                                            |
-| deleted_at                 | DATETIME     | YES  |     |                   | Deletion date                                                          |
+| Column                     | Type         | Null | Key | Default           | Description                                                                         |
+| -------------------------- | ------------ | ---- | --- | ----------------- | ----------------------------------------------------------------------------------- |
+| id                         | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                                         |
+| taxon_identifier           | VARCHAR(100) | NO   | UQ  |                   | Taxon identifier, DwC taxonID, Unique key for the API.                              |
+| scientific_name_identifier | VARCHAR(100) | NO   |     |                   | Unique identifier of the accepted name, DwC scientificNameID                        |
+| scientific_name            | VARCHAR(200) | NO   |     |                   | Accepted scientific taxon name, DwC scientificName                                  |
+| scientific_name_authorship | VARCHAR(100) | YES  |     |                   | Taxon name author, DwC scientificNameAuthorship                                     |
+| vernacular_name            | VARCHAR(200) | NO   |     |                   | Common taxon name, DwC vernacularName                                               |
+| <rank>_id                  | BIGINT       | YES  | FK  |                   | Dynamic taxon-rank FK (for each configured rank), references `taxa.id`              |
+| taxon_group_id             | BIGINT       | NO   | FK  |                   | ID of the taxon reporting group                                                     |
+| id_difficulty              | TINYINT      | YES  |     |                   | Record Cleaner ID difficulty (1-5)                                                  |
+| recording_scheme_id        | BIGINT       | YES  | FK  |                   | ID of the associated recording scheme                                               |
+| conservation_status        | VARCHAR(10)  | YES  |     |                   | Abbreviation of the taxon's conservation designation                                |
+| taxon_remarks              | TEXT         | YES  |     |                   | Species account text if provided, DwC taxonRemarks                                  |
+| rarity_group_name          | VARCHAR(100) | NO   |     |                   | Grouping of taxa whose rarities are compared together when calculating the category |
+| rarity_category            | TINYINT      | YES  |     |                   | Assigned caetgory of rarity, calculated from the data in pre-processing             |
+| blocked                    | TINYINT(1)   | NO   |     |                   | 1 = species is blocked from searches, 0 otherwise                                   |
+| blocked_reason             | TEXT         | YES  |     |                   | Reason given for blocking the record                                                |
+| created_at                 | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                       |
+| updated_at                 | DATETIME     | YES  |     |                   | Update date                                                                         |
+| deleted_at                 | DATETIME     | YES  |     |                   | Deletion date                                                                       |
 
 Note that when tanhub is linked to UKSI as its source of taxonomic data, the following applies:
 - taxon_identifier will contain `ORGANISM_KEY`, the UKSI provided unique identifier of the organism

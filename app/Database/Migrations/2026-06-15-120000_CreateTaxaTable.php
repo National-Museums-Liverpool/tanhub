@@ -95,6 +95,11 @@ class CreateTaxaTable extends Migration
                 'type'       => 'VARCHAR',
                 'constraint' => 100,
             ],
+            'rarity_category' => [
+                'type'       => 'TINYINT',
+                'constraint' => 3,
+                'null'       => true,
+            ],
             'blocked' => [
                 'type'       => 'TINYINT',
                 'constraint' => 1,

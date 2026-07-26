@@ -74,6 +74,7 @@ class Taxa extends ApiResourceController
             'conservation_status' => 't.conservation_status',
             'taxon_remarks' => 't.taxon_remarks',
             'rarity_group_name' => 't.rarity_group_name',
+            'rarity_category' => 't.rarity_category',
         ];
 
         if ($this->hasInclude($includes, 'parent-taxa')) {

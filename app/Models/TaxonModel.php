@@ -14,6 +14,7 @@ class TaxonModel extends Model
      */
     private const BASE_ALLOWED_FIELDS = [
         'rarity_group_name',
+        'rarity_category',
         'taxon_remarks',
         'blocked',
         'blocked_reason',

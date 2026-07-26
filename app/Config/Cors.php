@@ -112,12 +112,9 @@ class Cors extends BaseConfig
 
         $origins = env('CORS_ALLOWED_ORIGINS', '');
         $this->default['allowedOrigins'] = $origins === '' ? [] : array_values(array_filter(array_map('trim', explode(',', $origins))));
-log_message('debug', 'CORS_ALLOWED_ORIGINS: ' . var_export($this->default['allowedOrigins'], TRUE));
         $patterns = env('CORS_ALLOWED_ORIGINS_PATTERNS', '');
         $this->default['allowedOriginsPatterns'] = $patterns === '' ? [] : array_values(array_filter(array_map('trim', explode(',', $patterns))));
-
         $this->default['supportsCredentials'] = filter_var(env('CORS_SUPPORTS_CREDENTIALS', 'false'), FILTER_VALIDATE_BOOLEAN);
-
         $this->default['allowedHeaders'] = array_values(array_filter(array_map('trim', explode(',', env('CORS_ALLOWED_HEADERS', 'Origin,Content-Type,Accept,Authorization')))));
     }
 }

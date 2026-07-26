@@ -92,6 +92,13 @@
                                 <div class="invalid-feedback d-block"><?= esc($errors['rarity_group_name']) ?></div>
                             <?php endif; ?>
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="rarity_category">
+                                Rarity category
+                                <span class="badge bg-secondary ms-2">Read-only</span>
+                            </label>
+                            <input class="form-control" id="rarity_category" type="text" value="<?= esc((string) ($page['referenceLabels']['rarity_category'] ?? '')) ?>" disabled>
+                        </div>
 
                         <?php foreach ($page['classificationColumns'] as $column): ?>
                             <div class="col-md-6">

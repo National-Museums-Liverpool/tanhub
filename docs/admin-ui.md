@@ -231,7 +231,7 @@ recording scheme name and groups taxa together into collections within which the
 for rarity calculations, so they are only compared to similarly recorded taxa.
 
 - Read-only: taxon_identifier, scientific_name_identifier, scientific_name, vernacular_name,
-  classification FKs.
+  classification FKs, rarity category.
 - Classification FKs are dynamic self-references on taxa (for example order_id, family_id,
   species_id) rather than separate order, family, or superfamily tables.
 - Read-only table: associated taxon names (name, given_name_identifier, accepted, scientific).

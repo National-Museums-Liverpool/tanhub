@@ -714,8 +714,8 @@ Examples:
 - Unique identifier: `taxon_identifier`
 - Exposed fields:
 	- `taxon_identifier`, `scientific_name_identifier`, `scientific_name`,
-	  `scientific_name_authorship`, `vernacular_name`, `id_difficulty`,
-		`conservation_status`, `taxon_remarks`, `rarity_group_name`
+	  `scientific_name_authorship`, `vernacular_name`, `id_difficulty`, `conservation_status`,
+		`taxon_remarks`, `rarity_group_name`, `rarity_category`
 	- dynamic taxon rank fields by configured rank identifier
 - Filterable fields:
 	- all exposed taxa fields above
@@ -765,7 +765,8 @@ Examples:
 			"recording_scheme_external_key": "ABCD1234EFGH5678",
 			"conservation_status": "LC",
 			"taxon_remarks": "Common and widespread.",
-			"rarity_group_name": "common"
+			"rarity_group_name": "Bees, Wasps and Ants",
+			"rarity_category": "Common"
 		}
 	],
 	"meta": {
@@ -799,7 +800,8 @@ Examples:
 			"recording_scheme_external_key": "ABCD1234EFGH5678",
 			"conservation_status": "EN",
 			"taxon_remarks": "Declining species.",
-			"rarity_group_name": "scarce"
+			"rarity_group_name": "Bees, Wasps and Ants",
+			"rarity_category": "Scarce"
 		}
 	],
 	"meta": {
@@ -833,7 +835,8 @@ Examples:
 			"recording_scheme_external_key": "ABCD1234EFGH5678",
 			"conservation_status": "LC",
 			"taxon_remarks": null,
-			"rarity_group_name": "common"
+			"rarity_group_name": "Beetles",
+			"rarity_category": "Common"
 		}
 	],
 	"meta": {

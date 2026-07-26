@@ -126,6 +126,42 @@ Optional parameters:
 
 - `--dry-run` compute aggregates without writing updates.
 
+### Derived taxon rarity categories
+
+After taxa and occurrence imports, run the derived rarity task to populate
+`taxa.rarity_category` within each `rarity_group_name`:
+
+```bash
+$ php spark stats:taxon-rarity
+```
+
+The task:
+
+- groups taxa by `rarity_group_name`
+- counts active occurrences per taxon (`occurrences.deleted_at IS NULL` and
+  `occurrences.blocked = 0`)
+- counts distinct active 2km grid squares per taxon from `occurrences.grid_ref_2km`
+- ranks taxa from low to high for each metric within each rarity group
+- combines those ranks using configurable weights from `rarity.squareWeight`
+  and `rarity.occurrenceWeight`
+- assigns categories `1..5` from rarest to commonest within each rarity group
+
+Optional parameters:
+
+- `--dry-run` compute rarity categories without writing updates.
+
+Configuration:
+
+- `rarity.squareWeight` controls the contribution from unique 2km squares.
+- `rarity.occurrenceWeight` controls the contribution from total active occurrences.
+
+Example `env` overrides:
+
+```dotenv
+rarity.squareWeight = 1.0
+rarity.occurrenceWeight = 1.0
+```
+
 ### Verify derived counts
 
 After running `php spark stats:grid-square-stats`, you can verify that stored
@@ -242,10 +278,12 @@ You cannot import `occurrences` until the following imports are completed:
 - `taxon_ranks`
 - `taxa`
 - `taxon_names`
-You cannot run `grid_square_stats_counts` until the following imports are
-completed:
+You cannot run `grid_square_stats_counts` until the following imports are completed and statistics
+will be based on loaded occurrences only:
 - `grid_square_stats`
-- `occurrences` (indicia)
-- `occurrences` (nbn)
+
+You cannot run `taxon_rarity` until the following imports are completed  and statistics will be
+based on loaded occurrences only:
+- `taxa`
 
 An import task is marked as complete when it is successfully run and returns has more: no.

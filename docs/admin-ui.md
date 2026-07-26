@@ -99,6 +99,7 @@ lookups, taxonomy, occurrences and report stats:
   - occurrences (NBN, not implemented)
 - report stats:
   - grid_square_stats_counts
+  - taxon_rarity
   - taxon_stats
   - taxon_year_stats
 
@@ -117,6 +118,10 @@ The current queue is shown on the page.
 `grid_square_stats_counts` is a derived task that recalculates
 `grid_square_stats.occurrences_count` and `grid_square_stats.species_count`
 from active occurrences after both occurrence import streams complete.
+
+`taxon_rarity` is a derived task that recalculates `taxa.rarity_category`
+within each `rarity_group_name` using weighted ranks from active occurrence
+counts and distinct 2km grid square coverage.
 
 ## Table coverage and behaviour
 

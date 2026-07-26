@@ -4,6 +4,7 @@ namespace Tests;
 
 use App\Services\Import\EntityImportOrchestrator;
 use App\Services\Stats\GridSquareStatsCountsService;
+use App\Services\Stats\TaxonRarityService;
 use Config\Auth;
 use CodeIgniter\Shield\Models\UserModel;
 use CodeIgniter\Shield\Test\AuthenticationTesting;
@@ -61,6 +62,7 @@ final class ImportsPageTest extends CIUnitTestCase
         $result->assertSee('Imports');
         $result->assertSee('Blocked by taxon_groups');
         $result->assertSee('grid_square_stats_counts');
+        $result->assertSee('taxon_rarity');
         $result->assertSee('Not implemented');
     }
 
@@ -240,6 +242,48 @@ final class ImportsPageTest extends CIUnitTestCase
 
         $queueRow = $db->table('import_task_queue')
             ->where('task_key', 'stats:derived:grid_square_stats_counts')
+            ->orderBy('id', 'desc')
+            ->get()
+            ->getRowArray();
+
+        $this->assertIsArray($queueRow);
+        $this->assertSame('completed', (string) $queueRow['status']);
+    }
+
+    public function testRunDerivedTaxonRarityTask(): void
+    {
+        $this->markTaxonomyDependenciesComplete();
+
+        $db = db_connect();
+        $db->table('import_offsets')->where('source_key', 'indicia-occurrences:occurrences')->update(['is_complete' => 1]);
+
+        $this->authenticateAs('imports-admin-rarity@example.com', 'admin');
+
+        $mock = $this->createMock(TaxonRarityService::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->with(false)
+            ->willReturn([
+                'status' => 'success',
+                'fetched' => 8,
+                'inserted' => 0,
+                'updated' => 6,
+                'skipped' => 2,
+                'errors' => 0,
+            ]);
+
+        \Config\Services::injectMock('taxonRarityService', $mock);
+
+        $result = $this->post('imports/run', [
+            'task_key' => 'stats:derived:taxon_rarity',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirectTo(site_url('imports'));
+        $result->assertSessionHas('warning');
+
+        $queueRow = $db->table('import_task_queue')
+            ->where('task_key', 'stats:derived:taxon_rarity')
             ->orderBy('id', 'desc')
             ->get()
             ->getRowArray();

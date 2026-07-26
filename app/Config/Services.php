@@ -70,6 +70,18 @@ class Services extends BaseService
     }
 
     /**
+     * Taxon rarity derived stats service.
+     */
+    public static function taxonRarityService(bool $getShared = true): \App\Services\Stats\TaxonRarityService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('taxonRarityService');
+        }
+
+        return new \App\Services\Stats\TaxonRarityService();
+    }
+
+    /**
      * Geographic regions to occurrences assignment service.
      */
     public static function geographicRegionsOccurrenceImportService(bool $getShared = true): \App\Services\Import\Persistence\GeographicRegionsOccurrenceImportService

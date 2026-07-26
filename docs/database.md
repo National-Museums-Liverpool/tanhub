@@ -198,7 +198,7 @@ directly to a Darwin Core concept, this is indicated in the description.
 | conservation_status        | VARCHAR(10)  | YES  |     |                   | Abbreviation of the taxon's conservation designation                                |
 | taxon_remarks              | TEXT         | YES  |     |                   | Species account text if provided, DwC taxonRemarks                                  |
 | rarity_group_name          | VARCHAR(100) | NO   |     |                   | Grouping of taxa whose rarities are compared together when calculating the category |
-| rarity_category            | TINYINT      | YES  |     |                   | Assigned caetgory of rarity, calculated from the data in pre-processing             |
+| rarity_category            | TINYINT      | YES  |     |                   | Assigned category of rarity, populated by `php spark stats:taxon-rarity`            |
 | blocked                    | TINYINT(1)   | NO   |     |                   | 1 = species is blocked from searches, 0 otherwise                                   |
 | blocked_reason             | TEXT         | YES  |     |                   | Reason given for blocking the record                                                |
 | created_at                 | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                       |

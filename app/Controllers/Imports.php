@@ -123,7 +123,17 @@ class Imports extends BaseController
             'label' => 'grid_square_stats_counts',
             'source' => null,
             'kind' => 'derived',
+            'service' => 'gridSquareStatsCountsService',
             'source_key' => 'derived-stats:grid_square_stats_counts',
+            'supports_run' => true,
+        ],
+        'stats:derived:taxon_rarity' => [
+            'category' => 'Report stats',
+            'label' => 'taxon_rarity',
+            'source' => null,
+            'kind' => 'derived',
+            'service' => 'taxonRarityService',
+            'source_key' => 'derived-stats:taxon_rarity',
             'supports_run' => true,
         ],
     ];
@@ -162,6 +172,9 @@ class Imports extends BaseController
         'stats:derived:taxon_year_stats' => ['occurrence:indicia:occurrences'],
         'stats:derived:grid_square_stats_counts' => [
             'lookup:indicia:grid_square_stats',
+        ],
+        'stats:derived:taxon_rarity' => [
+            'taxonomy:indicia:taxa',
         ],
     ];
 
@@ -316,28 +329,29 @@ class Imports extends BaseController
     private function summarizeTaskResult(array $state, array $result): string
     {
         $status = strtolower((string) ($result['status'] ?? 'success'));
-        $fetched = (int) ($result['fetched'] ?? 0);
-        $inserted = (int) ($result['inserted'] ?? 0);
-        $updated = (int) ($result['updated'] ?? 0);
-        $skipped = (int) ($result['skipped'] ?? 0);
-        $errors = (int) ($result['errors'] ?? 0);
+        // Convert the result key/value pairs to a list for the summary message.
+        $summaryParts = [];
+        $keysToInclude = ['fetched', 'processed', 'inserted', 'updated', 'not changed', 'skipped', 'errors'];
+        foreach ($result as $key => $value) {
+            if (is_scalar($value) && in_array($key, $keysToInclude)) {
+                $summaryParts[] = $key . ': ' . (string) $value;
+            }
+        }
 
         $summary = sprintf(
-            'Task %s finished with status %s. Fetched: %d, inserted: %d, updated: %d, skipped: %d, errors: %d.',
+            'Task %s finished with status %s.',
             (string) ($state['label'] ?? 'unknown'),
-            $status,
-            $fetched,
-            $inserted,
-            $updated,
-            $skipped,
-            $errors,
+            $status
         );
+        if (count($summaryParts) > 0) {
+            $summary .= ' ' . ucfirst(implode(', ', $summaryParts)) . '.';
+        }
 
-        if ($errors > 0) {
+        if (($result['errors'] ?? 0) > 0) {
             return $summary . ' Import stopped early because some records failed.';
         }
 
-        if ($skipped > 0) {
+        if (($result['skipped'] ?? 0) > 0) {
             return $summary . ' Some records were skipped; review the import logs if this was unexpected.';
         }
 
@@ -368,6 +382,7 @@ class Imports extends BaseController
                 'source' => $task['source'],
                 'kind' => $task['kind'],
                 'entity' => $task['entity'] ?? null,
+                'service' => $task['service'] ?? null,
                 'source_key' => $sourceKey,
                 'supports_run' => (bool) $task['supports_run'],
                 'is_complete' => $isComplete,
@@ -456,8 +471,13 @@ class Imports extends BaseController
         }
 
         if ($kind === 'derived') {
-            /** @var \App\Services\Stats\GridSquareStatsCountsService $service */
-            $service = service('gridSquareStatsCountsService');
+            $serviceName = trim((string) ($state['service'] ?? ''));
+
+            if ($serviceName === '') {
+                throw new RuntimeException('Derived task service is missing.');
+            }
+
+            $service = service($serviceName);
 
             return $service->run(false);
         }

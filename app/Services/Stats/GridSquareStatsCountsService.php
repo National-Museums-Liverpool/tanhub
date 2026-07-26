@@ -16,9 +16,7 @@ class GridSquareStatsCountsService
     {
         $counts = [
             'status' => 'success',
-            'fetched' => 0,
             'processed' => 0,
-            'inserted' => 0,
             'updated' => 0,
             'skipped' => 0,
             'errors' => 0,
@@ -49,10 +47,9 @@ class GridSquareStatsCountsService
                 GROUP BY o.grid_ref_2km, gro.geographic_region_id'
             )->getResultArray();
 
-            $counts['fetched'] = count($aggregates);
+            $counts['processed'] = count($aggregates);
 
-            if ($dryRun) {
-                $counts['processed'] = $counts['fetched'];
+            if ($dryRun) {;
 
                 return $counts;
             }

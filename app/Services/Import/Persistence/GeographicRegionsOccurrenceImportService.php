@@ -19,7 +19,6 @@ class GeographicRegionsOccurrenceImportService
         $counts = [
             'status' => 'success',
             'fetched' => 0,
-            'processed' => 0,
             'inserted' => 0,
             'updated' => 0,
             'skipped' => 0,
@@ -31,7 +30,6 @@ class GeographicRegionsOccurrenceImportService
             $assignments = $this->buildAssignments($db);
 
             $counts['fetched'] = count($assignments);
-            $counts['processed'] = $counts['fetched'];
 
             if ($dryRun) {
                 return $counts;

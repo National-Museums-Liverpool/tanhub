@@ -116,7 +116,7 @@ Optional parameters:
 ### Derived grid square stats counts
 
 After occurrence imports, run the derived counts task to populate
-`grid_square_stats.occurrences_count` and `grid_square_stats.species_count`:
+`grid_square_stats.occurrences_count`, `grid_square_stats.species_count` and `grid_square_stats.rarity_score`:
 
 ```bash
 $ php spark stats:grid-square-stats

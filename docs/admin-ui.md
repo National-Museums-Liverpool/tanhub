@@ -116,8 +116,9 @@ if the task is complete. Any other tasks in the queue then proceed in the order 
 The current queue is shown on the page.
 
 `grid_square_stats_counts` is a derived task that recalculates
-`grid_square_stats.occurrences_count` and `grid_square_stats.species_count`
-from active occurrences after both occurrence import streams complete.
+`grid_square_stats.occurrences_count`, `grid_square_stats.species_count` and
+`grid_square_stats.rarity_score` from active occurrences after both occurrence import streams
+complete.
 
 `taxon_rarity` is a derived task that recalculates `taxa.rarity_category`
 within each `rarity_group_name` using weighted ranks from active occurrence

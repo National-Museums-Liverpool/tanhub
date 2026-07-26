@@ -24,7 +24,7 @@ class GridSquareStats extends BaseCommand
     /**
      * @var string
      */
-    protected $description = 'Recompute grid_square_stats occurrences_count and species_count from active occurrences.';
+    protected $description = 'Recompute grid_square_stats occurrences_count, species_count and rarity_score from active occurrences.';
 
     /**
      * @var string

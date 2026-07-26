@@ -72,6 +72,13 @@ class CreateGridSquareStatsTable extends Migration
                 'unsigned'   => true,
                 'default'    => 0,
             ],
+            'rarity_score' => [
+                'type'       => 'INT',
+                'constraint' => 11,
+                'unsigned'   => true,
+                'default'    => 0,
+                'null'       => true,
+            ],
         ]);
 
         $this->forge->addKey('id', true);

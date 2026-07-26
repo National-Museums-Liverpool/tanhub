@@ -346,17 +346,18 @@ squares should filter on partial=false. A query on a given geographic_region_id 
 geographic_region_id alone (this will include contained grid squares, plus those along the boundary
 where partial is true).
 
-| Column               | Type        | Null | Key     | Default        | Description                                                                                          |
-| -------------------- | ----------- | ---- | ------- | -------------- | ---------------------------------------------------------------------------------------------------- |
-| id                   | BIGINT      | NO   | PK      | AUTO_INCREMENT | Primary key                                                                                          |
-| uuid                 | CHAR(36)    | NO   | UQ      |                | Unique key for the API                                                                               |
-| square               | VARCHAR(12) | NO   | UQ*     |                | Grid square in OSGB notation                                                                         |
-| geographic_region_id | BIGINT      | NO   | FK, UQ* |                | Geographic region this square belongs to                                                             |
-| easting              | INT         | NO   |         |                | Grid square centroid easting in metres (OSGB:1936)                                                   |
-| northing             | INT         | NO   |         |                | Grid square centroid northing in metres (OSGB:1936)                                                  |
-| partial              | BOOL        | NO   |         | false          | Flag set to true if the square is only partially within the region, so this is not the entire square |
-| occurrences_count    | INT         | NO   |         |                | Number of occurrences which intersect the grid square                                                |
-| species_count        | INT         | NO   |         |                | Number of species which intersect the grid square                                                    |
+| Column               | Type        | Null | Key     | Default        | Description                                                                                            |
+| -------------------- | ----------- | ---- | ------- | -------------- | ------------------------------------------------------------------------------------------------------ |
+| id                   | BIGINT      | NO   | PK      | AUTO_INCREMENT | Primary key                                                                                            |
+| uuid                 | CHAR(36)    | NO   | UQ      |                | Unique key for the API                                                                                 |
+| square               | VARCHAR(12) | NO   | UQ*     |                | Grid square in OSGB notation                                                                           |
+| geographic_region_id | BIGINT      | NO   | FK, UQ* |                | Geographic region this square belongs to                                                               |
+| easting              | INT         | NO   |         |                | Grid square centroid easting in metres (OSGB:1936)                                                     |
+| northing             | INT         | NO   |         |                | Grid square centroid northing in metres (OSGB:1936)                                                    |
+| partial              | BOOL        | NO   |         | false          | Flag set to true if the square is only partially within the region, so this is not the entire square   |
+| occurrences_count    | INT         | NO   |         |                | Number of occurrences which intersect the grid square                                                  |
+| species_count        | INT         | NO   |         |                | Number of species which intersect the grid square                                                      |
+| rarity_score         | INT         | NO   |         |                | Scoring given to the grid square indicative of the relative number of rare species found in the square |
 
 UQ* indicates a compound unique index on `square` and `geographic_region_id` so
 they cannot be duplicated.

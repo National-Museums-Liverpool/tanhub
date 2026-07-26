@@ -38,6 +38,7 @@ class GridSquareStats extends ApiResourceController
             'partial' => 'gs.partial',
             'occurrences_count' => 'gs.occurrences_count',
             'species_count' => 'gs.species_count',
+            'rarity_score' => 'gs.rarity_score',
             'higher_geography_identifier' => 'gr.higher_geography_identifier',
         ];
 

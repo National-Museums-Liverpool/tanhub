@@ -8,7 +8,7 @@ namespace App\Services\Stats;
 class GridSquareStatsCountsService
 {
     /**
-     * Recompute occurrences_count and species_count for all grid square stats rows.
+     * Recompute occurrences_count, species_count and rarity_score for all grid square stats rows.
      *
      * @return array<string, int|string>
      */
@@ -57,6 +57,7 @@ class GridSquareStatsCountsService
             $db->table('grid_square_stats')->update([
                 'occurrences_count' => 0,
                 'species_count' => 0,
+                'rarity_score' => 0,
             ]);
 
             foreach ($aggregates as $aggregate) {

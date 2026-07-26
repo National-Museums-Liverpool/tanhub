@@ -1141,9 +1141,9 @@ Examples:
 - Item path: `GET /api/v1/grid-square-stats/{uuid}`
 - Unique identifier: `uuid`
 - Exposed fields: `uuid`, `square`, `easting`, `northing`, `lon`, `lat`, `partial`,
-  `occurrences_count`, `species_count`, `higher_geography_identifier`
+  `occurrences_count`, `species_count`, `rarity_score`, `higher_geography_identifier`
 - Filterable fields: `uuid`, `square`, `easting`, `northing`, `lon`, `lat`, `partial`,
-  `occurrences_count`, `species_count`, `higher_geography_identifier`
+  `occurrences_count`, `species_count`, `rarity_score`, `higher_geography_identifier`
 - Include:
 	- query parameter: `include`
 	- supported values and added fields:
@@ -1171,6 +1171,7 @@ Examples:
 			"partial": 0,
 			"occurrences_count": 122,
 			"species_count": 84,
+			"rarity_score": 14,
 			"geographic_region__higher_geography": "South Hampshire",
 			"geographic_region__location_type": "Vice County"
 		}
@@ -1205,7 +1206,8 @@ Examples:
 			"higher_geography_identifier": 13,
 			"partial": 1,
 			"occurrences_count": 201,
-			"species_count": 133
+			"species_count": 133,
+			"rarity_score": 100,
 		}
 	],
 	"meta": {

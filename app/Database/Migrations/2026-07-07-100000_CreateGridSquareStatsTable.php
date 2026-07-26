@@ -73,10 +73,9 @@ class CreateGridSquareStatsTable extends Migration
                 'default'    => 0,
             ],
             'rarity_score' => [
-                'type'       => 'INT',
-                'constraint' => 11,
+                'type'       => 'DECIMAL',
+                'constraint' => '12,4',
                 'unsigned'   => true,
-                'default'    => 0,
                 'null'       => true,
             ],
         ]);

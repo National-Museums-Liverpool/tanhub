@@ -13,21 +13,31 @@ use Throwable;
 class ImportOccurrences extends BaseCommand
 {
     /**
+     * The group the command is lumped under when using Spark list.
+     *
      * @var string
      */
     protected $group = 'tanhub';
 
     /**
+     * The command's name.
+     *
      * @var string
      */
     protected $name = 'import:occurrences';
 
     /**
+     * CLI options.
+     *
+     * The command's description.
+     *
      * @var string
      */
     protected $description = 'Import occurrences from NBN Atlas or Indicia into local tables.';
 
     /**
+     * The command's usage description for the --help Spark option.
+     *
      * @var string
      */
     protected $usage = 'import:occurrences [options]';

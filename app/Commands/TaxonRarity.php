@@ -12,26 +12,36 @@ use Throwable;
 class TaxonRarity extends BaseCommand
 {
     /**
+     * The group the command is lumped under when using Spark list.
+     *
      * @var string
      */
     protected $group = 'tanhub';
 
     /**
+     * The command's name.
+     *
      * @var string
      */
     protected $name = 'stats:taxon-rarity';
 
     /**
+     * The command's description.
+     *
      * @var string
      */
     protected $description = 'Recompute taxa.rarity_category from active occurrence counts and 2km grid square coverage.';
 
     /**
+     * The command's usage description for the --help Spark option.
+     *
      * @var string
      */
     protected $usage = 'stats:taxon-rarity [options]';
 
     /**
+     * CLI options.
+     *
      * @var array<string, string>
      */
     protected $options = [

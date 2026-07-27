@@ -40,6 +40,8 @@ class RebuildTaxonMediaVariants extends BaseCommand
     protected $usage = 'media:rebuild-taxon-media-variants [options]';
 
     /**
+     * CLI options.
+     *
      * @var array<string, string>
      */
     protected $options = [

@@ -41,6 +41,8 @@ class ImportIndicia extends BaseCommand
     protected $usage = 'import:indicia [options]';
 
     /**
+     * CLI options.
+     *
      * @var array<string, string>
      */
     protected $options = [

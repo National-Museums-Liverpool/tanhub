@@ -40,6 +40,8 @@ class GridSquareStats extends BaseCommand
     protected $usage = 'stats:grid-square-stats [options]';
 
     /**
+     * CLI options.
+     *
      * @var array<string, string>
      */
     protected $options = [

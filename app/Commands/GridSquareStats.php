@@ -12,21 +12,29 @@ use Throwable;
 class GridSquareStats extends BaseCommand
 {
     /**
+     * The group the command is lumped under when using Spark list.
+     *
      * @var string
      */
     protected $group = 'tanhub';
 
     /**
+     * The command's name.
+     *
      * @var string
      */
     protected $name = 'stats:grid-square-stats';
 
     /**
+     * The command's description.
+     *
      * @var string
      */
     protected $description = 'Recompute grid_square_stats occurrences_count, species_count and rarity_score from active occurrences.';
 
     /**
+     * The command's usage description for the --help Spark option.
+     *
      * @var string
      */
     protected $usage = 'stats:grid-square-stats [options]';

@@ -13,21 +13,29 @@ use Throwable;
 class ImportIndicia extends BaseCommand
 {
     /**
+     * The group the command is lumped under when using Spark list.
+     *
      * @var string
      */
     protected $group = 'tanhub';
 
     /**
+     * The command's name.
+     *
      * @var string
      */
     protected $name = 'import:indicia';
 
     /**
+     * The command's description.
+     *
      * @var string
      */
     protected $description = 'Import records from Indicia into local lookup/taxa tables.';
 
     /**
+     * The command's usage description for the --help Spark option.
+     *
      * @var string
      */
     protected $usage = 'import:indicia [options]';

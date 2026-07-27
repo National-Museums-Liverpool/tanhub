@@ -12,21 +12,29 @@ use Throwable;
 class RebuildTaxonMediaVariants extends BaseCommand
 {
     /**
+     * The group the command is lumped under when using Spark list.
+     *
      * @var string
      */
     protected $group = 'tanhub';
 
     /**
+     * The command's name.
+     *
      * @var string
      */
     protected $name = 'media:rebuild-taxon-media-variants';
 
     /**
+     * The command's description.
+     *
      * @var string
      */
     protected $description = 'Regenerate taxon media variants for all media records or a filtered subset.';
 
     /**
+     * The command's usage description for the --help Spark option.
+     *
      * @var string
      */
     protected $usage = 'media:rebuild-taxon-media-variants [options]';

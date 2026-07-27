@@ -115,7 +115,7 @@ Optional parameters:
 
 ### Derived grid square stats counts
 
-After occurrence imports, run the derived counts task to populate
+After both occurrence imports complete, run the derived counts task to populate
 `grid_square_stats.occurrences_count`, `grid_square_stats.species_count` and `grid_square_stats.rarity_score`:
 
 ```bash
@@ -125,6 +125,16 @@ $ php spark stats:grid-square-stats
 Optional parameters:
 
 - `--dry-run` compute aggregates without writing updates.
+
+The task:
+
+- counts active occurrences per grid square and geographic region
+- counts distinct `taxa.species_id` values per grid square and geographic region
+- calculates `rarity_score` from active gridded occurrences only
+- treats species with `<= 100` active gridded records as qualifying rare species
+- adds `(100 / total active gridded records for the species)` for each qualifying
+  occurrence into the grid square and region where that occurrence falls
+- stores the total as a decimal score, so split distributions retain fractional values
 
 ### Derived taxon rarity categories
 
@@ -165,7 +175,8 @@ rarity.occurrenceWeight = 1.0
 ### Verify derived counts
 
 After running `php spark stats:grid-square-stats`, you can verify that stored
-counts match the expected aggregate values using the following SQL.
+counts and rarity scores match the expected aggregate values using the
+following SQL.
 
 Expected counts from active occurrences:
 
@@ -223,6 +234,113 @@ WHERE gss.occurrences_count <> COALESCE(exp.expected_occurrences_count, 0)
 ORDER BY gss.square, gss.geographic_region_id;
 ```
 
+Expected rarity scores from active gridded occurrences:
+
+```sql
+SELECT
+  square_species.square,
+  square_species.geographic_region_id,
+  ROUND(
+    SUM((100.0 / species_totals.total_records) * square_species.square_occurrences_count),
+    4
+  ) AS expected_rarity_score
+FROM (
+  SELECT
+    UPPER(o.grid_ref_2km) AS square,
+    gro.geographic_region_id,
+    t.species_id,
+    COUNT(*) AS square_occurrences_count
+  FROM occurrences o
+  INNER JOIN geographic_regions_occurrences gro
+    ON gro.occurrence_id = o.id
+  INNER JOIN taxa t
+    ON t.id = o.taxon_id
+  WHERE o.deleted_at IS NULL
+    AND o.blocked = 0
+    AND o.grid_ref_2km IS NOT NULL
+    AND TRIM(o.grid_ref_2km) <> ''
+    AND t.species_id IS NOT NULL
+  GROUP BY UPPER(o.grid_ref_2km), gro.geographic_region_id, t.species_id
+) square_species
+INNER JOIN (
+  SELECT
+    t.species_id,
+    COUNT(*) AS total_records
+  FROM occurrences o
+  INNER JOIN taxa t
+    ON t.id = o.taxon_id
+  WHERE o.deleted_at IS NULL
+    AND o.blocked = 0
+    AND o.grid_ref_2km IS NOT NULL
+    AND TRIM(o.grid_ref_2km) <> ''
+    AND t.species_id IS NOT NULL
+  GROUP BY t.species_id
+  HAVING COUNT(*) <= 100
+) species_totals
+  ON species_totals.species_id = square_species.species_id
+GROUP BY square_species.square, square_species.geographic_region_id
+ORDER BY square_species.square, square_species.geographic_region_id;
+```
+
+Rows where stored rarity scores differ from expected rarity scores:
+
+```sql
+SELECT
+  gss.square,
+  gss.geographic_region_id,
+  COALESCE(gss.rarity_score, 0) AS stored_rarity_score,
+  COALESCE(exp.expected_rarity_score, 0) AS expected_rarity_score
+FROM grid_square_stats gss
+LEFT JOIN (
+  SELECT
+    square_species.square,
+    square_species.geographic_region_id,
+    ROUND(
+      SUM((100.0 / species_totals.total_records) * square_species.square_occurrences_count),
+      4
+    ) AS expected_rarity_score
+  FROM (
+    SELECT
+      UPPER(o.grid_ref_2km) AS square,
+      gro.geographic_region_id,
+      t.species_id,
+      COUNT(*) AS square_occurrences_count
+    FROM occurrences o
+    INNER JOIN geographic_regions_occurrences gro
+      ON gro.occurrence_id = o.id
+    INNER JOIN taxa t
+      ON t.id = o.taxon_id
+    WHERE o.deleted_at IS NULL
+      AND o.blocked = 0
+      AND o.grid_ref_2km IS NOT NULL
+      AND TRIM(o.grid_ref_2km) <> ''
+      AND t.species_id IS NOT NULL
+    GROUP BY UPPER(o.grid_ref_2km), gro.geographic_region_id, t.species_id
+  ) square_species
+  INNER JOIN (
+    SELECT
+      t.species_id,
+      COUNT(*) AS total_records
+    FROM occurrences o
+    INNER JOIN taxa t
+      ON t.id = o.taxon_id
+    WHERE o.deleted_at IS NULL
+      AND o.blocked = 0
+      AND o.grid_ref_2km IS NOT NULL
+      AND TRIM(o.grid_ref_2km) <> ''
+      AND t.species_id IS NOT NULL
+    GROUP BY t.species_id
+    HAVING COUNT(*) <= 100
+  ) species_totals
+    ON species_totals.species_id = square_species.species_id
+  GROUP BY square_species.square, square_species.geographic_region_id
+) exp
+  ON exp.square = gss.square
+  AND exp.geographic_region_id = gss.geographic_region_id
+WHERE ABS(COALESCE(gss.rarity_score, 0) - COALESCE(exp.expected_rarity_score, 0)) > 0.0001
+ORDER BY gss.square, gss.geographic_region_id;
+```
+
 ## Notes
 
 Taxonomic hierarchy is populated through dynamic `<rank>_id` fields on `taxa`
@@ -253,6 +371,9 @@ The grid-square counts task uses active occurrences only
 (`occurrences.deleted_at IS NULL` and `occurrences.blocked = 0`) and aggregates
 by `(grid_ref_2km, geographic_region_id)`. `species_count` is calculated as a
 distinct count of `taxa.species_id` values linked by `occurrences.taxon_id`.
+`rarity_score` sums weighted qualifying occurrences, where a qualifying species
+has `<= 100` active gridded records across the full dataset and each occurrence
+contributes `100 / total_records_for_species` to its square and region.
 
 Configure the taxon groups that will be imported in your `env` file's
 `import.taxonRanks` setting.
@@ -280,7 +401,8 @@ You cannot import `occurrences` until the following imports are completed:
 - `taxon_names`
 You cannot run `grid_square_stats_counts` until the following imports are completed and statistics
 will be based on loaded occurrences only:
-- `grid_square_stats`
+- `occurrence:indicia:occurrences`
+- `occurrence:nbn:occurrences`
 
 You cannot run `taxon_rarity` until the following imports are completed  and statistics will be
 based on loaded occurrences only:

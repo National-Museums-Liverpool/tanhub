@@ -171,7 +171,8 @@ class Imports extends BaseController
         'stats:derived:taxon_stats' => ['occurrence:indicia:occurrences'],
         'stats:derived:taxon_year_stats' => ['occurrence:indicia:occurrences'],
         'stats:derived:grid_square_stats_counts' => [
-            'lookup:indicia:grid_square_stats',
+            'occurrence:indicia:occurrences',
+            'occurrence:nbn:occurrences',
         ],
         'stats:derived:taxon_rarity' => [
             'taxonomy:indicia:taxa',

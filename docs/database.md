@@ -357,7 +357,7 @@ where partial is true).
 | partial              | BOOL        | NO   |         | false          | Flag set to true if the square is only partially within the region, so this is not the entire square   |
 | occurrences_count    | INT         | NO   |         |                | Number of occurrences which intersect the grid square                                                  |
 | species_count        | INT         | NO   |         |                | Number of species which intersect the grid square                                                      |
-| rarity_score         | INT         | NO   |         |                | Scoring given to the grid square indicative of the relative number of rare species found in the square |
+| rarity_score         | DECIMAL(12,4) | YES |         |                | Weighted rarity score from species with `<= 100` active gridded records; null until derived stats run |
 
 UQ* indicates a compound unique index on `square` and `geographic_region_id` so
 they cannot be duplicated.

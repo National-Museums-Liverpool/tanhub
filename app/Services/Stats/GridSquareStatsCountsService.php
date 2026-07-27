@@ -8,6 +8,12 @@ namespace App\Services\Stats;
 class GridSquareStatsCountsService
 {
     /**
+     * The threshold for species occurrence counts to be included in rarity score calculations.
+     * @var int
+     */
+    private const RARITY_THRESHOLD = 100;
+
+    /**
      * Recompute occurrences_count, species_count and rarity_score for all grid square stats rows.
      *
      * @return array<string, int|string>
@@ -16,6 +22,7 @@ class GridSquareStatsCountsService
     {
         $counts = [
             'status' => 'success',
+            'fetched' => 0,
             'processed' => 0,
             'updated' => 0,
             'skipped' => 0,
@@ -28,28 +35,75 @@ class GridSquareStatsCountsService
 
             $db = db_connect();
             $prefix = $db->getPrefix();
+            $activeOccurrenceWhere = 'o.deleted_at IS NULL
+                    AND o.blocked = 0
+                    AND o.grid_ref_2km IS NOT NULL
+                    AND TRIM(o.grid_ref_2km) <> ""';
 
             $aggregates = $db->query(
                 'SELECT
-                    o.grid_ref_2km AS square,
-                    gro.geographic_region_id AS geographic_region_id,
-                    COUNT(*) AS occurrences_count,
-                    COUNT(DISTINCT t.species_id) AS species_count
-                FROM ' . $prefix . 'occurrences o
-                INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
-                    ON gro.occurrence_id = o.id
-                INNER JOIN ' . $prefix . 'taxa t
-                    ON t.id = o.taxon_id
-                WHERE o.deleted_at IS NULL
-                    AND o.blocked = 0
-                    AND o.grid_ref_2km IS NOT NULL
-                    AND TRIM(o.grid_ref_2km) <> ""
-                GROUP BY o.grid_ref_2km, gro.geographic_region_id'
+                    aggregates.square,
+                    aggregates.geographic_region_id,
+                    aggregates.occurrences_count,
+                    aggregates.species_count,
+                    COALESCE(rarity.rarity_score, 0) AS rarity_score
+                FROM (
+                    SELECT
+                        UPPER(TRIM(o.grid_ref_2km)) AS square,
+                        gro.geographic_region_id AS geographic_region_id,
+                        COUNT(*) AS occurrences_count,
+                        COUNT(DISTINCT t.species_id) AS species_count
+                    FROM ' . $prefix . 'occurrences o
+                    INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
+                        ON gro.occurrence_id = o.id
+                    INNER JOIN ' . $prefix . 'taxa t
+                        ON t.id = o.taxon_id
+                    WHERE ' . $activeOccurrenceWhere . '
+                    GROUP BY UPPER(TRIM(o.grid_ref_2km)), gro.geographic_region_id
+                ) aggregates
+                LEFT JOIN (
+                    SELECT
+                        square_species.square,
+                        square_species.geographic_region_id,
+                        ROUND(SUM((100.0 / species_totals.total_records) * square_species.square_occurrences_count), 4) AS rarity_score
+                    FROM (
+                        SELECT
+                            UPPER(TRIM(o.grid_ref_2km)) AS square,
+                            gro.geographic_region_id AS geographic_region_id,
+                            t.species_id AS species_id,
+                            COUNT(*) AS square_occurrences_count
+                        FROM ' . $prefix . 'occurrences o
+                        INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
+                            ON gro.occurrence_id = o.id
+                        INNER JOIN ' . $prefix . 'taxa t
+                            ON t.id = o.taxon_id
+                        WHERE ' . $activeOccurrenceWhere . '
+                            AND t.species_id IS NOT NULL
+                        GROUP BY UPPER(TRIM(o.grid_ref_2km)), gro.geographic_region_id, t.species_id
+                    ) square_species
+                    INNER JOIN (
+                        SELECT
+                            t.species_id AS species_id,
+                            COUNT(*) AS total_records
+                        FROM ' . $prefix . 'occurrences o
+                        INNER JOIN ' . $prefix . 'taxa t
+                            ON t.id = o.taxon_id
+                        WHERE ' . $activeOccurrenceWhere . '
+                            AND t.species_id IS NOT NULL
+                        GROUP BY t.species_id
+                        HAVING COUNT(*) <= ' . self::RARITY_THRESHOLD . '
+                    ) species_totals
+                        ON species_totals.species_id = square_species.species_id
+                    GROUP BY square_species.square, square_species.geographic_region_id
+                ) rarity
+                    ON rarity.square = aggregates.square
+                    AND rarity.geographic_region_id = aggregates.geographic_region_id'
             )->getResultArray();
 
-            $counts['processed'] = count($aggregates);
+            $counts['fetched'] = count($aggregates);
 
             if ($dryRun) {;
+                $counts['processed'] = $counts['fetched'];
 
                 return $counts;
             }
@@ -73,6 +127,7 @@ class GridSquareStatsCountsService
                 $update = [
                     'occurrences_count' => max(0, (int) ($aggregate['occurrences_count'] ?? 0)),
                     'species_count' => max(0, (int) ($aggregate['species_count'] ?? 0)),
+                    'rarity_score' => $this->formatRarityScore($aggregate['rarity_score'] ?? null),
                 ];
 
                 $existing = $db->table('grid_square_stats')
@@ -103,5 +158,19 @@ class GridSquareStatsCountsService
         }
 
         return $counts;
+    }
+
+    /**
+     * Normalize the computed rarity score for decimal storage.
+     *
+     * @param mixed $value
+     */
+    private function formatRarityScore($value): string
+    {
+        if (! is_numeric($value)) {
+            return '0.0000';
+        }
+
+        return number_format((float) $value, 4, '.', '');
     }
 }

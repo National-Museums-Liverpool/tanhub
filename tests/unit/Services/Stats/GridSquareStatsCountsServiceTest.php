@@ -129,7 +129,8 @@ final class GridSquareStatsCountsServiceTest extends CIUnitTestCase
             lat DECIMAL(10,7) NULL,
             partial INTEGER NOT NULL DEFAULT 0,
             occurrences_count INTEGER NOT NULL DEFAULT 0,
-            species_count INTEGER NOT NULL DEFAULT 0
+            species_count INTEGER NOT NULL DEFAULT 0,
+            rarity_score DECIMAL(12,4) NULL
         )');
 
         $this->db->table('data_sources')->emptyTable();
@@ -193,10 +194,12 @@ final class GridSquareStatsCountsServiceTest extends CIUnitTestCase
         $this->assertNotNull($su99a);
         $this->assertSame(3, (int) $su99a['occurrences_count']);
         $this->assertSame(2, (int) $su99a['species_count']);
+        $this->assertEqualsWithDelta(166.6667, (float) $su99a['rarity_score'], 0.0001);
 
         $this->assertNotNull($su10b);
         $this->assertSame(1, (int) $su10b['occurrences_count']);
         $this->assertSame(1, (int) $su10b['species_count']);
+        $this->assertEqualsWithDelta(33.3333, (float) $su10b['rarity_score'], 0.0001);
     }
 
     public function testRunResetsCountsAndSkipsUnmatchedGridSquareRows(): void
@@ -213,6 +216,7 @@ final class GridSquareStatsCountsServiceTest extends CIUnitTestCase
             ->update([
                 'occurrences_count' => 9,
                 'species_count' => 7,
+                'rarity_score' => '77.7000',
             ]);
 
         $this->db->table('occurrences')->insertBatch([
@@ -249,10 +253,104 @@ final class GridSquareStatsCountsServiceTest extends CIUnitTestCase
         $this->assertNotNull($su99a);
         $this->assertSame(1, (int) $su99a['occurrences_count']);
         $this->assertSame(1, (int) $su99a['species_count']);
+        $this->assertEqualsWithDelta(100.0, (float) $su99a['rarity_score'], 0.0001);
 
         $this->assertNotNull($su10b);
         $this->assertSame(0, (int) $su10b['occurrences_count']);
         $this->assertSame(0, (int) $su10b['species_count']);
+        $this->assertEqualsWithDelta(0.0, (float) $su10b['rarity_score'], 0.0001);
+    }
+
+    public function testRunCalculatesRarityScoreFromSpeciesDistribution(): void
+    {
+        $this->seedTaxa();
+        $this->seedDataSource();
+        $this->seedTaxonNames();
+        $this->seedGeographicRegions();
+        $this->seedGridSquareStats();
+
+        $this->db->table('grid_square_stats')->insertBatch([
+            ['id' => 3, 'uuid' => 'cccc3333-3333-4333-8333-333333333333', 'square' => 'SU11C', 'geographic_region_id' => 11, 'easting' => 102000, 'northing' => 202000, 'lon' => '-1.0200000', 'lat' => '53.0200000', 'partial' => 0],
+            ['id' => 4, 'uuid' => 'dddd4444-4444-4444-8444-444444444444', 'square' => 'SU12D', 'geographic_region_id' => 11, 'easting' => 103000, 'northing' => 203000, 'lon' => '-1.0300000', 'lat' => '53.0300000', 'partial' => 0],
+            ['id' => 5, 'uuid' => 'eeee5555-5555-4555-8555-555555555555', 'square' => 'SU10B', 'geographic_region_id' => 11, 'easting' => 101500, 'northing' => 201500, 'lon' => '-1.0150000', 'lat' => '53.0150000', 'partial' => 0],
+        ]);
+
+        $this->db->table('occurrences')->insertBatch([
+            ['id' => 201, 'unique_key' => 'TEST:201', 'taxon_id' => 1, 'taxon_name_id' => 1, 'grid_ref' => 'SU99A1234', 'grid_ref_2km' => 'SU99A', 'recorded_by' => 'Tester', 'identification_verification_status' => 'V', 'data_source_id' => 1, 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 202, 'unique_key' => 'TEST:202', 'taxon_id' => 3, 'taxon_name_id' => 3, 'grid_ref' => 'SU10B1234', 'grid_ref_2km' => 'SU10B', 'recorded_by' => 'Tester', 'identification_verification_status' => 'V', 'data_source_id' => 1, 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 203, 'unique_key' => 'TEST:203', 'taxon_id' => 1, 'taxon_name_id' => 1, 'grid_ref' => 'SU11C1234', 'grid_ref_2km' => 'SU11C', 'recorded_by' => 'Tester', 'identification_verification_status' => 'V', 'data_source_id' => 1, 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 204, 'unique_key' => 'TEST:204', 'taxon_id' => 2, 'taxon_name_id' => 2, 'grid_ref' => 'SU99A1234', 'grid_ref_2km' => 'SU99A', 'recorded_by' => 'Tester', 'identification_verification_status' => 'V', 'data_source_id' => 1, 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 205, 'unique_key' => 'TEST:205', 'taxon_id' => 4, 'taxon_name_id' => 4, 'grid_ref' => 'SU12D1234', 'grid_ref_2km' => 'SU12D', 'recorded_by' => 'Tester', 'identification_verification_status' => 'V', 'data_source_id' => 1, 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 206, 'unique_key' => 'TEST:206', 'taxon_id' => 4, 'taxon_name_id' => 4, 'grid_ref' => 'SU12D1235', 'grid_ref_2km' => 'SU12D', 'recorded_by' => 'Tester', 'identification_verification_status' => 'V', 'data_source_id' => 1, 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 207, 'unique_key' => 'TEST:207', 'taxon_id' => 4, 'taxon_name_id' => 4, 'grid_ref' => 'SU12D1236', 'grid_ref_2km' => 'SU12D', 'recorded_by' => 'Tester', 'identification_verification_status' => 'V', 'data_source_id' => 1, 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 208, 'unique_key' => 'TEST:208', 'taxon_id' => 4, 'taxon_name_id' => 4, 'grid_ref' => 'SU12D1237', 'grid_ref_2km' => 'SU12D', 'recorded_by' => 'Tester', 'identification_verification_status' => 'V', 'data_source_id' => 1, 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 209, 'unique_key' => 'TEST:209', 'taxon_id' => 4, 'taxon_name_id' => 4, 'grid_ref' => 'SU10B1235', 'grid_ref_2km' => 'SU10B', 'recorded_by' => 'Tester', 'identification_verification_status' => 'V', 'data_source_id' => 1, 'blocked' => 0, 'deleted_at' => null],
+        ]);
+
+        $this->db->table('geographic_regions_occurrences')->insertBatch([
+            ['geographic_region_id' => 11, 'occurrence_id' => 201],
+            ['geographic_region_id' => 11, 'occurrence_id' => 202],
+            ['geographic_region_id' => 11, 'occurrence_id' => 203],
+            ['geographic_region_id' => 11, 'occurrence_id' => 204],
+            ['geographic_region_id' => 11, 'occurrence_id' => 205],
+            ['geographic_region_id' => 11, 'occurrence_id' => 206],
+            ['geographic_region_id' => 11, 'occurrence_id' => 207],
+            ['geographic_region_id' => 11, 'occurrence_id' => 208],
+            ['geographic_region_id' => 11, 'occurrence_id' => 209],
+        ]);
+
+        $service = new GridSquareStatsCountsService();
+        $counts = $service->run(false);
+
+        $this->assertSame('success', $counts['status']);
+        $this->assertSame(4, $counts['fetched']);
+        $this->assertSame(4, $counts['processed']);
+        $this->assertSame(4, $counts['updated']);
+        $this->assertSame(0, $counts['errors']);
+
+        $su99a = $this->db->table('grid_square_stats')
+            ->where('square', 'SU99A')
+            ->where('geographic_region_id', 11)
+            ->get()
+            ->getRowArray();
+
+        $su10b = $this->db->table('grid_square_stats')
+            ->where('square', 'SU10B')
+            ->where('geographic_region_id', 11)
+            ->get()
+            ->getRowArray();
+
+        $su11c = $this->db->table('grid_square_stats')
+            ->where('square', 'SU11C')
+            ->where('geographic_region_id', 11)
+            ->get()
+            ->getRowArray();
+
+        $su12d = $this->db->table('grid_square_stats')
+            ->where('square', 'SU12D')
+            ->where('geographic_region_id', 11)
+            ->get()
+            ->getRowArray();
+
+        $this->assertNotNull($su99a);
+        $this->assertSame(2, (int) $su99a['occurrences_count']);
+        $this->assertSame(2, (int) $su99a['species_count']);
+        $this->assertEqualsWithDelta(133.3333, (float) $su99a['rarity_score'], 0.0001);
+
+        $this->assertNotNull($su10b);
+        $this->assertSame(2, (int) $su10b['occurrences_count']);
+        $this->assertSame(2, (int) $su10b['species_count']);
+        $this->assertEqualsWithDelta(53.3333, (float) $su10b['rarity_score'], 0.0001);
+
+        $this->assertNotNull($su11c);
+        $this->assertSame(1, (int) $su11c['occurrences_count']);
+        $this->assertSame(1, (int) $su11c['species_count']);
+        $this->assertEqualsWithDelta(33.3333, (float) $su11c['rarity_score'], 0.0001);
+
+        $this->assertNotNull($su12d);
+        $this->assertSame(4, (int) $su12d['occurrences_count']);
+        $this->assertSame(1, (int) $su12d['species_count']);
+        $this->assertEqualsWithDelta(80.0, (float) $su12d['rarity_score'], 0.0001);
     }
 
     private function seedTaxa(): void
@@ -319,6 +417,21 @@ final class GridSquareStatsCountsServiceTest extends CIUnitTestCase
                 'blocked_reason' => null,
                 'deleted_at' => null,
             ],
+            [
+                'id' => 4,
+                'taxon_identifier' => 'TX-4',
+                'scientific_name_identifier' => 'SCI-4',
+                'scientific_name' => 'Species three',
+                'vernacular_name' => 'Species three',
+                'taxon_rank_id' => 1,
+                'taxon_group_id' => 1,
+                'rarity_group_name' => 'Bees, Wasps and Ants',
+                'rarity_category' => 4,
+                'species_id' => 3,
+                'blocked' => 0,
+                'blocked_reason' => null,
+                'deleted_at' => null,
+            ],
         ]);
     }
 
@@ -361,6 +474,16 @@ final class GridSquareStatsCountsServiceTest extends CIUnitTestCase
                 'taxon_id' => 3,
                 'name' => 'Species one variant',
                 'given_name_identifier' => 'GN-3',
+                'accepted' => 1,
+                'scientific' => 1,
+                'deleted_at' => null,
+            ],
+            [
+                'id' => 4,
+                'uuid' => '44444444-4444-4444-8444-444444444444',
+                'taxon_id' => 4,
+                'name' => 'Species three',
+                'given_name_identifier' => 'GN-4',
                 'accepted' => 1,
                 'scientific' => 1,
                 'deleted_at' => null,

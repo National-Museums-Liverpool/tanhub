@@ -117,8 +117,10 @@ The current queue is shown on the page.
 
 `grid_square_stats_counts` is a derived task that recalculates
 `grid_square_stats.occurrences_count`, `grid_square_stats.species_count` and
-`grid_square_stats.rarity_score` from active occurrences after both occurrence import streams
-complete.
+`grid_square_stats.rarity_score` from active occurrences after both occurrence
+import streams complete. It weights each qualifying occurrence from species
+with `<= 100` active gridded records by `100 / total_records_for_species` and
+stores the summed decimal score for each square and region.
 
 `taxon_rarity` is a derived task that recalculates `taxa.rarity_category`
 within each `rarity_group_name` using weighted ranks from active occurrence

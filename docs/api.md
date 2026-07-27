@@ -479,6 +479,9 @@ Examples:
 			- `taxon__scientific_name_authorship`
 			- `taxon__scientific_name_identifier`
 			- `taxon__vernacular_name`
+			- `taxon__id_difficulty`
+			- `taxon__conservation_status`
+			- `taxon__rarity_category`
 
 			Include `taxon` for additional info about the taxon concept.
 		- `taxon-name`
@@ -542,6 +545,9 @@ Examples:
 			"taxon__scientific_name_authorship": "L.",
 			"taxon__scientific_name_identifier": "NHMSYS0073AC441A",
 			"taxon__vernacular_name": "Buff-tailed Bumblebee",
+			"taxon__id_difficulty": 4,
+			"taxon__conservation_status": null,
+			"taxon__rarity_category": 5,
 			"taxon_name__uuid": "3d77f8e7-e2e8-4d74-9d4d-cff4d11130e8",
 			"taxon_name__name": "Buff-tailed Bumblebee",
 			"taxon_name__given_name_identifier": "9876FGH",
@@ -984,6 +990,9 @@ Examples:
 			- `taxon__scientific_name_authorship`
 			- `taxon__scientific_name_identifier`
 			- `taxon__vernacular_name`
+			- `taxon__id_difficulty`
+			- `taxon__conservation_status`
+			- `taxon__rarity_category`
 
 			Include `taxon` for additional info about the taxon concept.
 		- `taxon-media`:
@@ -1144,6 +1153,8 @@ Examples:
   `occurrences_count`, `species_count`, `rarity_score`, `higher_geography_identifier`
 - Filterable fields: `uuid`, `square`, `easting`, `northing`, `lon`, `lat`, `partial`,
   `occurrences_count`, `species_count`, `rarity_score`, `higher_geography_identifier`
+- `rarity_score` is a decimal derived field. It remains `null` until the
+	grid-square stats task has been run for the imported squares.
 - Include:
 	- query parameter: `include`
 	- supported values and added fields:
@@ -1171,7 +1182,7 @@ Examples:
 			"partial": 0,
 			"occurrences_count": 122,
 			"species_count": 84,
-			"rarity_score": 14,
+			"rarity_score": 14.2500,
 			"geographic_region__higher_geography": "South Hampshire",
 			"geographic_region__location_type": "Vice County"
 		}
@@ -1207,7 +1218,7 @@ Examples:
 			"partial": 1,
 			"occurrences_count": 201,
 			"species_count": 133,
-			"rarity_score": 100,
+			"rarity_score": 100.0000,
 		}
 	],
 	"meta": {
@@ -1248,6 +1259,9 @@ Examples:
 			- `taxon__scientific_name_authorship`
 			- `taxon__scientific_name_identifier`
 			- `taxon__vernacular_name`
+			- `taxon__id_difficulty`
+			- `taxon__conservation_status`
+			- `taxon__rarity_category`
 
 			Include `taxon` for additional info about the taxon concept.
 		- `taxon-media`:
@@ -1302,6 +1316,9 @@ Examples:
 			"taxon__scientific_name_authorship": "L.",
 			"taxon__scientific_name_identifier": "XYZ123",
 			"taxon__vernacular_name": "Buff-tailed Bumblebee",
+			"taxon__id_difficulty": 4,
+			"taxon__conservation_status": null,
+			"taxon__rarity_category": 5,
 			"taxon_rank__rank": "Species",
 			"taxon_rank__abbr": "sp",
 			"taxon_rank__sort_order": 300,
@@ -1419,6 +1436,9 @@ Examples:
 			- `taxon__scientific_name_authorship`
 			- `taxon__scientific_name_identifier`
 			- `taxon__vernacular_name`
+			- `taxon__id_difficulty`
+			- `taxon__conservation_status`
+			- `taxon__rarity_category`
 
 			Include `taxon` for additional info about the taxon concept.
 		- `taxon-media`:
@@ -1466,6 +1486,9 @@ Examples:
 			"taxon__scientific_name_authorship": "L.",
 			"taxon__scientific_name_identifier": "XYZ123",
 			"taxon__vernacular_name": "Buff-tailed Bumblebee",
+			"taxon__id_difficulty": 4,
+			"taxon__conservation_status": null,
+			"taxon__rarity_category": 5,
 			"taxon_rank__rank": "Species",
 			"taxon_rank__abbr": "sp",
 			"taxon_rank__sort_order": 300,
@@ -1486,6 +1509,9 @@ Examples:
 			"taxon__scientific_name_authorship": "L.",
 			"taxon__scientific_name_identifier": "XYZ123",
 			"taxon__vernacular_name": "Buff-tailed Bumblebee",
+			"taxon__id_difficulty": 4,
+			"taxon__conservation_status": null,
+			"taxon__rarity_category": 5,
 			"taxon_rank__rank": "Species",
 			"taxon_rank__abbr": "sp",
 			"taxon_rank__sort_order": 300,

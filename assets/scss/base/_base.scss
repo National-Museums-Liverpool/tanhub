@@ -1,0 +1,26 @@
+body {
+    min-height: 100vh;
+    color: var(--th-ink);
+    font-family: "Source Sans 3", sans-serif;
+    background:
+        radial-gradient(circle at top left, rgba(201, 143, 43, 0.18), transparent 28%),
+        radial-gradient(circle at right center, rgba(29, 39, 51, 0.08), transparent 30%),
+        linear-gradient(180deg, #fcfaf6 0%, #f3ede2 100%);
+}
+
+h1,
+h2,
+h3,
+.navbar-brand {
+    font-family: "Outfit", sans-serif;
+    letter-spacing: -0.03em;
+}
+
+a {
+    color: var(--th-gold-deep);
+}
+
+a:hover,
+a:focus {
+    color: var(--th-ink);
+}

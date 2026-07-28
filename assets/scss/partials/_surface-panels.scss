@@ -1,0 +1,12 @@
+.navbar-shell,
+.hero-card,
+.feature-card,
+.checklist-card,
+.stat-card,
+.auth-panel,
+.auth-card {
+    background: var(--th-panel);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--th-border);
+    box-shadow: var(--th-shadow);
+}

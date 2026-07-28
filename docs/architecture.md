@@ -23,6 +23,9 @@ both staff administration pages and a read-only REST API.
   filters.
 - `app/Commands` exposes imports, derived-statistics calculations, and media
   maintenance through CodeIgniter Spark.
+- `assets/scss` contains source stylesheets, organised into abstracts,
+  partials, components, features, utilities, and vendor overrides.
+- `public/css/site.css` is the compiled stylesheet served to browsers.
 
 ## Request flows
 

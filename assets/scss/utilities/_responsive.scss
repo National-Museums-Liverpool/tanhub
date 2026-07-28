@@ -1,0 +1,12 @@
+@use '../abstracts/mixins';
+
+@include mixins.sm-down {
+    .hero,
+    .page-section {
+        padding-top: 2rem;
+    }
+
+    .display-4 {
+        font-size: 2.8rem;
+    }
+}

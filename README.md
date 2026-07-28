@@ -2,15 +2,32 @@
 
 ## About
 
-Tanhub is a wildlife observation management platform that aggregates and organizes wildlife data from multiple sources into a centralized database. It provides a RESTful API that enables users to query, analyze, and visualize ecological observation data for research, reporting, and conservation purposes. Tanhub uses technology commonly found on shared web-servers so is easy to install and low-cost to run.
+Tanhub is a wildlife observation management platform that aggregates and organizes wildlife data
+from multiple sources into a centralized database. It provides a RESTful API that enables users to
+query, analyze, and visualize ecological observation data for research, reporting, and conservation
+purposes. Tanhub uses technology commonly found on shared web-servers so is easy to install and
+low-cost to run.
 
 ## Documentation
 
-See [docs/README.md](docs/README.md) for the full documentation index, covering installation, architecture, the database schema, the API, administration, and testing.
+See [docs/README.md](docs/README.md) for the full documentation index, covering installation,
+architecture, the database schema, the API, administration, and testing.
 
 ## Installation
 
 See [docs/installation.md](docs/installation.md) for installation notes.
+
+## Frontend styling
+
+The project uses SCSS sources in `assets/scss` and compiles them into a single output file,
+`public/css/site.css`.
+
+- Install frontend build dependencies: `npm install`
+- Build styles once: `npm run css:build`
+- Watch and rebuild while editing: `npm run css:watch`
+
+For full styling conventions and file organisation, see
+[docs/frontend-styling.md](docs/frontend-styling.md).
 
 ## Server Requirements
 

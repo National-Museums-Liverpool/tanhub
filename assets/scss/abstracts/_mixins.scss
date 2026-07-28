@@ -1,0 +1,7 @@
+@use 'tokens';
+
+@mixin sm-down {
+    @media (max-width: tokens.$th-breakpoint-sm-max) {
+        @content;
+    }
+}

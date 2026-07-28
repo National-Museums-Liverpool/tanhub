@@ -1,0 +1,13 @@
+/*
+ * Generates public/css/site.css.
+ * Edit SCSS files under assets/scss and run npm run css:build.
+ */
+
+@use 'abstracts/index' as abstracts;
+@use 'vendors/bootstrap-overrides' as bootstrapOverrides;
+@use 'base/index' as base;
+@use 'layout/index' as layout;
+@use 'partials/index' as partials;
+@use 'components/index' as components;
+@use 'features/index' as features;
+@use 'utilities/index' as utilities;

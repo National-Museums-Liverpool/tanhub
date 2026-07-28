@@ -25,7 +25,9 @@ Use this page to find the documentation relevant to your task.
 
 1. [Architecture](architecture.md) explains the application's main components.
 2. [Testing](testing.md) explains the PHPUnit test suite and focused test commands.
-3. Read the repository's `.github/copilot-instructions.md` for coding and documentation
+3. [Frontend styling](frontend-styling.md) explains the SCSS file structure, Bootstrap overrides,
+   and build commands.
+4. Read the repository's `.github/copilot-instructions.md` for coding and documentation
    conventions.
 
 ## Reference
@@ -36,6 +38,7 @@ Use this page to find the documentation relevant to your task.
 - [Architecture](architecture.md)
 - [Configuration reference](configuration-reference.md)
 - [Database schema](database.md)
+- [Frontend styling](frontend-styling.md)
 - [Import](import.md)
 - [Installation](installation.md)
 - [OpenAPI v1 specification](openapi.v1.yaml)

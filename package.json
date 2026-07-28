@@ -1,0 +1,14 @@
+{
+  "name": "tanhub-frontend-build",
+  "private": true,
+  "version": "1.0.0",
+  "description": "SCSS build pipeline for tanhub",
+  "scripts": {
+    "css:build": "sass --style=expanded --no-source-map assets/scss/site.scss public/css/site.css",
+    "css:watch": "sass --style=expanded --no-source-map --watch assets/scss/site.scss:public/css/site.css",
+    "css:build:prod": "sass --style=compressed --no-source-map assets/scss/site.scss public/css/site.css"
+  },
+  "devDependencies": {
+    "sass": "1.77.8"
+  }
+}

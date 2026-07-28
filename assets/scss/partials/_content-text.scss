@@ -1,0 +1,28 @@
+.hero-copy,
+.section-copy,
+.feature-copy,
+.checklist-card li,
+.auth-benefits li,
+.site-footer p {
+    color: var(--th-slate);
+    font-size: 1.05rem;
+}
+
+.auth-benefits strong {
+    color: var(--th-ink);
+}
+
+.section-heading {
+    font-size: clamp(2rem, 3vw, 3rem);
+    font-weight: 700;
+}
+
+.checklist-card ul,
+.auth-benefits {
+    padding-left: 1.1rem;
+}
+
+.checklist-card li + li,
+.auth-benefits li + li {
+    margin-top: 0.85rem;
+}

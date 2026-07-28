@@ -19,24 +19,36 @@ Before installing, ensure you have:
   should have a taxon list populated with the contents of the UKSI species list as well as
   occurrence data that you will import into tanhub.
 
+If you are planning to develop the tanhub code, then you may additionally require:
+- Node.js 18 or higher (required for local SCSS compilation)
+
 ## 2. Application Setup
 
-1. Obtain a copy of the code using Git as follows:
+1. Obtain a copy of the code by visiting
+   [Github](https://github.com/National-Museums-Liverpool/tanhub/tree/master)
+   and clicking Code, then Download Zip. Save the file, then unzip it and copy the
+   `tanhub-master` contents to a folder where you want the installation to run from and rename it
+   to `tanhub`.
+
+   Alternatively if you are planning to develop the tanhub code and have Git installed you can
+   clone the code to your local machine:
 
    ```bash
    git clone https://github.com/National-Museums-Liverpool/tanhub.git
    cd tanhub
    ```
 
-   If you don't have Git installed you can obtain the code manually by visiting
-   [Github](https://github.com/National-Museums-Liverpool/tanhub/tree/master) and clicking Code,
-   then Download Zip. Save the file, then unzip it and copy the `tanhub-master` contents to a
-   folder where you want the installation to run from and rename it to `tanhub`.
-
 2. Install dependencies:
 
    ```bash
    composer install --no-dev
+   ```
+
+   If you are developing frontend styles, also install Node dependencies:
+
+   ```bash
+   npm install
+   npm run css:build
    ```
 
 3. Configure your web server to use `tanhub/public` as the document root.
@@ -94,7 +106,8 @@ cp env .env
    account.
 
    - This is the only self-service account creation step.
-   - After setup, open the Users page from the menu (`/users`) when logged in as an admin to create and manage all other users.
+    - After setup, open the Users page from the menu (`/users`) when logged in as an admin to
+       create and manage all other users.
    - Public `/register` self-registration is disabled.
 
    When setup is complete, future homepage visits by logged-in users show a warning and link to
@@ -214,8 +227,10 @@ CORS_ALLOWED_HEADERS=Origin,Content-Type,Accept,Authorization,X-Requested-With
   - `Config\Import.indiciaWarehouseUrl` - the warehouse URL without trailing slash or `index.php`.
   - `Config\Import.indiciaTaxonListId` - the taxon list on the warehouse which contains the UKSI
    data.
-  - `Config\Import.indiciaProjId` - set to `TANHUB` (or the Proj ID set for your client connection if different).
-  - `Config\Import.indiciaUsername` - set to `tanhub` (or the username set for your API client if different).
+   - `Config\Import.indiciaProjId` - set to `TANHUB` (or the Proj ID set for your client
+      connection if different).
+   - `Config\Import.indiciaUsername` - set to `tanhub` (or the username set for your API client
+      if different).
   - `Config\Import.indiciaSecret` - set to the secret given for your API client.
   - `Config\Import.indiciaOccurrencesEsEndpoint` - match the endpoint from step 5.
 

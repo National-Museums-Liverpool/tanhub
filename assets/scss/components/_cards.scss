@@ -1,0 +1,24 @@
+.stat-card,
+.feature-card,
+.checklist-card {
+    border-radius: 1.5rem;
+    height: 100%;
+}
+
+.stat-value {
+    font-family: "Outfit", sans-serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.feature-icon {
+    width: 3rem;
+    height: 3rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 1rem;
+    background: rgba(201, 143, 43, 0.15);
+    color: var(--th-gold-deep);
+    font-weight: 700;
+}

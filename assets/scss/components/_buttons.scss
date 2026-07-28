@@ -1,0 +1,25 @@
+.btn-brand {
+    background: var(--th-ink);
+    border-color: var(--th-ink);
+    color: #fff;
+}
+
+.btn-brand:hover,
+.btn-brand:focus {
+    background: #111923;
+    border-color: #111923;
+    color: #fff;
+}
+
+.btn-outline-brand {
+    border-color: rgba(29, 39, 51, 0.2);
+    color: var(--th-ink);
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.btn-outline-brand:hover,
+.btn-outline-brand:focus {
+    background: rgba(29, 39, 51, 0.06);
+    border-color: rgba(29, 39, 51, 0.3);
+    color: var(--th-ink);
+}

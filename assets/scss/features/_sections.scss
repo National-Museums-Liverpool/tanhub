@@ -1,0 +1,37 @@
+.hero,
+.page-section {
+    padding: 4rem 0 3rem;
+}
+
+.hero-card,
+.auth-panel,
+.auth-card {
+    border-radius: 2rem;
+    overflow: hidden;
+    position: relative;
+}
+
+.hero-card::after,
+.auth-panel::after {
+    content: "";
+    position: absolute;
+    inset: auto -10% -25% auto;
+    width: 16rem;
+    height: 16rem;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(201, 143, 43, 0.38) 0%, rgba(201, 143, 43, 0) 72%);
+}
+
+.eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.8rem;
+    border-radius: 999px;
+    background: rgba(29, 39, 51, 0.06);
+    color: var(--th-slate);
+    font-size: 0.9rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}

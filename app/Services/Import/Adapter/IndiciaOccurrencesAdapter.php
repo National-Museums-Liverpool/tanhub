@@ -323,9 +323,10 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
      */
     private function normalizeRecord(array $record): array
     {
-        $gridRef = (string) ($this->stringFromPath($record, 'location.output_sref'));
-        $gridRef2km = $this->calculateTetrad($gridRef);
         $point = explode(',', (string) $this->valueFromPath($record, 'location.point'));
+        $gridRef = (string) ($this->stringFromPath($record, 'location.output_sref'));
+        $gridRefSystem = (string) ($this->stringFromPath($record, 'location.output_sref_system'));
+        $gridRef2km = $this->calculateTetrad($gridRef);
         return [
             'remote_id' => (string) $record['_id'],
             // Indicia ES data doesn't currently hold the organism key.
@@ -336,6 +337,7 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             'from_date' => $this->valueFromPath($record, 'event.date_start') ?? null,
             'to_date' => $this->valueFromPath($record, 'event.date_end') ?? null,
             'grid_ref' => $gridRef,
+            'grid_ref_system' => $gridRefSystem,
             'grid_ref_2km' => $gridRef2km,
             'locality' => $this->valueFromPath($record, 'location.verbatim_locality') ?? null,
             'recorded_by' => $this->valueFromPath($record, 'event.recorded_by') ?? null,
@@ -348,6 +350,7 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
                 ?? null,
             'latitude' => $point[0] ?? null,
             'longitude' => $point[1] ?? null,
+            'coordinate_uncertainty_in_meters' => $this->valueFromPath($record, 'location.coordinate_uncertainty_in_meters') ?? null,
         ];
     }
 

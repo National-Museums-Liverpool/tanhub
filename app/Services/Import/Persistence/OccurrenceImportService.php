@@ -5,12 +5,21 @@ namespace App\Services\Import\Persistence;
 use App\Models\OccurrenceModel;
 use App\Models\TaxonModel;
 use App\Models\TaxonNameModel;
+use App\Services\Import\Support\OsgbGridReferenceBuilder;
 
 /**
  * Persists normalized occurrence records into local tables.
  */
 class OccurrenceImportService
 {
+    /**
+     * @param OsgbGridReferenceBuilder|null $osgbGridReferenceBuilder Grid reference conversion helper.
+     */
+    public function __construct(
+        private readonly ?OsgbGridReferenceBuilder $osgbGridReferenceBuilder = null,
+    ) {
+    }
+
     /**
      * @param array<int, array<string, mixed>> $records
      * @return array<string, int>
@@ -37,6 +46,7 @@ class OccurrenceImportService
         $taxonNameModel = model(TaxonNameModel::class);
         /** @var OccurrenceModel $occurrenceModel */
         $occurrenceModel = model(OccurrenceModel::class);
+        $osgbGridReferenceBuilder = $this->osgbGridReferenceBuilder ?? new OsgbGridReferenceBuilder();
 
 
         $ranks = config('Import')->taxonRanks;
@@ -71,7 +81,27 @@ class OccurrenceImportService
                 }
 
                 $gridRef = trim((string) ($record['grid_ref'] ?? ''));
+                $gridRefSystem = trim((string) ($record['grid_ref_system'] ?? ''));
                 $gridRef2km = trim((string) ($record['grid_ref_2km'] ?? ''));
+
+                if ($this->shouldRegenerateGridReference($gridRefSystem)) {
+                    $generatedGridRef = $osgbGridReferenceBuilder->buildFromWgs84(
+                        $record['latitude'] ?? null,
+                        $record['longitude'] ?? null,
+                        $record['coordinate_uncertainty_in_meters'] ?? null,
+                    );
+
+                    if ($generatedGridRef === null) {
+                        log_message('debug', 'Skipping occurrence record due to failed non-OSGB grid reference generation: ' . var_export($record, true));
+                        $counts['skipped']++;
+                        $counts['processed']++;
+                        $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);
+                        continue;
+                    }
+
+                    $gridRef = $generatedGridRef['grid_ref'];
+                    $gridRef2km = $osgbGridReferenceBuilder->calculateDintyTetrad($gridRef) ?? '';
+                }
 
                 if ($gridRef === '') {
                     log_message('debug', 'Skipping occurrence record due to missing grid reference: ' . var_export($record, true));
@@ -209,6 +239,24 @@ class OccurrenceImportService
         $string = trim((string) $value);
 
         return $string === '' ? null : $string;
+    }
+
+    /**
+     * Determine if this record should regenerate grid reference from coordinates.
+     *
+     * @param string $gridRefSystem Source grid reference system token.
+     *
+     * @return bool True when the source system is explicitly non-OSGB.
+     */
+    private function shouldRegenerateGridReference(string $gridRefSystem): bool
+    {
+        $normalised = strtoupper(trim($gridRefSystem));
+
+        if ($normalised === '') {
+            return false;
+        }
+
+        return ! in_array($normalised, ['OSGB', 'OSGB1936', 'EPSG:27700'], true);
     }
 
     /**

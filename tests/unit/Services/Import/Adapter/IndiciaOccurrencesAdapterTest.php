@@ -26,6 +26,30 @@ final class IndiciaOccurrencesAdapterTest extends CIUnitTestCase
         $this->assertSame('SU14L', $this->calculateTetrad('SU123456'));
     }
 
+    public function testNormalizeRecordIncludesGridSystemAndUncertainty(): void
+    {
+        $record = [
+            '_id' => 'remote-1',
+            'taxon' => [
+                'accepted_taxon_id' => 'TVK-1',
+                'taxon_id' => 'GIVEN-1',
+            ],
+            'location' => [
+                'output_sref' => 'SU1234',
+                'output_sref_system' => 'WGS84',
+                'coordinate_uncertainty_in_meters' => 1500,
+                'point' => '53.4808,-2.2426',
+            ],
+        ];
+
+        $normalized = $this->normalizeRecord($record);
+
+        $this->assertSame('WGS84', $normalized['grid_ref_system']);
+        $this->assertSame(1500, $normalized['coordinate_uncertainty_in_meters']);
+        $this->assertSame('53.4808', $normalized['latitude']);
+        $this->assertSame('-2.2426', $normalized['longitude']);
+    }
+
     private function calculateTetrad(string $gridRef): ?string
     {
         $method = new ReflectionMethod(IndiciaOccurrencesAdapter::class, 'calculateTetrad');
@@ -33,6 +57,21 @@ final class IndiciaOccurrencesAdapterTest extends CIUnitTestCase
 
         /** @var ?string $result */
         $result = $method->invoke($this->newAdapter(), $gridRef);
+
+        return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $record
+     * @return array<string, mixed>
+     */
+    private function normalizeRecord(array $record): array
+    {
+        $method = new ReflectionMethod(IndiciaOccurrencesAdapter::class, 'normalizeRecord');
+        $method->setAccessible(true);
+
+        /** @var array<string, mixed> $result */
+        $result = $method->invoke($this->newAdapter(), $record);
 
         return $result;
     }

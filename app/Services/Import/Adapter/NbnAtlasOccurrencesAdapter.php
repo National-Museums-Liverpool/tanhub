@@ -116,6 +116,17 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
     {
         $gridRef = (string) ($record['grid_ref'] ?? $record['gridReference'] ?? '');
         $gridRef2km = (string) ($record['grid_ref_2km'] ?? $record['gridReference2Km'] ?? '');
+        $gridRefSystem = (string) ($record['grid_ref_system']
+            ?? $record['gridReferenceSystem']
+            ?? $record['spatialReferenceSystem']
+            ?? $record['coordinateSystem']
+            ?? '');
+        $coordinateUncertainty = $this->numberFromAny([
+            $record['coordinate_uncertainty_in_meters'] ?? null,
+            $record['coordinateUncertaintyInMeters'] ?? null,
+            $record['uncertaintyInMeters'] ?? null,
+            $record['coordinateUncertainty'] ?? null,
+        ]);
 
         if ($gridRef2km === '' && $gridRef !== '') {
             $gridRef2km = strtoupper(substr(str_replace(' ', '', $gridRef), 0, 5));
@@ -129,6 +140,7 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             'from_date' => $record['from_date'] ?? $record['eventDate'] ?? null,
             'to_date' => $record['to_date'] ?? null,
             'grid_ref' => $gridRef,
+            'grid_ref_system' => $gridRefSystem,
             'grid_ref_2km' => $gridRef2km,
             'locality' => $record['locality'] ?? null,
             'recorded_by' => $record['recorded_by'] ?? $record['recordedBy'] ?? null,
@@ -139,6 +151,7 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             'organism_quantity' => $record['organism_quantity'] ?? null,
             'latitude' => $record['decimalLatitude'] ?? null,
             'longitude' => $record['decimalLongitude'] ?? null,
+            'coordinate_uncertainty_in_meters' => $coordinateUncertainty,
             'blocked' => (bool) ($record['blocked'] ?? false),
             'blocked_reason' => $record['blocked_reason'] ?? null,
         ];

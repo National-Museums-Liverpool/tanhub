@@ -122,10 +122,43 @@ with coordinate uncertainty greater than 10,000m. This can be configured by sett
 `Config\Import.maximumCoordinateUncertaintyInMeters` in `.env`. It can be set to `0` to disable the
 restriction.
 
+#### Grid reference handling for occurrence imports
+
+When a source record has `grid_ref_system` set to a non-OSGB value, Tanhub
+regenerates `grid_ref` from the supplied latitude and longitude.
+
+The conversion flow is:
+
+1. read latitude/longitude as EPSG:4326 (WGS84)
+2. project to EPSG:27700 (OSGB1936 / British National Grid)
+3. choose a square size from coordinate uncertainty in metres
+4. format an OSGB `grid_ref` at that precision
+
+The selected square size is the smallest supported size that is greater than or equal to the
+uncertainty, using:
+
+- `1`
+- `10`
+- `100`
+- `1000`
+- `2000`
+- `10000`
+- `100000`
+
+If uncertainty is missing or invalid, import falls back to `2000`.
+
+For `2000`, the generated `grid_ref` uses DINTY tetrad format.
+
+If a non-OSGB record cannot be converted (for example, missing or invalid coordinates), it is
+skipped.
+
+OSGB source records (`OSGB`, `OSGB1936`, `EPSG:27700`) continue to use the supplied `grid_ref`.
+
 ### Derived grid square stats counts
 
 After both occurrence imports complete, run the derived counts task to populate
-`grid_square_stats.occurrences_count`, `grid_square_stats.species_count` and `grid_square_stats.rarity_score`:
+`grid_square_stats.occurrences_count`, `grid_square_stats.species_count` and
+`grid_square_stats.rarity_score`:
 
 ```bash
 $ php spark stats:grid-square-stats

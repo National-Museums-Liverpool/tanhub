@@ -20,6 +20,7 @@ class TaxonRarityService
     {
         $counts = [
             'status' => 'success',
+            'fetched' => 0,
             'processed' => 0,
             'updated' => 0,
             'not changed' => 0,
@@ -54,6 +55,7 @@ class TaxonRarityService
                 GROUP BY t.id, t.taxon_identifier, t.rarity_group_name, t.rarity_category'
             )->getResultArray();
 
+            $counts['fetched'] = count($rows);
             $counts['processed'] = count($rows);
 
             if ($rows === []) {

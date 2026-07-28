@@ -21,8 +21,20 @@ Confirm the `database.default.*` settings in `.env` point to the intended MySQL
 database, then visit `/update` and run the migration action. Create the initial
 administrator through `/setup-admin-user` after the database setup is complete.
 
+If setup is incomplete and migrations are pending, the home route (`/`) redirects
+to `/update` automatically.
+
 See [Installation](installation.md#2-application-setup) for the prerequisites
 and required database permissions.
+
+## The home page shows a pending migration warning
+
+When a user is logged in and database migrations are pending, the home page
+shows a warning with a link to `/update`. This is expected behavior and is a
+prompt to run pending schema updates.
+
+After updates complete, refresh the home page. The warning disappears when no
+pending migrations remain.
 
 ## Taxon media uploads fail
 

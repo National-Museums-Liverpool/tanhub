@@ -18,6 +18,12 @@
                 <?php if (session()->getFlashdata('message')): ?>
                     <div class="alert alert-success" role="alert"><?= session()->getFlashdata('message') ?></div>
                 <?php endif; ?>
+                <?php if (! empty($page['showInstallWelcome'])): ?>
+                    <div class="alert alert-info" role="alert">
+                        Welcome to tanhub installation. Run the updates below to create the database schema.
+                        After completion you will be redirected to create the first administrator account.
+                    </div>
+                <?php endif; ?>
                 <?php if ($page['migrationCount'] > 0): ?>
                     <div class="alert alert-info" role="alert"><?= esc($page['migrationCount']) ?> database update<?= $page['migrationCount'] === 1 ? '' : 's' ?> available.</div>
                 <?php else: ?>

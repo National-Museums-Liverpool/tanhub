@@ -12,6 +12,9 @@
         </div>
         <div class="col-lg-7">
             <div class="auth-card p-4 p-lg-5">
+                <?php if (session()->getFlashdata('message')): ?>
+                    <div class="alert alert-success" role="alert"><?= esc(session()->getFlashdata('message')) ?></div>
+                <?php endif; ?>
                 <?php if (session()->getFlashdata('error')): ?>
                     <div class="alert alert-danger" role="alert"><?= esc(session()->getFlashdata('error')) ?></div>
                 <?php endif; ?>

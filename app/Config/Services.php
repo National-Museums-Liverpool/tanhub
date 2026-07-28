@@ -2,6 +2,7 @@
 
 namespace Config;
 
+use App\Services\InstallStatusService;
 use CodeIgniter\Config\BaseService;
 
 /**
@@ -19,6 +20,21 @@ use CodeIgniter\Config\BaseService;
  */
 class Services extends BaseService
 {
+    /**
+     * Installation status service.
+     *
+     * @param bool $getShared Whether to return a shared service instance.
+     * @return InstallStatusService
+     */
+    public static function installStatusService(bool $getShared = true): InstallStatusService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('installStatusService');
+        }
+
+        return new InstallStatusService();
+    }
+
     /**
      * Taxon media read service.
         *

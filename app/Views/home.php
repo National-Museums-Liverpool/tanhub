@@ -1,6 +1,12 @@
 <?= $this->extend('layouts/default') ?>
 
 <?= $this->section('content') ?>
+<?php if (! empty($page['migrationWarningMessage'])): ?>
+    <div class="alert alert-warning" role="alert">
+        <?= esc((string) $page['migrationWarningMessage']) ?>
+        <a href="<?= esc((string) $page['migrationWarningUrl']) ?>">Run updates</a>.
+    </div>
+<?php endif; ?>
 <section class="hero" id="top">
     <div class="hero-card p-4 p-lg-5">
         <div class="row align-items-center g-4 g-lg-5">

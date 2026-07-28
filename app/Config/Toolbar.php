@@ -144,4 +144,20 @@ class Toolbar extends BaseConfig
         'HX-Request'       => 'true',           // HTMX requests
         'X-Up-Version'     => null,             // Unpoly partial requests
     ];
+
+    /**
+     * Constructor.
+     *
+     * Remove Shield's Auth collector from the debug toolbar to avoid early
+     * auth/settings-table lookups during first-run installation flows.
+     */
+    public function __construct()
+    {
+        parent::__construct();
+
+        $this->collectors = array_values(array_filter(
+            $this->collectors,
+            static fn (string $collector): bool => $collector !== \CodeIgniter\Shield\Collectors\Auth::class,
+        ));
+    }
 }

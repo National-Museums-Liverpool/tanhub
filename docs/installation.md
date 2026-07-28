@@ -79,14 +79,26 @@ cp env .env
    - `import.geographicRegionLocationType` - set to the name of the Location Type in Indicia that
      the regions belong to, for example "Vice County".
 
-8. Visit the `/update` page in your browser and click the button to run the migration scripts,
-   which set up the database.
+8. Visit the site you have just installed in your browser. As you have not yet installed the
+   database schema you will be redirected to the `/update` page. Click the button to run the
+   migration scripts which set up the database.
 
-9. Visit the `/setup-admin-user` and follow the instructions to create the first admin account.
+    - On a fresh install, visiting `/` redirects to `/update` when setup is incomplete and
+      migrations are pending.
+    - During first-time setup, `/update` shows a welcome message explaining the installation step.
+    - After updates complete, if no administrator exists yet, you are redirected to
+       `/setup-admin-user`.
+
+9. After setting up the database, you will be redirected to the page for configuring the
+   administrator account (`/setup-admin-user`). Follow the instructions to create the first admin
+   account.
 
    - This is the only self-service account creation step.
-   - After setup, open `/users` as an admin to create and manage all other users.
+   - After setup, open the Users page from the menu (`/users`) when logged in as an admin to create and manage all other users.
    - Public `/register` self-registration is disabled.
+
+   When setup is complete, future homepage visits by logged-in users show a warning and link to
+   `/update` whenever new migrations are pending.
 
 10. For production environments, enable production mode in `.env`. Note that this step is important
     as without it, full stack dumps are shown on errors which may contain credentials:

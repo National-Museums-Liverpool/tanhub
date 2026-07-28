@@ -54,6 +54,7 @@ final class TaxaImportServiceTest extends CIUnitTestCase
             vernacular_name VARCHAR(200) NOT NULL,
             taxon_rank_id INTEGER NOT NULL,
             taxon_group_id INTEGER NOT NULL,
+            id_difficulty INTEGER NULL,
             recording_scheme_id INTEGER NULL,
             conservation_status VARCHAR(10) NULL,
             rarity_group_name VARCHAR(100) NOT NULL,

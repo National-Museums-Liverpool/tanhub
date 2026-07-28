@@ -24,7 +24,7 @@ class CreateImportRunsTable extends Migration
             ],
             'source_key' => [
                 'type'       => 'VARCHAR',
-                'constraint' => 32,
+                'constraint' => 64,
             ],
             'source_abbr' => [
                 'type'       => 'VARCHAR',

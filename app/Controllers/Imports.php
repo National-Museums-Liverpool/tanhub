@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Models\ImportOffsetModel;
+use App\Models\ImportRunModel;
 use App\Models\ImportTaskQueueModel;
 use CodeIgniter\HTTP\RedirectResponse;
 use Config\Import as ImportConfig;
@@ -23,119 +24,106 @@ class Imports extends BaseController
      * @var array<string, array<string, mixed>>
      */
     private const TASKS = [
-        'lookup:indicia:recording_schemes' => [
+        'indicia-taxonomy:recording_schemes' => [
             'category' => 'Lookups',
             'label' => 'recording_schemes',
             'source' => 'indicia',
             'kind' => 'entity',
             'entity' => 'recording_schemes',
-            'source_key' => 'indicia-taxonomy:recording_schemes',
             'supports_run' => true,
         ],
-        'lookup:indicia:geographic_regions' => [
+        'indicia-taxonomy:geographic_regions' => [
             'category' => 'Lookups',
             'label' => 'geographic_regions',
             'source' => 'indicia',
             'kind' => 'entity',
             'entity' => 'geographic_regions',
-            'source_key' => 'indicia-taxonomy:geographic_regions',
             'supports_run' => true,
         ],
-        'lookup:indicia:grid_square_stats' => [
+        'indicia-taxonomy:grid_square_stats' => [
             'category' => 'Lookups',
             'label' => 'grid_square_stats',
             'source' => 'indicia',
             'kind' => 'entity',
             'entity' => 'grid_square_stats',
-            'source_key' => 'indicia-taxonomy:grid_square_stats',
             'supports_run' => true,
         ],
-        'taxonomy:indicia:taxon_groups' => [
+        'indicia-taxonomy:taxon_groups' => [
             'category' => 'Taxonomy',
             'label' => 'taxon_groups',
             'source' => 'indicia',
             'kind' => 'entity',
             'entity' => 'taxon_groups',
-            'source_key' => 'indicia-taxonomy:taxon_groups',
             'supports_run' => true,
         ],
-        'taxonomy:indicia:taxon_ranks' => [
+        'indicia-taxonomy:taxon_ranks' => [
             'category' => 'Taxonomy',
             'label' => 'taxon_ranks',
             'source' => 'indicia',
             'kind' => 'entity',
             'entity' => 'taxon_ranks',
-            'source_key' => 'indicia-taxonomy:taxon_ranks',
             'supports_run' => true,
         ],
-        'taxonomy:indicia:taxa' => [
+        'indicia-taxonomy:taxa' => [
             'category' => 'Taxonomy',
             'label' => 'taxa',
             'source' => 'indicia',
             'kind' => 'entity',
             'entity' => 'taxa',
-            'source_key' => 'indicia-taxonomy:taxa',
             'supports_run' => true,
         ],
-        'taxonomy:indicia:taxon_names' => [
+        'indicia-taxonomy:taxon_names' => [
             'category' => 'Taxonomy',
             'label' => 'taxon_names',
             'source' => 'indicia',
             'kind' => 'entity',
             'entity' => 'taxon_names',
-            'source_key' => 'indicia-taxonomy:taxon_names',
             'supports_run' => true,
         ],
-        'occurrence:indicia:occurrences' => [
+        'indicia-occurrences:occurrences' => [
             'category' => 'Occurrences',
             'label' => 'occurrences',
             'source' => 'indicia',
             'kind' => 'occurrence',
-            'source_key' => 'indicia-occurrences:occurrences',
             'supports_run' => true,
         ],
-        'occurrence:nbn:occurrences' => [
+        'nbn-occurrences:occurrences' => [
             'category' => 'Occurrences',
             'label' => 'occurrences',
             'source' => 'nbn',
             'kind' => 'unsupported',
-            'source_key' => 'nbn-occurrences:occurrences',
             'supports_run' => false,
         ],
-        'stats:derived:taxon_stats' => [
+        'derived-stats:taxon_stats' => [
             'category' => 'Report stats',
             'label' => 'taxon_stats',
             'source' => null,
             'kind' => 'derived',
             'service' => 'taxonStatsService',
-            'source_key' => 'derived-stats:taxon_stats',
             'supports_run' => true,
         ],
-        'stats:derived:taxon_year_stats' => [
+        'derived-stats:taxon_year_stats' => [
             'category' => 'Report stats',
             'label' => 'taxon_year_stats',
             'source' => null,
             'kind' => 'derived',
             'service' => 'taxonYearStatsService',
-            'source_key' => 'derived-stats:taxon_year_stats',
             'supports_run' => true,
         ],
-        'stats:derived:grid_square_stats_counts' => [
+        'derived-stats:grid_square_stats_counts' => [
             'category' => 'Report stats',
             'label' => 'grid_square_stats_counts',
             'source' => null,
             'kind' => 'derived',
             'service' => 'gridSquareStatsCountsService',
-            'source_key' => 'derived-stats:grid_square_stats_counts',
             'supports_run' => true,
         ],
-        'stats:derived:taxon_rarity' => [
+        'derived-stats:taxon_rarity' => [
             'category' => 'Report stats',
             'label' => 'taxon_rarity',
             'source' => null,
             'kind' => 'derived',
             'service' => 'taxonRarityService',
-            'source_key' => 'derived-stats:taxon_rarity',
             'supports_run' => true,
         ],
     ];
@@ -144,39 +132,39 @@ class Imports extends BaseController
      * @var array<string, array<int, string>>
      */
     private const DEPENDENCIES = [
-        'lookup:indicia:grid_square_stats' => ['lookup:indicia:geographic_regions'],
-        'taxonomy:indicia:taxa' => [
-            'lookup:indicia:recording_schemes',
-            'lookup:indicia:geographic_regions',
-            'taxonomy:indicia:taxon_groups',
-            'taxonomy:indicia:taxon_ranks',
+        'indicia-taxonomy:grid_square_stats' => ['indicia-taxonomy:geographic_regions'],
+        'indicia-taxonomy:taxa' => [
+            'indicia-taxonomy:recording_schemes',
+            'indicia-taxonomy:geographic_regions',
+            'indicia-taxonomy:taxon_groups',
+            'indicia-taxonomy:taxon_ranks',
         ],
-        'taxonomy:indicia:taxon_names' => ['taxonomy:indicia:taxa'],
-        'occurrence:indicia:occurrences' => [
-            'lookup:indicia:recording_schemes',
-            'lookup:indicia:geographic_regions',
-            'lookup:indicia:grid_square_stats',
-            'taxonomy:indicia:taxon_groups',
-            'taxonomy:indicia:taxon_ranks',
-            'taxonomy:indicia:taxa',
-            'taxonomy:indicia:taxon_names',
+        'indicia-taxonomy:taxon_names' => ['indicia-taxonomy:taxa'],
+        'indicia-occurrences:occurrences' => [
+            'indicia-taxonomy:recording_schemes',
+            'indicia-taxonomy:geographic_regions',
+            'indicia-taxonomy:grid_square_stats',
+            'indicia-taxonomy:taxon_groups',
+            'indicia-taxonomy:taxon_ranks',
+            'indicia-taxonomy:taxa',
+            'indicia-taxonomy:taxon_names',
         ],
-        'occurrence:nbn:occurrences' => [
-            'lookup:indicia:recording_schemes',
-            'lookup:indicia:geographic_regions',
-            'lookup:indicia:grid_square_stats',
-            'taxonomy:indicia:taxon_groups',
-            'taxonomy:indicia:taxon_ranks',
-            'taxonomy:indicia:taxa',
-            'taxonomy:indicia:taxon_names',
+        'nbn-occurrences:occurrences' => [
+            'indicia-taxonomy:recording_schemes',
+            'indicia-taxonomy:geographic_regions',
+            'indicia-taxonomy:grid_square_stats',
+            'indicia-taxonomy:taxon_groups',
+            'indicia-taxonomy:taxon_ranks',
+            'indicia-taxonomy:taxa',
+            'indicia-taxonomy:taxon_names',
         ],
-        'stats:derived:taxon_stats' => ['taxonomy:indicia:taxa'],
-        'stats:derived:taxon_year_stats' => ['taxonomy:indicia:taxa'],
-        'stats:derived:grid_square_stats_counts' => [
-            'lookup:indicia:grid_square_stats',
+        'derived-stats:taxon_stats' => ['indicia-taxonomy:taxa'],
+        'derived-stats:taxon_year_stats' => ['indicia-taxonomy:taxa'],
+        'derived-stats:grid_square_stats_counts' => [
+            'indicia-taxonomy:grid_square_stats',
         ],
-        'stats:derived:taxon_rarity' => [
-            'taxonomy:indicia:taxa',
+        'derived-stats:taxon_rarity' => [
+            'indicia-taxonomy:taxa',
         ],
     ];
 
@@ -201,17 +189,17 @@ class Imports extends BaseController
      */
     public function run(): RedirectResponse
     {
-        $taskKey = trim((string) $this->request->getPost('task_key'));
+        $sourceKey = trim((string) $this->request->getPost('source_key'));
 
-        if (! isset(self::TASKS[$taskKey])) {
+        if (! isset(self::TASKS[$sourceKey])) {
             return redirect()->to(site_url('imports'))->with('error', 'Unknown import task.');
         }
 
         $queueModel = model(ImportTaskQueueModel::class);
 
-        if (! $this->isTaskQueued($queueModel, $taskKey)) {
+        if (! $this->isTaskQueued($queueModel, $sourceKey)) {
             $queueModel->insert([
-                'task_key' => $taskKey,
+                'source_key' => $sourceKey,
                 'status' => 'queued',
                 'queued_at' => date('Y-m-d H:i:s'),
             ]);
@@ -232,45 +220,44 @@ class Imports extends BaseController
                 break;
             }
 
-            $headTaskKey = (string) $nextQueued['task_key'];
+            $headSourceKey = (string) $nextQueued['source_key'];
             $taskStates = $this->buildTaskStates();
-            $state = $taskStates[$headTaskKey] ?? null;
+            $state = $taskStates[$headSourceKey] ?? null;
 
             if ($state === null) {
-                $queueModel->update((int) $nextQueued['id'], [
-                    'status' => 'failed',
-                    'message' => 'Unknown task key in queue.',
-                    'finished_at' => date('Y-m-d H:i:s'),
-                ]);
+                $errorMessages[] = 'Unknown queued source key: ' . $headSourceKey . '.';
+                $queueModel->delete((int) $nextQueued['id']);
                 continue;
             }
 
             if ($state['blocked_by'] !== []) {
                 $errorMessages[] = 'Queued task ' . $state['label'] . ' is blocked by: ' . implode(', ', $state['blocked_by']) . '.';
+                $queueModel->delete((int) $nextQueued['id']);
                 break;
             }
 
             $queueModel->update((int) $nextQueued['id'], [
                 'status' => 'running',
                 'started_at' => date('Y-m-d H:i:s'),
-                'message' => null,
+                'run_id' => null,
             ]);
 
             if (! $state['supports_run']) {
                 $errorMessages[] = 'Task ' . $state['label'] . ' is not implemented yet.';
-                $queueModel->update((int) $nextQueued['id'], [
-                    'status' => 'failed',
-                    'message' => 'Task is not implemented yet.',
-                    'finished_at' => date('Y-m-d H:i:s'),
-                ]);
+                $queueModel->delete((int) $nextQueued['id']);
                 continue;
             }
 
             try {
                 $result = $this->runTask($state);
+                $runId = (int) ($result['run_id'] ?? 0);
                 $summary = $this->summarizeTaskResult($state, $result);
                 $runStatus = strtolower((string) ($result['status'] ?? 'success'));
                 $queueStatus = $runStatus === 'success' ? 'completed' : 'failed';
+
+                if ($runId > 0 && $this->importRunExists($runId)) {
+                    $queueModel->update((int) $nextQueued['id'], ['run_id' => $runId]);
+                }
 
                 if ($runStatus !== 'success') {
                     $errorMessages[] = $summary;
@@ -280,22 +267,14 @@ class Imports extends BaseController
                     $infoMessages[] = $summary;
                 }
 
-                $queueModel->update((int) $nextQueued['id'], [
-                    'status' => $queueStatus,
-                    'message' => $summary,
-                    'finished_at' => date('Y-m-d H:i:s'),
-                ]);
+                $queueModel->delete((int) $nextQueued['id']);
 
                 if ($queueStatus === 'failed') {
                     break;
                 }
             } catch (Throwable $exception) {
                 $errorMessages[] = 'Task ' . $state['label'] . ' failed: ' . $exception->getMessage();
-                $queueModel->update((int) $nextQueued['id'], [
-                    'status' => 'failed',
-                    'message' => $exception->getMessage(),
-                    'finished_at' => date('Y-m-d H:i:s'),
-                ]);
+                $queueModel->delete((int) $nextQueued['id']);
                 break;
             }
         }
@@ -370,15 +349,13 @@ class Imports extends BaseController
         $db = db_connect();
         $states = [];
 
-        foreach (self::TASKS as $taskKey => $task) {
-            $sourceKey = (string) $task['source_key'];
+        foreach (self::TASKS as $sourceKey => $task) {
             $offsetRow = $db->table('import_offsets')->where('source_key', $sourceKey)->get()->getRowArray();
             $isComplete = $offsetModel->isComplete($sourceKey);
             $nextOffset = $offsetRow['next_offset'] ?? null;
             $nextCheckpoint = $offsetRow['next_checkpoint'] ?? null;
 
-            $states[$taskKey] = [
-                'task_key' => $taskKey,
+            $states[$sourceKey] = [
                 'category' => $task['category'],
                 'label' => $task['label'],
                 'source' => $task['source'],
@@ -395,23 +372,23 @@ class Imports extends BaseController
             ];
         }
 
-        foreach ($this->queueStatusByTaskKey() as $taskKey => $queueStatus) {
-            if (! isset($states[$taskKey])) {
+        foreach ($this->queueStatusBySourceKey() as $sourceKey => $queueStatus) {
+            if (! isset($states[$sourceKey])) {
                 continue;
             }
 
-            $states[$taskKey]['queue_status'] = $queueStatus;
+            $states[$sourceKey]['queue_status'] = $queueStatus;
         }
 
-        foreach (self::DEPENDENCIES as $taskKey => $dependencies) {
-            if (! isset($states[$taskKey])) {
+        foreach (self::DEPENDENCIES as $sourceKey => $dependencies) {
+            if (! isset($states[$sourceKey])) {
                 continue;
             }
 
             $blockedBy = [];
 
-            foreach ($dependencies as $dependencyTaskKey) {
-                $dependencyState = $states[$dependencyTaskKey] ?? null;
+            foreach ($dependencies as $dependencySourceKey) {
+                $dependencyState = $states[$dependencySourceKey] ?? null;
 
                 if ($dependencyState === null) {
                     continue;
@@ -422,7 +399,7 @@ class Imports extends BaseController
                 }
             }
 
-            $states[$taskKey]['blocked_by'] = $blockedBy;
+            $states[$sourceKey]['blocked_by'] = $blockedBy;
         }
 
         return $states;
@@ -473,15 +450,7 @@ class Imports extends BaseController
         }
 
         if ($kind === 'derived') {
-            $serviceName = trim((string) ($state['service'] ?? ''));
-
-            if ($serviceName === '') {
-                throw new RuntimeException('Derived task service is missing.');
-            }
-
-            $service = service($serviceName);
-
-            return $service->run(false);
+            return $this->runDerivedTask($state);
         }
 
         throw new RuntimeException('Task is not runnable yet.');
@@ -504,40 +473,40 @@ class Imports extends BaseController
     }
 
     /**
-     * Return active queue status keyed by task key.
+     * Return active queue status keyed by source key.
      *
      * @return array<string, string>
      */
-    private function queueStatusByTaskKey(): array
+    private function queueStatusBySourceKey(): array
     {
-        $statusByTaskKey = [];
+        $statusBySourceKey = [];
 
         foreach ($this->taskQueueRows() as $row) {
-            $taskKey = (string) ($row['task_key'] ?? '');
+            $sourceKey = (string) ($row['source_key'] ?? '');
             $status = (string) ($row['status'] ?? '');
 
-            if ($taskKey === '' || $status === '') {
+            if ($sourceKey === '' || $status === '') {
                 continue;
             }
 
-            $statusByTaskKey[$taskKey] = $status;
+            $statusBySourceKey[$sourceKey] = $status;
         }
 
-        return $statusByTaskKey;
+        return $statusBySourceKey;
     }
 
     /**
      * Determine whether a task is already queued or running.
      *
      * @param ImportTaskQueueModel $queueModel Queue model.
-     * @param string               $taskKey Task key.
+     * @param string               $sourceKey Source key.
      *
      * @return bool
      */
-    private function isTaskQueued(ImportTaskQueueModel $queueModel, string $taskKey): bool
+    private function isTaskQueued(ImportTaskQueueModel $queueModel, string $sourceKey): bool
     {
         return $queueModel
-            ->where('task_key', $taskKey)
+            ->where('source_key', $sourceKey)
             ->whereIn('status', self::ACTIVE_QUEUE_STATUSES)
             ->countAllResults() > 0;
     }
@@ -569,5 +538,89 @@ class Imports extends BaseController
             ->first();
 
         return is_array($row) ? $row : null;
+    }
+
+    /**
+     * Check whether an import run row exists.
+     *
+     * @param int $runId
+     * @return bool
+     */
+    private function importRunExists(int $runId): bool
+    {
+        if ($runId <= 0) {
+            return false;
+        }
+
+        /** @var ImportRunModel $importRunModel */
+        $importRunModel = model(ImportRunModel::class);
+
+        return $importRunModel->where('id', $runId)->countAllResults() > 0;
+    }
+
+    /**
+     * Execute a derived task and persist a matching import_runs row.
+     *
+     * @param array<string, mixed> $state
+     * @return array<string, mixed>
+     */
+    private function runDerivedTask(array $state): array
+    {
+        $serviceName = trim((string) ($state['service'] ?? ''));
+
+        if ($serviceName === '') {
+            throw new RuntimeException('Derived task service is missing.');
+        }
+
+        $sourceKey = (string) ($state['source_key'] ?? '');
+
+        if ($sourceKey === '') {
+            throw new RuntimeException('Derived task source key is missing.');
+        }
+
+        /** @var ImportRunModel $importRunModel */
+        $importRunModel = model(ImportRunModel::class);
+
+        $runId = (int) $importRunModel->insert([
+            'source_key' => $sourceKey,
+            'source_abbr' => 'LOCAL',
+            'status' => 'running',
+            'checkpoint' => null,
+            'started_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        try {
+            $service = service($serviceName);
+            $result = $service->run(false);
+            $status = strtolower((string) ($result['status'] ?? 'success')) === 'success' ? 'success' : 'failed';
+            $fetched = (int) ($result['fetched'] ?? $result['processed'] ?? 0);
+            $summary = $this->summarizeTaskResult($state, $result);
+
+            $importRunModel->update($runId, [
+                'status' => $status,
+                'checkpoint' => null,
+                'fetched_count' => $fetched,
+                'inserted_count' => (int) ($result['inserted'] ?? 0),
+                'updated_count' => (int) ($result['updated'] ?? 0),
+                'skipped_count' => (int) ($result['skipped'] ?? 0),
+                'error_count' => (int) ($result['errors'] ?? 0),
+                'message' => $summary,
+                'finished_at' => date('Y-m-d H:i:s'),
+            ]);
+
+            $result['run_id'] = $runId;
+
+            return $result;
+        } catch (Throwable $exception) {
+            $importRunModel->update($runId, [
+                'status' => 'failed',
+                'checkpoint' => null,
+                'error_count' => 1,
+                'message' => $exception->getMessage(),
+                'finished_at' => date('Y-m-d H:i:s'),
+            ]);
+
+            throw $exception;
+        }
     }
 }

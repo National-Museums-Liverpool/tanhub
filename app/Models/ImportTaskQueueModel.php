@@ -28,9 +28,9 @@ class ImportTaskQueueModel extends Model
      * @var array<int, string>
      */
     protected $allowedFields = [
-        'task_key',
+        'source_key',
+        'run_id',
         'status',
-        'message',
         'queued_at',
         'started_at',
         'finished_at',

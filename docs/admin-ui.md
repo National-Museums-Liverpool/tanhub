@@ -113,7 +113,11 @@ starts processing immediately and its Go button is replaced with a "running" bad
 finishes, the Go button is restored and any other tasks blocked by this task are unblocked, only
 if the task is complete. Any other tasks in the queue then proceed in the order they were added.
 
-The current queue is shown on the page.
+The current queue is shown on the page and only includes active items (`queued` or `running`).
+Completed and failed rows are removed from the queue table once processed.
+
+Task outcomes and summaries are stored in `import_runs`, which is the canonical history for import
+and derived-task executions.
 
 The report-stat tasks recalculate reporting data from active occurrences:
 

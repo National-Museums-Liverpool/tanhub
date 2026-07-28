@@ -30,7 +30,7 @@
                 <ol class="mb-0">
                     <?php foreach ($page['taskQueue'] as $queuedTask): ?>
                         <li>
-                            <code><?= esc((string) ($queuedTask['task_key'] ?? '')) ?></code>
+                            <code><?= esc((string) ($queuedTask['source_key'] ?? '')) ?></code>
                             <span class="badge text-bg-light ms-1"><?= esc((string) ($queuedTask['status'] ?? '')) ?></span>
                         </li>
                     <?php endforeach; ?>
@@ -78,7 +78,7 @@
                             <?php else: ?>
                                 <form method="post" action="<?= esc(site_url('imports/run')) ?>">
                                     <?= csrf_field() ?>
-                                    <input type="hidden" name="task_key" value="<?= esc((string) $task['task_key']) ?>">
+                                    <input type="hidden" name="source_key" value="<?= esc((string) $task['source_key']) ?>">
                                     <button class="btn btn-sm btn-brand" type="submit">Go</button>
                                 </form>
                             <?php endif; ?>

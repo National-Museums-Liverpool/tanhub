@@ -72,7 +72,7 @@ final class ImportsPageTest extends CIUnitTestCase
         $this->authenticateAs('imports-admin-blocked@example.com', 'admin');
 
         $result = $this->post('imports/run', [
-            'task_key' => 'taxonomy:indicia:taxa',
+            'source_key' => 'indicia-taxonomy:taxa',
         ]);
 
         $result->assertStatus(302);
@@ -81,12 +81,11 @@ final class ImportsPageTest extends CIUnitTestCase
 
         $queueRows = db_connect()
             ->table('import_task_queue')
-            ->where('task_key', 'taxonomy:indicia:taxa')
+            ->where('source_key', 'indicia-taxonomy:taxa')
             ->get()
             ->getResultArray();
 
-        $this->assertCount(1, $queueRows);
-        $this->assertSame('queued', (string) $queueRows[0]['status']);
+        $this->assertCount(0, $queueRows);
     }
 
     public function testRunUnblockedTaskQueuesAndRuns(): void
@@ -107,7 +106,7 @@ final class ImportsPageTest extends CIUnitTestCase
         \Config\Services::injectMock('importOrchestrator', $mock);
 
         $result = $this->post('imports/run', [
-            'task_key' => 'taxonomy:indicia:taxon_names',
+            'source_key' => 'indicia-taxonomy:taxon_names',
         ]);
 
         $result->assertStatus(302);
@@ -116,13 +115,12 @@ final class ImportsPageTest extends CIUnitTestCase
 
         $queueRow = db_connect()
             ->table('import_task_queue')
-            ->where('task_key', 'taxonomy:indicia:taxon_names')
+            ->where('source_key', 'indicia-taxonomy:taxon_names')
             ->orderBy('id', 'desc')
             ->get()
             ->getRowArray();
 
-        $this->assertIsArray($queueRow);
-        $this->assertSame('completed', (string) $queueRow['status']);
+        $this->assertNull($queueRow);
     }
 
     public function testRunTaskWithSkippedRecordsShowsWarning(): void
@@ -148,7 +146,7 @@ final class ImportsPageTest extends CIUnitTestCase
         \Config\Services::injectMock('importOrchestrator', $mock);
 
         $result = $this->post('imports/run', [
-            'task_key' => 'taxonomy:indicia:taxon_names',
+            'source_key' => 'indicia-taxonomy:taxon_names',
         ]);
 
         $result->assertStatus(302);
@@ -157,14 +155,12 @@ final class ImportsPageTest extends CIUnitTestCase
 
         $queueRow = db_connect()
             ->table('import_task_queue')
-            ->where('task_key', 'taxonomy:indicia:taxon_names')
+            ->where('source_key', 'indicia-taxonomy:taxon_names')
             ->orderBy('id', 'desc')
             ->get()
             ->getRowArray();
 
-        $this->assertIsArray($queueRow);
-        $this->assertSame('completed', (string) $queueRow['status']);
-        $this->assertStringContainsString('skipped: 2', strtolower((string) $queueRow['message']));
+        $this->assertNull($queueRow);
     }
 
     public function testRunTaskWithErrorsShowsErrorSummaryAndMarksQueueFailed(): void
@@ -190,7 +186,7 @@ final class ImportsPageTest extends CIUnitTestCase
         \Config\Services::injectMock('importOrchestrator', $mock);
 
         $result = $this->post('imports/run', [
-            'task_key' => 'taxonomy:indicia:taxon_names',
+            'source_key' => 'indicia-taxonomy:taxon_names',
         ]);
 
         $result->assertStatus(302);
@@ -199,14 +195,12 @@ final class ImportsPageTest extends CIUnitTestCase
 
         $queueRow = db_connect()
             ->table('import_task_queue')
-            ->where('task_key', 'taxonomy:indicia:taxon_names')
+            ->where('source_key', 'indicia-taxonomy:taxon_names')
             ->orderBy('id', 'desc')
             ->get()
             ->getRowArray();
 
-        $this->assertIsArray($queueRow);
-        $this->assertSame('failed', (string) $queueRow['status']);
-        $this->assertStringContainsString('errors: 2', strtolower((string) $queueRow['message']));
+        $this->assertNull($queueRow);
     }
 
     public function testRunDerivedGridSquareStatsCountsTask(): void
@@ -240,7 +234,7 @@ final class ImportsPageTest extends CIUnitTestCase
         \Config\Services::injectMock('gridSquareStatsCountsService', $mock);
 
         $result = $this->post('imports/run', [
-            'task_key' => 'stats:derived:grid_square_stats_counts',
+            'source_key' => 'derived-stats:grid_square_stats_counts',
         ]);
 
         $result->assertStatus(302);
@@ -248,13 +242,23 @@ final class ImportsPageTest extends CIUnitTestCase
         $result->assertSessionHas('message');
 
         $queueRow = $db->table('import_task_queue')
-            ->where('task_key', 'stats:derived:grid_square_stats_counts')
+            ->where('source_key', 'derived-stats:grid_square_stats_counts')
             ->orderBy('id', 'desc')
             ->get()
             ->getRowArray();
 
-        $this->assertIsArray($queueRow);
-        $this->assertSame('completed', (string) $queueRow['status']);
+        $this->assertNull($queueRow);
+
+        $runRow = $db->table('import_runs')
+            ->where('source_key', 'derived-stats:grid_square_stats_counts')
+            ->orderBy('id', 'desc')
+            ->get()
+            ->getRowArray();
+
+        $this->assertIsArray($runRow);
+        $this->assertSame('success', (string) $runRow['status']);
+        $this->assertSame(5, (int) $runRow['fetched_count']);
+        $this->assertSame(3, (int) $runRow['updated_count']);
     }
 
     public function testRunDerivedTaxonRarityTask(): void
@@ -282,7 +286,7 @@ final class ImportsPageTest extends CIUnitTestCase
         \Config\Services::injectMock('taxonRarityService', $mock);
 
         $result = $this->post('imports/run', [
-            'task_key' => 'stats:derived:taxon_rarity',
+            'source_key' => 'derived-stats:taxon_rarity',
         ]);
 
         $result->assertStatus(302);
@@ -290,13 +294,23 @@ final class ImportsPageTest extends CIUnitTestCase
         $result->assertSessionHas('warning');
 
         $queueRow = $db->table('import_task_queue')
-            ->where('task_key', 'stats:derived:taxon_rarity')
+            ->where('source_key', 'derived-stats:taxon_rarity')
             ->orderBy('id', 'desc')
             ->get()
             ->getRowArray();
 
-        $this->assertIsArray($queueRow);
-        $this->assertSame('completed', (string) $queueRow['status']);
+        $this->assertNull($queueRow);
+
+        $runRow = $db->table('import_runs')
+            ->where('source_key', 'derived-stats:taxon_rarity')
+            ->orderBy('id', 'desc')
+            ->get()
+            ->getRowArray();
+
+        $this->assertIsArray($runRow);
+        $this->assertSame('success', (string) $runRow['status']);
+        $this->assertSame(8, (int) $runRow['fetched_count']);
+        $this->assertSame(2, (int) $runRow['skipped_count']);
     }
 
     public function testRunDerivedTaxonStatsTask(): void
@@ -326,7 +340,7 @@ final class ImportsPageTest extends CIUnitTestCase
         \Config\Services::injectMock('taxonStatsService', $mock);
 
         $result = $this->post('imports/run', [
-            'task_key' => 'stats:derived:taxon_stats',
+            'source_key' => 'derived-stats:taxon_stats',
         ]);
 
         $result->assertStatus(302);
@@ -334,13 +348,23 @@ final class ImportsPageTest extends CIUnitTestCase
         $result->assertSessionHas('message');
 
         $queueRow = $db->table('import_task_queue')
-            ->where('task_key', 'stats:derived:taxon_stats')
+            ->where('source_key', 'derived-stats:taxon_stats')
             ->orderBy('id', 'desc')
             ->get()
             ->getRowArray();
 
-        $this->assertIsArray($queueRow);
-        $this->assertSame('completed', (string) $queueRow['status']);
+        $this->assertNull($queueRow);
+
+        $runRow = $db->table('import_runs')
+            ->where('source_key', 'derived-stats:taxon_stats')
+            ->orderBy('id', 'desc')
+            ->get()
+            ->getRowArray();
+
+        $this->assertIsArray($runRow);
+        $this->assertSame('success', (string) $runRow['status']);
+        $this->assertSame(6, (int) $runRow['fetched_count']);
+        $this->assertSame(6, (int) $runRow['inserted_count']);
     }
 
     private function seedImportOffsets(): void
@@ -348,6 +372,7 @@ final class ImportsPageTest extends CIUnitTestCase
         $db = db_connect();
         $db->table('import_offsets')->emptyTable();
         $db->table('import_task_queue')->emptyTable();
+        $db->table('import_runs')->emptyTable();
 
         $db->table('import_offsets')->insertBatch([
             [

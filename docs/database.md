@@ -428,7 +428,7 @@ Logs import tasks that have been run.
 | Column         | Type         | Null | Key | Default           | Description                                   |
 | -------------- | ------------ | ---- | --- | ----------------- | --------------------------------------------- |
 | id             | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                   |
-| source_key     | VARCHAR(32)  | NO   |     |                   | Identifier of the task which sources the data |
+| source_key     | VARCHAR(64)  | NO   |     |                   | Identifier of the task which sources the data |
 | source_abbr    | VARCHAR(10)  | NO   |     |                   | Identifies the data source, e.g. IREC or NBN  |
 | status         | VARCHAR(20)  | NO   |     |                   | Success or failure indicator                  |
 | checkpoint     | VARCHAR(255) | YES  |     |                   | Paging checkpoint or next offset reached      |
@@ -447,21 +447,26 @@ There are compound indexes on `source_key, status` and `source_key, finished_at`
 
 ### import_task_queue
 
-Records queued import tasks.
+Transient queue for currently active import tasks.
 
-| Column      | Type        | Null | Key | Default           | Description                                   |
-| ----------- | ----------- | ---- | --- | ----------------- | --------------------------------------------- |
-| id          | BIGINT      | NO   | PK  | AUTO_INCREMENT    | Primary key                                   |
-| task_key    | VARCHAR(64) | NO   |     |                   | Identifier of the task which sources the data |
-| status      | VARCHAR(20) | NO   |     | queued            | Current task status, e.g. queued, running     |
-| message     | TEXT        | YES  |     |                   | Task completion message                       |
-| queued_at   | DATETIME    | NO   |     | CURRENT_TIMESTAMP | Time the task was queued                      |
-| started_at  | DATETIME    | YES  |     |                   | Time the task run started                     |
-| finished_at | DATETIME    | YES  |     |                   | Time the task run finished                    |
-| created_at  | DATETIME    | NO   |     | CURRENT_TIMESTAMP | Creation date                                 |
-| updated_at  | DATETIME    | YES  |     |                   | Update date                                   |
+| Column      | Type        | Null | Key | Default           | Description                                        |
+| ----------- | ----------- | ---- | --- | ----------------- | -------------------------------------------------- |
+| id          | BIGINT      | NO   | PK  | AUTO_INCREMENT    | Primary key                                        |
+| source_key  | VARCHAR(64) | NO   |     |                   | Identifier of the task currently queued or running |
+| run_id      | BIGINT      | YES  | FK  |                   | Linked `import_runs.id` while processing, if known |
+| status      | VARCHAR(20) | NO   |     | queued            | Current task status, e.g. queued, running          |
+| queued_at   | DATETIME    | NO   |     | CURRENT_TIMESTAMP | Time the task was queued                           |
+| started_at  | DATETIME    | YES  |     |                   | Time the task run started                          |
+| finished_at | DATETIME    | YES  |     |                   | Time the task run finished                         |
+| created_at  | DATETIME    | NO   |     | CURRENT_TIMESTAMP | Creation date                                      |
+| updated_at  | DATETIME    | YES  |     |                   | Update date                                        |
 
-There is a compound index on `status, queued_at`.
+Rows are removed when a queued task is processed (success, failure, or blocked), so this table
+does not provide task history. Use `import_runs` for run outcomes and summaries.
+
+There are indexes on `status, queued_at`, `source_key`, and `run_id`.
+
+`run_id` has a foreign key to `import_runs.id` with `ON UPDATE SET NULL` and `ON DELETE SET NULL`.
 
 ## See also
 

@@ -66,6 +66,9 @@ The remaining stats related imports are for processing the already collected int
 reporting outputs, e.g. count occurrence data per grid square or year. They should be run after
 any modification of the occurrence data using the `occurrences` imports.
 
+The admin Imports page queue is transient and shows only active tasks. For execution history,
+status, and run summaries, use the `import_runs` table.
+
 ## Running the import using CodeIgniter Spark commands
 
 You may prefer to use command-line Spark commands to run the import, which can be useful for script

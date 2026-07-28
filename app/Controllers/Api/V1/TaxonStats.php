@@ -95,6 +95,9 @@ class TaxonStats extends ApiResourceController
             $fields['taxon__scientific_name_authorship'] = 't.scientific_name_authorship';
             $fields['taxon__scientific_name_identifier'] = 't.scientific_name_identifier';
             $fields['taxon__vernacular_name'] = 't.vernacular_name';
+            $fields['taxon__id_difficulty'] = 't.id_difficulty';
+            $fields['taxon__conservation_status'] = 't.conservation_status';
+            $fields['taxon__rarity_category'] = 't.rarity_category';
 
             if ($this->hasInclude($includes, 'parent-taxa')) {
                 foreach ($this->dynamicRankAliases() as $alias) {

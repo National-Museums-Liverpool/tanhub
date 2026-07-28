@@ -156,7 +156,17 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
      */
     private function buildSearchBody(?string $checkpoint, int $limit): array
     {
-        $mustFilters = [];
+        // Default filters. As tanhub is a public API, we only want sensitive
+        // data at blurred precision, released, non-trial, non-confidential
+        // non-private data. This should also be enforced in the Indicia
+        // warehouse proxy, but we want to be sure.
+        $mustFilters = [
+            ['term' => ['metadata.confidential' => false]],
+            ['term' => ['metadata.private' => false]],
+            ['term' => ['metadata.trial' => false]],
+            ['term' => ['metadata.release_status' => 'R']],
+            ['query_string' => ['query' => '((metadata.sensitivity_blur:B) OR (!metadata.sensitivity_blur:*))']],
+        ];
 
         $taxonGroups = $this->normalisedListValues($this->config['taxon_groups'] ?? []);
         $taxonRanks = $this->normalisedListValues($this->config['taxon_ranks'] ?? []);

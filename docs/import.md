@@ -109,12 +109,18 @@ $ php spark import:occurrences --source indicia --page-size 500 --limit 5000
 $ php spark import:occurrences --source nbn --page-size 500 --limit 5000
 ```
 
-Occurrence checkpoints are tracked in `import_offsets` using source keys in the form `<source>-occurrences:occurrences` (for example `indicia-occurrences:occurrences`).
+Occurrence checkpoints are tracked in `import_offsets` using source keys in the form
+`<source>-occurrences:occurrences` (for example `indicia-occurrences:occurrences`).
 
 Optional parameters:
 
 - `--dry-run` fetch and validate records without writing to `occurrences`.
 - `--since` override source checkpoint for a run.
+
+Occurrences with a low geospatial precision are not imported, the default is to drop occurrences
+with coordinate uncertainty greater than 10,000m. This can be configured by setting
+`Config\Import.maximumCoordinateUncertaintyInMeters` in `.env`. It can be set to `0` to disable the
+restriction.
 
 ### Derived grid square stats counts
 

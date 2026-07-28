@@ -42,6 +42,7 @@ class OccurrenceSourceAdapterFactory
                 'taxon_ranks' => $this->config->taxonRanks,
                 'geographic_regions' => $this->config->geographicRegions,
                 'geographic_region_location_type' => $this->config->geographicRegionLocationType,
+                'maximum_coordinate_uncertainty_in_meters' => $this->config->maximumCoordinateUncertaintyInMeters,
             ]);
         }
 

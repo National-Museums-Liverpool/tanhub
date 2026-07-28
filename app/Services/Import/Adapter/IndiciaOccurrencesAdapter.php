@@ -199,6 +199,17 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             ];
         }
 
+        if ($this->config['maximum_coordinate_uncertainty_in_meters'] !== 0) {
+            $maxUncertainty = (int) $this->config['maximum_coordinate_uncertainty_in_meters'];
+            $mustFilters[] = [
+                'range' => [
+                    'location.coordinate_uncertainty_in_meters' => [
+                        'lte' => $maxUncertainty,
+                    ],
+                ],
+            ];
+        }
+
         $query = [
             'bool' => [
                 'filter' => $mustFilters,

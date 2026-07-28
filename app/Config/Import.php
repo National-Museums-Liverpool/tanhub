@@ -120,6 +120,16 @@ class Import extends BaseConfig
     public string $geographicRegionLocationType = 'Vice County';
 
     /**
+     * Maximum coordinate uncertainty in metres.
+     *
+     * Default is to drop records at lower than 10km precision. US spelling to match Darwin Core.
+     * Set to zero to disable this limit.
+     *
+     * @var int
+     */
+    public int $maximumCoordinateUncertaintyInMeters = 10000;
+
+    /**
      * Constructor loads array overrides from .env.
      */
     public function __construct()

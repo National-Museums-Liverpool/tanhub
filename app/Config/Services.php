@@ -2,6 +2,7 @@
 
 namespace Config;
 
+use App\Services\HomeCountsService;
 use App\Services\InstallStatusService;
 use CodeIgniter\Config\BaseService;
 
@@ -20,6 +21,21 @@ use CodeIgniter\Config\BaseService;
  */
 class Services extends BaseService
 {
+    /**
+     * Homepage counts service.
+     *
+     * @param bool $getShared Whether to return a shared service instance.
+     * @return HomeCountsService
+     */
+    public static function homeCountsService(bool $getShared = true): HomeCountsService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('homeCountsService');
+        }
+
+        return new HomeCountsService();
+    }
+
     /**
      * Installation status service.
      *

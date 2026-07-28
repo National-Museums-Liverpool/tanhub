@@ -31,5 +31,34 @@
     </div>
 </section>
 
+<section class="mt-4" aria-labelledby="home-counts-title">
+    <div class="hero-card p-4 p-lg-5">
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+            <h2 class="h4 mb-0" id="home-counts-title">Database at a glance</h2>
+            <p class="mb-0 section-copy">Active records only</p>
+        </div>
+        <div class="row g-3">
+            <div class="col-12 col-md-4">
+                <div class="stat-card p-4 h-100">
+                    <div class="stat-value mb-1"><?= esc(number_format((int) ($page['homeCounts']['occurrences'] ?? 0))) ?></div>
+                    <p class="mb-0 section-copy">Occurrences</p>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="stat-card p-4 h-100">
+                    <div class="stat-value mb-1"><?= esc(number_format((int) ($page['homeCounts']['taxa'] ?? 0))) ?></div>
+                    <p class="mb-0 section-copy">Taxa</p>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="stat-card p-4 h-100">
+                    <div class="stat-value mb-1"><?= esc(number_format((int) ($page['homeCounts']['geographic_regions'] ?? 0))) ?></div>
+                    <p class="mb-0 section-copy">Geographic regions</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
 
 <?= $this->endSection() ?>

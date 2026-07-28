@@ -18,6 +18,8 @@ class Home extends BaseController
     {
         /** @var \App\Services\InstallStatusService $installStatus */
         $installStatus = service('installStatusService');
+        /** @var \App\Services\HomeCountsService $homeCountsService */
+        $homeCountsService = service('homeCountsService');
 
         $pendingMigrationCount = $installStatus->getPendingMigrationCount();
         $setupComplete = $installStatus->isSetupComplete();
@@ -42,12 +44,15 @@ class Home extends BaseController
                 : $pendingMigrationCount . ' database updates are available.';
         }
 
+        $homeCounts = $homeCountsService->getCounts();
+
         return $this->renderPage('home', [
             'pageTitle' => 'Home',
             'heroTitle' => 'The Tanyptera Project DB Hub',
             'heroCopy' => 'Providing a centralised reporting service for wildlife observation and species data.',
             'migrationWarningMessage' => $migrationWarningMessage,
             'migrationWarningUrl' => site_url('update'),
+            'homeCounts' => $homeCounts,
 
         ]);
     }

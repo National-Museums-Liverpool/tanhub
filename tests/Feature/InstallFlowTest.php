@@ -2,6 +2,7 @@
 
 namespace Tests;
 
+use App\Services\HomeCountsService;
 use App\Services\InstallStatusService;
 use Config\Auth;
 use CodeIgniter\Shield\Models\UserModel;
@@ -38,6 +39,12 @@ final class InstallFlowTest extends CIUnitTestCase
         $migrate = service('migrations');
         $migrate->setNamespace(null);
         $migrate->latest();
+
+        $this->injectHomeCounts([
+            'occurrences' => 0,
+            'taxa' => 0,
+            'geographic_regions' => 0,
+        ]);
     }
 
     public function testHomeRedirectsToUpdateWhenSetupIncompleteAndMigrationsPending(): void
@@ -95,6 +102,27 @@ final class InstallFlowTest extends CIUnitTestCase
         $result->assertSee('The Tanyptera Project DB Hub');
     }
 
+    public function testHomeRendersDatabaseCountsPanel(): void
+    {
+        $this->injectInstallStatus(true, 0);
+        $this->injectHomeCounts([
+            'occurrences' => 120,
+            'taxa' => 34,
+            'geographic_regions' => 7,
+        ]);
+
+        $result = $this->get('/');
+
+        $result->assertStatus(200);
+        $result->assertSee('Database at a glance');
+        $result->assertSee('Occurrences');
+        $result->assertSee('Taxa');
+        $result->assertSee('Geographic regions');
+        $result->assertSee('120');
+        $result->assertSee('34');
+        $result->assertSee('7');
+    }
+
     public function testUpdatePageHidesInstallWelcomeWhenSetupComplete(): void
     {
         $this->injectInstallStatus(true, 0);
@@ -113,6 +141,17 @@ final class InstallFlowTest extends CIUnitTestCase
         $mock->method('getPendingMigrationCount')->willReturn($pendingMigrationCount);
 
         \Config\Services::injectMock('installStatusService', $mock);
+    }
+
+    /**
+     * @param array<string, int> $counts
+     */
+    private function injectHomeCounts(array $counts): void
+    {
+        $mock = $this->createMock(HomeCountsService::class);
+        $mock->method('getCounts')->willReturn($counts);
+
+        \Config\Services::injectMock('homeCountsService', $mock);
     }
 
     private function authenticateAs(string $email, string $group): void

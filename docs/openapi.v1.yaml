@@ -3,7 +3,8 @@ info:
   title: Tanhub API
   version: 1.0.0
   description: >-
-    Starter OpenAPI specification for the tanhub read-only REST API.
+    Machine-readable specification for the tanhub read-only REST API. Keep this
+    specification consistent with the canonical human-readable reference in api.md.
 servers:
   - url: /api/v1
     description: API v1

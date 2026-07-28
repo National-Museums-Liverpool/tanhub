@@ -219,4 +219,11 @@ grant select on recording_schemes to indicia_report_user;
 
 ## 6. Next Step
 
-After installation and warehouse linkage, continue with the import process in [docs/import.md](docs/import.md).
+After installation and warehouse linkage, continue with the import process in [Import](import.md).
+
+## See also
+
+- [Configuration reference](configuration-reference.md)
+- [Import](import.md)
+- [Administration](administration.md)
+- [Troubleshooting](troubleshooting.md)

@@ -61,22 +61,22 @@ All detail pages should follow the same interaction model:
 
 Access:
 
-- List/create/edit: Admin only.
+- List/view/create/edit: Admin only.
 - Self-registration is disabled after initial setup.
 
 List page:
 
-- Columns: id, username, email, active, groups, created, actions.
-- Supports sort and search.
+- Columns: id, username, email, active status, groups, created_at, actions.
+- Supports sort and generic search.
 
 Create page:
 
-- Fields: username, email, active, password, password_confirm.
+- Fields: username, email, active status, groups, password, password_confirm.
 - Password is required on create.
 
 Edit page:
 
-- Editable: username, email, active, password.
+- Editable: username, email, active status, groups, password.
 - Password is optional on edit; when supplied it updates the stored password.
 - Setting active to false blocks login for that account.
 
@@ -115,44 +115,18 @@ if the task is complete. Any other tasks in the queue then proceed in the order 
 
 The current queue is shown on the page.
 
-`grid_square_stats_counts` is a derived task that recalculates the number of occurrences and the
-number of species associated with each grid square. It also calculates the square's rarity score,
-a measure of the number of rare species that occur within the square. The task updateas
-`grid_square_stats.occurrences_count`, `grid_square_stats.species_count` and
-`grid_square_stats.rarity_score` from active occurrences. It weights each qualifying occurrence
-from species with `<= 100` active records by `100 / total_records_for_species` and stores the
-summed decimal score for each square and region.
+The report-stat tasks recalculate reporting data from active occurrences:
 
-`taxon_rarity` is a derived task that recalculates `taxa.rarity_category`
-within each `rarity_group_name` using weighted ranks from active occurrence
-counts and distinct 2km grid square coverage.
-
-`taxon_stats` is a derived task that recalculates `taxon_stats` from active
-occurrences. It creates global and per-region rows per taxon and populates
-first/last and verified first/last record fields.
-
-`taxon_year_stats` is a derived task that recalculates `taxon_year_stats` from
-active occurrences over the rolling latest ten calendar years, globally and by
-region.
+- `grid_square_stats_counts` updates per-square occurrence counts, species counts, and rarity
+  scores. See [derived grid square stats counts](import.md#derived-grid-square-stats-counts).
+- `taxon_rarity` updates `taxa.rarity_category` within each `rarity_group_name`. See
+  [derived taxon rarity categories](import.md#derived-taxon-rarity-categories).
+- `taxon_stats` updates global and per-region records in `taxon_stats`. See
+  [derived taxon stats](import.md#derived-taxon-stats).
+- `taxon_year_stats` updates rolling ten-year global and per-region records in
+  `taxon_year_stats`. See [derived taxon year stats](import.md#derived-taxon-year-stats).
 
 ## Table coverage and behaviour
-
-### Users
-
-Access:
-
-- List/view/edit/create/deactivate/delete: Admin only.
-
-List page:
-
-- Columns: id, username, email, groups, active status, created_at, actions.
-- Filters: group, active status.
-- Actions: create user, edit user, deactivate/reactivate, soft delete.
-
-Edit page:
-
-- Editable: username, email, active status, groups.
-- Password reset as a separate explicit action.
 
 ### Taxon groups
 
@@ -340,3 +314,10 @@ Use consistent plural nouns and id-based edit/view paths:
 - Read-only vs editable fields are clear on every edit screen.
 - Managers can perform operational moderation tasks without Admin rights.
 - Admins can manage users and lookup sources safely.
+
+## See also
+
+- [Import](import.md)
+- [Administration](administration.md)
+- [Configuration reference](configuration-reference.md)
+- [Troubleshooting](troubleshooting.md)

@@ -125,3 +125,8 @@ vendor/bin/phpunit -c phpunit.dist.xml --coverage-text --coverage-html build/log
 - Keep response envelope shape stable (`data`, `meta`, `links`) to avoid breaking existing API tests.
 - If you add new filterable or sortable fields, add matching feature tests in `tests/Feature/ApiV1LookupResourcesTest.php`.
 - If response fields change intentionally, update both tests and API documentation together.
+
+## See also
+
+- [Architecture](architecture.md)
+- [API reference](api.md)

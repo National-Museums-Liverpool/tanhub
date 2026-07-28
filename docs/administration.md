@@ -45,3 +45,9 @@ original image is stored at uploaded dimensions.
 ```bash
 php spark cache:clear
 ```
+
+## See also
+
+- [Configuration reference](configuration-reference.md)
+- [Admin user interface](admin-ui.md)
+- [Troubleshooting](troubleshooting.md)

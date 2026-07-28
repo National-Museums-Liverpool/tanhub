@@ -1,5 +1,9 @@
 # Tanhub REST API Specification (v1)
 
+This document is the canonical human-readable reference for API behaviour.
+Keep the machine-readable [OpenAPI v1 specification](openapi.v1.yaml) consistent
+with it.
+
 ## 1. Overview
 
 Tanhub provides a read-only REST API for reporting and discovery use cases.
@@ -1576,3 +1580,10 @@ An OpenAPI 3.1 starter specification is provided in `docs/openapi.v1.yaml`.
 
 - Use it as the implementation contract for endpoint shape, security, and common response envelopes.
 - Expand resource schemas and examples as implementation progresses.
+
+## See also
+
+- [OpenAPI v1 specification](openapi.v1.yaml)
+- [Database schema](database.md)
+- [Configuration reference](configuration-reference.md)
+- [Troubleshooting](troubleshooting.md)

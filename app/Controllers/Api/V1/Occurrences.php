@@ -202,7 +202,7 @@ class Occurrences extends ApiResourceController
     {
         $builder = $db->table('occurrences o')
                         ->select($this->getFieldSql($includes), false)
-            ->join('taxa t', 't.id = o.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0', 'left')
+            ->join('taxa t', 't.id = o.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0')
             ->where('o.deleted_at IS NULL', null, false)
             ->where('o.blocked = 0', null, false);
 

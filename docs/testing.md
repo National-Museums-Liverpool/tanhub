@@ -28,10 +28,10 @@ From the project root:
 composer test
 ```
 
-Equivalent command:
+Equivalent command used by this project:
 
 ```bash
-vendor/bin/phpunit -c phpunit.dist.xml
+XDEBUG_MODE=coverage php ./vendor/bin/phpunit -c phpunit.dist.xml
 ```
 
 ## Run only the API lookup resource tests
@@ -108,16 +108,22 @@ composer test
 - Coverage HTML: `build/logs/html`
 - Coverage Clover XML: `build/logs/clover.xml`
 
-To generate coverage reliably, ensure Xdebug coverage mode is enabled:
+`composer test` already runs PHPUnit with `XDEBUG_MODE=coverage`.
 
-```ini
-xdebug.mode=coverage
+If your machine does not have Xdebug enabled yet, install and enable it for your
+active PHP CLI runtime first.
+
+Example:
+
+```bash
+pecl install xdebug
+php -m | grep -i xdebug
 ```
 
 Then run:
 
 ```bash
-vendor/bin/phpunit -c phpunit.dist.xml --coverage-text --coverage-html build/logs/html
+composer test
 ```
 
 ## Notes for endpoint refactors

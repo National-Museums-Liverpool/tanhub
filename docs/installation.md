@@ -236,7 +236,11 @@ CORS_ALLOWED_HEADERS=Origin,Content-Type,Accept,Authorization,X-Requested-With
 
 ## 5. Prepare the Indicia Warehouse
 
-1. Ensure required tanhub reports are present in the warehouse.
+1. If you are using the BRC Community Warehouse for your Indicia installation, then the required
+   reports are already present on the server. If not, then copy the
+   `indicia-warehouse-module/tanhub` folder to your warehouse's `modules` folder. On the warehouse
+   edit `application/config/config.php` and ensure that `MODPATH.'tanhub'` is present in the
+   `$config['modules']` array then save the config file.
 2. In pgAdmin, grant read access for reporting:
 
 ```sql

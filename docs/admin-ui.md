@@ -115,16 +115,25 @@ if the task is complete. Any other tasks in the queue then proceed in the order 
 
 The current queue is shown on the page.
 
-`grid_square_stats_counts` is a derived task that recalculates
+`grid_square_stats_counts` is a derived task that recalculates the number of occurrences and the
+number of species associated with each grid square. It also calculates the square's rarity score,
+a measure of the number of rare species that occur within the square. The task updateas
 `grid_square_stats.occurrences_count`, `grid_square_stats.species_count` and
-`grid_square_stats.rarity_score` from active occurrences after both occurrence
-import streams complete. It weights each qualifying occurrence from species
-with `<= 100` active gridded records by `100 / total_records_for_species` and
-stores the summed decimal score for each square and region.
+`grid_square_stats.rarity_score` from active occurrences. It weights each qualifying occurrence
+from species with `<= 100` active records by `100 / total_records_for_species` and stores the
+summed decimal score for each square and region.
 
 `taxon_rarity` is a derived task that recalculates `taxa.rarity_category`
 within each `rarity_group_name` using weighted ranks from active occurrence
 counts and distinct 2km grid square coverage.
+
+`taxon_stats` is a derived task that recalculates `taxon_stats` from active
+occurrences. It creates global and per-region rows per taxon and populates
+first/last and verified first/last record fields.
+
+`taxon_year_stats` is a derived task that recalculates `taxon_year_stats` from
+active occurrences over the rolling latest ten calendar years, globally and by
+region.
 
 ## Table coverage and behaviour
 

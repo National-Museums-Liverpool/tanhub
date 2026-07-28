@@ -82,6 +82,30 @@ class Services extends BaseService
     }
 
     /**
+     * Taxon stats derived service.
+     */
+    public static function taxonStatsService(bool $getShared = true): \App\Services\Stats\TaxonStatsService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('taxonStatsService');
+        }
+
+        return new \App\Services\Stats\TaxonStatsService();
+    }
+
+    /**
+     * Taxon year stats derived service.
+     */
+    public static function taxonYearStatsService(bool $getShared = true): \App\Services\Stats\TaxonYearStatsService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('taxonYearStatsService');
+        }
+
+        return new \App\Services\Stats\TaxonYearStatsService();
+    }
+
+    /**
      * Geographic regions to occurrences assignment service.
      */
     public static function geographicRegionsOccurrenceImportService(bool $getShared = true): \App\Services\Import\Persistence\GeographicRegionsOccurrenceImportService

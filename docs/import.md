@@ -172,6 +172,46 @@ rarity.squareWeight = 1.0
 rarity.occurrenceWeight = 1.0
 ```
 
+### Derived taxon stats
+
+After occurrence imports complete, run:
+
+```bash
+$ php spark stats:taxon-stats
+```
+
+Optional parameters:
+
+- `--dry-run` compute results without writing updates.
+
+The task:
+
+- counts active occurrences per taxon globally and by geographic region
+- counts distinct active 2km grid squares per taxon globally and by region
+- stores first and last record date and recorder per scope
+- stores first and last verified record date and recorder where
+  `identification_verification_status` starts with `V`
+
+### Derived taxon year stats
+
+After occurrence imports complete, run:
+
+```bash
+$ php spark stats:taxon-year-stats
+```
+
+Optional parameters:
+
+- `--dry-run` compute results without writing updates.
+
+The task:
+
+- counts active occurrences per taxon and year globally and by geographic
+  region
+- counts distinct active 2km grid squares per taxon and year globally and by
+  region
+- includes only a rolling ten-year window (current year and previous nine)
+
 ### Verify derived counts
 
 After running `php spark stats:grid-square-stats`, you can verify that stored

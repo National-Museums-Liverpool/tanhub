@@ -5,6 +5,7 @@ namespace Tests;
 use App\Services\Import\EntityImportOrchestrator;
 use App\Services\Stats\GridSquareStatsCountsService;
 use App\Services\Stats\TaxonRarityService;
+use App\Services\Stats\TaxonStatsService;
 use Config\Auth;
 use CodeIgniter\Shield\Models\UserModel;
 use CodeIgniter\Shield\Test\AuthenticationTesting;
@@ -214,6 +215,12 @@ final class ImportsPageTest extends CIUnitTestCase
 
         $db = db_connect();
         $db->table('import_offsets')->where('source_key', 'indicia-occurrences:occurrences')->update(['is_complete' => 1]);
+        $db->table('import_offsets')->insert([
+            'source_key' => 'nbn-occurrences:occurrences',
+            'next_offset' => 0,
+            'next_checkpoint' => null,
+            'is_complete' => 1,
+        ]);
 
         $this->authenticateAs('imports-admin-derived@example.com', 'admin');
 
@@ -284,6 +291,50 @@ final class ImportsPageTest extends CIUnitTestCase
 
         $queueRow = $db->table('import_task_queue')
             ->where('task_key', 'stats:derived:taxon_rarity')
+            ->orderBy('id', 'desc')
+            ->get()
+            ->getRowArray();
+
+        $this->assertIsArray($queueRow);
+        $this->assertSame('completed', (string) $queueRow['status']);
+    }
+
+    public function testRunDerivedTaxonStatsTask(): void
+    {
+        $this->markTaxonomyDependenciesComplete();
+
+        $db = db_connect();
+        $db->table('import_offsets')->where('source_key', 'indicia-occurrences:occurrences')->update(['is_complete' => 1]);
+
+        $this->authenticateAs('imports-admin-taxon-stats@example.com', 'admin');
+
+        $mock = $this->createMock(TaxonStatsService::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->with(false)
+            ->willReturn([
+                'status' => 'success',
+                'fetched' => 6,
+                'processed' => 6,
+                'inserted' => 6,
+                'updated' => 0,
+                'not changed' => 0,
+                'skipped' => 0,
+                'errors' => 0,
+            ]);
+
+        \Config\Services::injectMock('taxonStatsService', $mock);
+
+        $result = $this->post('imports/run', [
+            'task_key' => 'stats:derived:taxon_stats',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirectTo(site_url('imports'));
+        $result->assertSessionHas('message');
+
+        $queueRow = $db->table('import_task_queue')
+            ->where('task_key', 'stats:derived:taxon_stats')
             ->orderBy('id', 'desc')
             ->get()
             ->getRowArray();

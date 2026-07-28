@@ -1,0 +1,76 @@
+<?php
+
+namespace App\Commands;
+
+use CodeIgniter\CLI\BaseCommand;
+use CodeIgniter\CLI\CLI;
+use Throwable;
+
+/**
+ * Recomputes derived taxon stats.
+ */
+class TaxonStats extends BaseCommand
+{
+    /**
+     * The group the command is lumped under when using Spark list.
+     *
+     * @var string
+     */
+    protected $group = 'tanhub';
+
+    /**
+     * The command's name.
+     *
+     * @var string
+     */
+    protected $name = 'stats:taxon-stats';
+
+    /**
+     * The command's description.
+     *
+     * @var string
+     */
+    protected $description = 'Recompute taxon_stats from active occurrences.';
+
+    /**
+     * The command's usage description for the --help Spark option.
+     *
+     * @var string
+     */
+    protected $usage = 'stats:taxon-stats [options]';
+
+    /**
+     * CLI options.
+     *
+     * @var array<string, string>
+     */
+    protected $options = [
+        '--dry-run' => 'Calculate taxon stats without writing updates.',
+    ];
+
+    /**
+     * Execute the command.
+     *
+     * @param array<int|string, mixed> $params Command parameters.
+     *
+     * @return void
+     */
+    public function run(array $params)
+    {
+        $dryRun = (bool) CLI::getOption('dry-run') || array_key_exists('dry-run', $params);
+
+        CLI::write('Starting taxon stats recalculation' . ($dryRun ? ' (dry run)' : '') . '.', 'yellow');
+
+        try {
+            /** @var \App\Services\Stats\TaxonStatsService $service */
+            $service = service('taxonStatsService');
+            $result = $service->run($dryRun);
+
+            CLI::write('Task completed with status: ' . (string) ($result['status'] ?? 'unknown'), 'green');
+            CLI::write('Fetched: ' . (int) ($result['fetched'] ?? 0) . ', Processed: ' . (int) ($result['processed'] ?? 0) . ', Inserted: ' . (int) ($result['inserted'] ?? 0) . ', Updated: ' . (int) ($result['updated'] ?? 0) . ', Not changed: ' . (int) ($result['not changed'] ?? 0) . ', Skipped: ' . (int) ($result['skipped'] ?? 0) . ', Errors: ' . (int) ($result['errors'] ?? 0));
+        } catch (Throwable $exception) {
+            CLI::error($exception->getMessage());
+            $this->showError($exception);
+        }
+    }
+}

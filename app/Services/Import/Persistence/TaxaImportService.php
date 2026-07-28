@@ -76,6 +76,7 @@ class TaxaImportService implements EntityImportServiceInterface
                     'scientific_name_authorship' => $this->nullableString($row['scientific_name_authorship'] ?? null, 100),
                     'vernacular_name' => substr($vernacularName, 0, 200),
                     'taxon_group_id' => $groupId,
+                    'id_difficulty' => isset($row['id_difficulty']) ? (int) $row['id_difficulty'] : null,
                     'recording_scheme_id' => $schemeId,
                     'taxon_rank_id' => $taxonRankId,
                     'conservation_status' => $this->nullableString($row['conservation_status'] ?? null, 10),

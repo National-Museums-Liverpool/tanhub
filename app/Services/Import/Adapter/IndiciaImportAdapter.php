@@ -287,6 +287,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
             'vernacular_name' => (string) ($row['vernacular_name'] ?? ''),
             'taxon_group' => (string) ($row['taxon_group'] ?? ''),
             'taxon_group_external_key' => (string) ($row['taxon_group_external_key'] ?? ''),
+            'id_difficulty' => (int) ($row['id_difficulty'] ?? null),
             'recording_scheme' => (string) ($row['recording_scheme'] ?? ''),
             'recording_scheme_external_key' => (string) ($row['recording_scheme_external_key'] ?? ''),
             'conservation_status' => $row['conservation_status'] ?? null,

@@ -110,7 +110,7 @@ abstract class BaseController extends Controller
         $navItems[] = $this->navLink($isLoggedIn ? 'Logout' : 'Login', site_url($isLoggedIn ? 'logout' : 'login'), $isLoggedIn ? 'logout' : 'login', 'link');
         $navItems[] = [
             'label' => 'Docs',
-            'url' => 'https://codeigniter.com/user_guide/',
+            'url' => 'https://github.com/National-Museums-Liverpool/tanhub/blob/master/docs/README.md',
             'style' => 'outline',
             'external' => true,
         ];

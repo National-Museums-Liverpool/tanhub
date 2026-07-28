@@ -401,3 +401,64 @@ region.
 | grid_square_count    | INT      | NO   |         |                | Number of grid squares for the taxon/year combination |
 
 UQ* indicates there is a compound unique key on `taxon_id`, `geographic_region_id` and `year`.
+
+## Import utility tables
+
+The following tables are used to manage and track data import tasks.
+
+### import_offsets
+
+Tracks the offset reached when paging through a remote dataset (e.g. reading taxa from Indicia).
+Contains a maximum of one row per import task type.
+
+| Column          | Type         | Null | Key | Default           | Description                                                                      |
+| --------------- | ------------ | ---- | --- | ----------------- | -------------------------------------------------------------------------------- |
+| id              | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                                      |
+| source_key      | VARCHAR      | NO   | UQ    |                   | Identifier of the task which sources the data                                    |
+| next_offset     | INT          | NO   |     | 0                 | Paging offset to use for the next run of the task, for page based tasks          |
+| next_checkpoint | VARCHAR(255) | YES  |     |                   | For tasks which use a checkpoint to capture progress, stores the next checkpoint |
+| is_complete     | TINYINT      | NO   |     | 0                 | Set to 1 if the task has ever run to completion.                                 |
+| created_at      | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                    |
+| updated_at      | DATETIME     | YES  |     |                   | Update date                                                                      |
+
+### import_runs
+
+Logs import tasks that have been run.
+
+| Column         | Type         | Null | Key | Default           | Description                                   |
+| -------------- | ------------ | ---- | --- | ----------------- | --------------------------------------------- |
+| id             | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                   |
+| source_key     | VARCHAR      | NO   |     |                   | Identifier of the task which sources the data |
+| source_abbr    | VARCHAR(10)  | NO   |     |                   | Identifies the data_source, e.g. IREC or NBN  |
+| status         | VARCHAR(20)  | NO   |     |                   | Success or failure indicator                  |
+| checkpoint     | VARCHAR(255) | YES  |     |                   | Paging checkpoint or next_offset reached      |
+| fetched_count  | INT          |      |     |                   | Count of fetched records                      |
+| inserted_count | INT          |      |     |                   | Count of inserted records                     |
+| updated_count  | INT          |      |     |                   | Count of updated records                      |
+| skipped_count  | INT          |      |     |                   | Count of skipped records                      |
+| error_count    | INT          |      |     |                   | Count of errors                               |
+| message        | TEXT         |      |     |                   | Message response if error occurred            |
+| started_at     | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Time the task run started                     |
+| finished_at    | DATETIME     | YES  |     |                   | Time the task run finished                    |
+| created_at     | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                 |
+| updated_at     | DATETIME     | YES  |     |                   | Update date                                   |
+
+There are compount indexes on source_key, status and on source_key, finished_at.
+
+### import_task_queue
+
+Records queued import tasks.
+
+| Column      | Type        | Null | Key | Default           | Description                                   |
+| ----------- | ----------- | ---- | --- | ----------------- | --------------------------------------------- |
+| id          | BIGINT      | NO   | PK  | AUTO_INCREMENT    | Primary key                                   |
+| task_key    | VARCHAR(64) | NO   |     |                   | Identifier of the task which sources the data |
+| status      | VARCHAR(20) | NO   |     |                   | Current task status, e.g. queued, running     |
+| message     | TEXT        | YES  |     |                   | Task completion message                       |
+| queued_at   | DATETIME    | NO   |     | CURRENT_TIMESTAMP | Time the task was queued                      |
+| started_at  | DATETIME    | YES  |     |                   | Time the task run started                     |
+| finished_at | DATETIME    | YES  |     |                   | Time the task run finished                    |
+| created_at  | DATETIME    | NO   |     | CURRENT_TIMESTAMP | Creation date                                 |
+| updated_at  | DATETIME    | YES  |     |                   | Update date                                   |
+
+There is a compount index on status, queued_at.

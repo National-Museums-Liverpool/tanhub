@@ -44,13 +44,15 @@ Tanhub should expose conventional JWT lifecycle endpoints under the API base pat
 - `POST /api/v1/auth/token/refresh` to refresh an access token
 - `POST /api/v1/auth/token/revoke` to revoke token(s)
 
-Request and response payload shapes can follow standard OAuth2/JWT-compatible patterns used by the tanhub auth layer.
+Request and response payload shapes can follow standard OAuth2/JWT-compatible patterns used by the
+tanhub auth layer.
 
-For `POST /api/v1/auth/token`, the request uses `username` and `password`; `username` should contain the account email address.
+For `POST /api/v1/auth/token`, the request should contain a JSON payload with `username` and
+`password`; `username` should contain the account email address.
 
 ### 2.2 Bearer token usage
 
-Clients send:
+Clients should attach the access token to the request header as follows:
 
 `Authorization: Bearer <access_token>`
 

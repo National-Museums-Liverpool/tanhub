@@ -52,6 +52,110 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame(1, $json['data'][0]['implied']);
     }
 
+    public function testPaginationRejectsLimitBelowMinimum(): void
+    {
+        $result = $this->get('api/v1/data-sources?limit=0');
+
+        $result->assertStatus(400);
+        $result->assertHeader('Content-Type', 'application/problem+json; charset=UTF-8');
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame(400, $json['status']);
+        $this->assertSame('Invalid pagination parameter', $json['title']);
+        $this->assertStringContainsString('limit must be between 1 and 10000', $json['detail']);
+    }
+
+    public function testPaginationRejectsNegativeOffset(): void
+    {
+        $result = $this->get('api/v1/data-sources?offset=-1');
+
+        $result->assertStatus(400);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame(400, $json['status']);
+        $this->assertSame('Invalid pagination parameter', $json['title']);
+        $this->assertStringContainsString('offset must be 0 or greater', $json['detail']);
+    }
+
+    public function testTaxonGroupsListSupportsMultipleSortFields(): void
+    {
+        $result = $this->get('api/v1/taxon-groups?sort=implied,title');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame(2, $json['meta']['count']);
+        $this->assertSame('Birds', $json['data'][0]['title']);
+        $this->assertSame('Bees', $json['data'][1]['title']);
+    }
+
+    public function testTaxonGroupsRejectInvalidSortField(): void
+    {
+        $result = $this->get('api/v1/taxon-groups?sort=blocked');
+
+        $result->assertStatus(400);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame(400, $json['status']);
+        $this->assertSame('Invalid sort parameter', $json['title']);
+        $this->assertStringContainsString('Unsupported sort field: blocked', $json['detail']);
+    }
+
+    public function testDataSourcesSupportsInFilterOperator(): void
+    {
+        $result = $this->get('api/v1/data-sources?abbr[in]=NBN,iRecord');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame(2, $json['meta']['count']);
+    }
+
+    public function testTaxaSupportsNullEqFilterOperator(): void
+    {
+        $result = $this->get('api/v1/taxa?scientific_name_authorship[eq]=null&sort=scientific_name');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame(1, $json['meta']['count']);
+        $this->assertSame('Apidae', $json['data'][0]['scientific_name']);
+    }
+
+    public function testOccurrencesSupportsGteAndLteFilterOperators(): void
+    {
+        $gteResult = $this->get('api/v1/occurrences?from_date[gte]=2024-05-11');
+        $gteResult->assertStatus(200);
+        $gteJson = json_decode((string) $gteResult->response()->getBody(), true);
+        $this->assertSame(1, $gteJson['meta']['count']);
+
+        $lteResult = $this->get('api/v1/occurrences?from_date[lte]=2024-05-10');
+        $lteResult->assertStatus(200);
+        $lteJson = json_decode((string) $lteResult->response()->getBody(), true);
+        $this->assertSame(0, $lteJson['meta']['count']);
+    }
+
+    public function testInvalidFilterOperatorReturnsProblemDetailsWithInstance(): void
+    {
+        $result = $this->get('api/v1/taxon-groups?title[foo]=Bee');
+
+        $result->assertStatus(400);
+        $result->assertHeader('Content-Type', 'application/problem+json; charset=UTF-8');
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame('Invalid filter parameter', $json['title']);
+        $this->assertSame(400, $json['status']);
+        $this->assertSame('/api/v1/taxon-groups?title%5Bfoo%5D=Bee', $json['instance']);
+        $this->assertStringContainsString('Filter operator', $json['detail']);
+    }
+
     public function testTaxonGroupShowReturnsSingleObject(): void
     {
         $result = $this->get('api/v1/taxon-groups/bees');
@@ -1164,7 +1268,8 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             lat DECIMAL(10,7) NULL,
             partial INTEGER NOT NULL DEFAULT 0,
             occurrences_count INTEGER NOT NULL DEFAULT 0,
-            species_count INTEGER NOT NULL DEFAULT 0
+            species_count INTEGER NOT NULL DEFAULT 0,
+            rarity_score DECIMAL(14,6) NULL
         )');
 
         $db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'taxon_stats (

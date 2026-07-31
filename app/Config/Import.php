@@ -50,10 +50,9 @@ class Import extends BaseConfig
     public array $occurrenceSources = [
         'nbn' => [
             'abbr' => 'NBN',
-            'endpoint' => 'occurrences/search',
+            'endpoint' => 'https://records-ws.nbnatlas.org/occurrences/search',
             'records_key' => 'occurrences',
-            'checkpoint_param' => 'since',
-            'checkpoint_field' => 'lastModified',
+            'filter_query' => '',
             'query' => [],
         ],
         'indicia' => [
@@ -100,6 +99,31 @@ class Import extends BaseConfig
         'insect - moth',
         'insect - caddis fly (Trichoptera)',
     ];
+
+    /**
+     * Minimum indicia taxon rank, defaults to 230 (Genus).
+     *
+     * @var int
+     */
+    public int $indiciaMinTaxonRankSortOrder = 230;
+
+    /**
+     * Minimum NBN Atlas taxon rank, defaults to 6000 (Genus).
+     *
+     * @var int
+     */
+    public int $nbnMinTaxonRankId = 6000;
+
+    /**
+     * Optional extra NBN Atlas fq filter query.
+     *
+     * Supports forms like:
+     * - kingdom:Animalia
+     * - fq=kingdom:Animalia&fq=-phylum:Chordata&fq=-order:Lepidoptera
+     *
+     * @var string
+     */
+    public string $nbnApiFilterQuery = '';
 
      /**
      * Taxonomic groups we allow reporting at.
@@ -157,8 +181,38 @@ class Import extends BaseConfig
             $this->geographicRegionLocationType = trim($configuredGeographicRegionLocationType);
             log_message('info', 'Configured geographic region location type overriden: ' . $configuredGeographicRegionLocationType);
         }
+        $configuredIndiciaMinTaxonRankSortOrder = env('import.indiciaMinTaxonRankSortOrder');
+        $validIndiciaMinTaxonRankSortOrder = $this->validateInt($configuredIndiciaMinTaxonRankSortOrder);
+        if ($validIndiciaMinTaxonRankSortOrder !== null) {
+            $this->indiciaMinTaxonRankSortOrder = $validIndiciaMinTaxonRankSortOrder;
+            log_message('info', 'Configured indicia minimum taxon rank sort order overriden: ' . $this->indiciaMinTaxonRankSortOrder);
+        }
+        $configuredNbnMinTaxonRankId = env('import.nbnMinTaxonRankId');
+        $validNbnMinTaxonRankId = $this->validateInt($configuredNbnMinTaxonRankId);
+        if ($validNbnMinTaxonRankId !== null) {
+            $this->nbnMinTaxonRankId = $validNbnMinTaxonRankId;
+            log_message('info', 'Configured NBN minimum taxon rank ID overriden: ' . $this->nbnMinTaxonRankId);
+        }
+        $configuredNbnApiFilterQuery = env('import.nbnApiFilterQuery');
+        if (is_string($configuredNbnApiFilterQuery)) {
+            $this->nbnApiFilterQuery = trim($configuredNbnApiFilterQuery);
+            if ($this->nbnApiFilterQuery !== '') {
+                log_message('info', 'Configured NBN API filter query overriden: ' . $this->nbnApiFilterQuery);
+            }
+        }
 
         $this->assertSpeciesRankConfigured();
+    }
+
+    private function validateInt($value): ?int
+    {
+        if (is_scalar($value)) {
+            $value = trim((string) $value);
+            if (preg_match('/^-?\d+$/', $value) === 1) {
+                return (int) $value;
+            }
+        }
+        return null;
     }
 
     /**

@@ -62,11 +62,12 @@ class TaxonRarity extends BaseCommand
         CLI::write('Starting taxon rarity recalculation' . ($dryRun ? ' (dry run)' : '') . '.', 'yellow');
 
         try {
-            /** @var \App\Services\Stats\TaxonRarityService $service */
-            $service = service('taxonRarityService');
-            $result = $service->run($dryRun);
+            /** @var \App\Services\Import\DerivedImportRunner $runner */
+            $runner = service('derivedImportRunner');
+            $result = $runner->run('derived-stats:taxon_rarity', 'taxonRarityService', $dryRun);
 
             CLI::write('Task completed with status: ' . (string) ($result['status'] ?? 'unknown'), 'green');
+            CLI::write(service('importTaskSummaryFormatter')->format('taxon_rarity', $result));
             CLI::write('Taxa analysed: ' . (int) ($result['analysed'] ?? 0) . ', Updated: ' . (int) ($result['updated'] ?? 0) . ', Not changed: ' . (int) ($result['notchanged'] ?? 0) . ', Errors: ' . (int) ($result['errors'] ?? 0));
         } catch (Throwable $exception) {
             CLI::error($exception->getMessage());

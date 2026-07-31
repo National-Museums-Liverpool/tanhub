@@ -18,6 +18,7 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         private readonly array $config,
         private readonly int $timeout,
     ) {
+        log_message('debug', 'IndiciaOccurrencesAdapter initialized with config: ' . json_encode($config));
     }
 
     /**
@@ -169,7 +170,6 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         ];
 
         $taxonGroups = $this->normalisedListValues($this->config['taxon_groups'] ?? []);
-        $taxonRanks = $this->normalisedListValues($this->config['taxon_ranks'] ?? []);
         $geographicRegions = $this->normalisedListValues($this->config['geographic_regions'] ?? []);
         $locationType = trim((string) ($this->config['geographic_region_location_type'] ?? ''));
 
@@ -179,8 +179,8 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             ];
         }
 
-        if ($taxonRanks !== []) {
-            $mustFilters[] = ['terms' => ['taxon.taxon_rank.keyword' => $taxonRanks]];
+        if ($this->config['min_taxon_rank_sort_order'] ?? null) {
+            $mustFilters[] = ['range' => ['taxon.taxon_rank_sort_order' => ['gte' => $this->config['min_taxon_rank_sort_order'] ?? 0]]];
         }
 
         if ($geographicRegions !== []) {

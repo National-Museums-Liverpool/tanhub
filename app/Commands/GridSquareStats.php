@@ -58,11 +58,12 @@ class GridSquareStats extends BaseCommand
         CLI::write('Starting grid square stats counts recalculation' . ($dryRun ? ' (dry run)' : '') . '.', 'yellow');
 
         try {
-            /** @var \App\Services\Stats\GridSquareStatsCountsService $service */
-            $service = service('gridSquareStatsCountsService');
-            $result = $service->run($dryRun);
+            /** @var \App\Services\Import\DerivedImportRunner $runner */
+            $runner = service('derivedImportRunner');
+            $result = $runner->run('derived-stats:grid_square_stats_counts', 'gridSquareStatsCountsService', $dryRun);
 
             CLI::write('Task completed with status: ' . (string) ($result['status'] ?? 'unknown'), 'green');
+            CLI::write(service('importTaskSummaryFormatter')->format('grid_square_stats_counts', $result));
             CLI::write('Fetched: ' . (int) ($result['fetched'] ?? 0) . ', Inserted: ' . (int) ($result['inserted'] ?? 0) . ', Updated: ' . (int) ($result['updated'] ?? 0) . ', Skipped: ' . (int) ($result['skipped'] ?? 0) . ', Errors: ' . (int) ($result['errors'] ?? 0));
         } catch (Throwable $exception) {
             CLI::error($exception->getMessage());

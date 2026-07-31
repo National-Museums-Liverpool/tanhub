@@ -95,6 +95,7 @@ class ImportIndicia extends BaseCommand
 
                 CLI::write('Import completed with status: ' . $result['status'], 'green');
                 CLI::write('Run ID: ' . $result['run_id'], 'green');
+                CLI::write(service('importTaskSummaryFormatter')->format($source . ' occurrences', $result));
                 CLI::write('Fetched: ' . $result['fetched'] . ', Inserted: ' . $result['inserted'] . ', Updated: ' . $result['updated'] . ', Skipped: ' . $result['skipped'] . ', Errors: ' . $result['errors']);
                 CLI::write('Checkpoint: ' . (string) ($result['checkpoint'] ?? '(none)'));
             } catch (Throwable $exception) {
@@ -121,6 +122,7 @@ class ImportIndicia extends BaseCommand
 
             CLI::write('Import completed with status: ' . $result['status'], 'green');
             CLI::write('Run ID: ' . $result['run_id'], 'green');
+            CLI::write(service('importTaskSummaryFormatter')->format($entity, $result));
             CLI::write('Entity: ' . $result['entity'], 'green');
             CLI::write('Fetched: ' . $result['fetched'] . ', Inserted: ' . $result['inserted'] . ', Updated: ' . $result['updated'] . ', Skipped: ' . $result['skipped'] . ', Errors: ' . $result['errors']);
             CLI::write('Offset used: ' . (string) ($result['offset'] ?? 0) . ' | Next offset: ' . (string) ($result['next_offset'] ?? 0) . ' | Has more: ' . (($result['has_more'] ?? false) ? 'yes' : 'no'));
@@ -162,6 +164,13 @@ class ImportIndicia extends BaseCommand
         return false;
     }
 
+    /**
+     * Check the raw command-line arguments for a boolean flag.
+     *
+     * @param string $name Flag name without leading dashes.
+     *
+     * @return bool Whether the flag was supplied.
+     */
     private function hasFlagInArgv(string $name): bool
     {
         $argv = $_SERVER['argv'] ?? [];

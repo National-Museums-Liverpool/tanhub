@@ -88,6 +88,7 @@ class ImportOccurrences extends BaseCommand
 
             CLI::write('Import completed with status: ' . $result['status'], 'green');
             CLI::write('Run ID: ' . $result['run_id'], 'green');
+            CLI::write(service('importTaskSummaryFormatter')->format($source . ' occurrences', $result));
             CLI::write('Fetched: ' . $result['fetched'] . ', Inserted: ' . $result['inserted'] . ', Updated: ' . $result['updated'] . ', Skipped: ' . $result['skipped'] . ', Errors: ' . $result['errors']);
             CLI::write('Checkpoint: ' . (string) ($result['checkpoint'] ?? '(none)'));
         } catch (Throwable $exception) {

@@ -50,6 +50,26 @@ refresh planning.
 - `import.geographicRegionLocationType`: Indicia location type used to identify
   the configured regions; the default is `Vice County`.
 
+These scope values are also applied to NBN Atlas occurrence imports:
+
+- `import.geographicRegions` builds a `cl254` filter
+- `import.taxonRanks` builds a `taxonRank` filter
+- `import.nbnApiFilterQuery` appends custom `fq` clauses to NBN requests
+
+`import.nbnApiFilterQuery` supports either a single clause (for example `kingdom:Animalia`) or
+a full repeated-fq fragment (for example
+`fq=kingdom:Animalia&fq=-phylum:Chordata&fq=-order:Lepidoptera`).
+
+Example `.env` setting:
+
+```dotenv
+import.nbnApiFilterQuery = 'fq=kingdom:Animalia&fq=-phylum:Chordata&fq=-order:Lepidoptera'
+```
+
+NBN imports also always exclude unresolved assertion codes `50005`, `50006`, and `50001`.
+
+NBN occurrence imports use `https://records-ws.nbnatlas.org/occurrences/search`.
+
 See [Import](import.md) for the required import order and source behaviour.
 
 ## Taxon media

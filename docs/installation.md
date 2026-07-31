@@ -13,7 +13,10 @@ Before installing, ensure you have:
 
 - Composer (https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos)
 - Git (optional) - (https://git-scm.com/install/)
-- a web server (or local dev stack) with PHP 8.2 or higher and MySQL
+- a web server (or local dev stack) with PHP 8.2 or higher and MySQL 5.7 or a compatible
+   equivalent
+- PHP extensions `intl`, `mbstring`, `mysqlnd`, `libcurl`, and `json` enabled. `json` is enabled
+   by default in supported PHP versions.
 - PHP GD extension enabled for image resizing and variant generation
 - access to an Indicia warehouse with rights to configure REST API connections. The warehouse
   should have a taxon list populated with the contents of the UKSI species list as well as
@@ -90,6 +93,37 @@ cp env .env
       These should be indexed locations in the Indicia warehouse.
    - `import.geographicRegionLocationType` - set to the name of the Location Type in Indicia that
      the regions belong to, for example "Vice County".
+   - `import.indiciaMinTaxonRankSortOrder` - the minimum Indicia taxon rank to import. The default
+     is `230`, which corresponds to genus or lower in the standard configuration.
+   - `import.nbnMinTaxonRankId` - the minimum NBN Atlas taxon rank ID to import. The default is
+     `6000`, which corresponds to genus or lower in the standard NBN configuration.
+   - `import.nbnApiFilterQuery` - optional NBN Atlas `fq` filter clauses. Set either one raw
+     clause, such as `kingdom:Animalia`, or repeated clauses joined with `&`, such as
+     `fq=kingdom:Animalia&fq=-phylum:Chordata`.
+   - `import.maximumCoordinateUncertaintyInMeters` - maximum accepted coordinate uncertainty for
+     Indicia occurrence records. The default is `10000`; set it to `0` to disable the limit.
+
+   The import commands use these defaults unless overridden on the command line:
+
+   - `Config\Import.defaultLimit` - maximum records processed by a run; default `5000`.
+   - `Config\Import.defaultPageSize` - records requested per occurrence page; default `200`.
+   - `Config\Import.httpTimeout` - external HTTP request timeout in seconds; default `30`.
+
+   The Indicia connection settings are configured separately and are required for the initial
+   taxonomy imports and Indicia occurrence imports:
+
+   - `Config\Import.indiciaWarehouseUrl` - warehouse base URL without a trailing slash or
+     `index.php`.
+   - `Config\Import.indiciaTaxonListId` - the warehouse taxon-list ID containing the UKSI data.
+   - `Config\Import.indiciaProjId` - REST API client project ID, normally `TANHUB`.
+   - `Config\Import.indiciaUsername` - REST API client username, normally `tanhub`.
+   - `Config\Import.indiciaSecret` - REST API client secret.
+   - `Config\Import.indiciaOccurrencesEsEndpoint` - the Elasticsearch endpoint name exposed by
+     the warehouse REST API; default `es`.
+
+   NBN Atlas occurrences use the standard records web-service endpoint configured in the
+   application and do not require an NBN credential. See [Import](import.md) for source-specific
+   behaviour and command options.
 
 8. Visit the site you have just installed in your browser. As you have not yet installed the
    database schema you will be redirected to the `/update` page. Click the button to run the
@@ -143,7 +177,30 @@ taxonMedia.variants.large.mode = contain
 taxonMedia.variants.large.quality = 90
 ```
 
-## 3. API Configuration
+## 3. Schedule automatic imports
+
+The `import:auto` Spark task selects and runs the next import batch or report-stat task. Schedule
+it to run repeatedly rather than scheduling each import command separately. It first completes the
+required Indicia taxonomy imports, then refreshes stale derived statistics, and then alternates
+between the least recently successful Indicia and NBN occurrence imports. The task records
+progress in `import_offsets` and run history in `import_runs`, so it can resume after a failed run.
+
+Use `--limit` and `--page-size` to override the configured defaults for one automated run. Use
+`--dry-run` to fetch and validate without writing imported rows or offsets.
+
+For example, edit the crontab for the web-server or deployment user:
+
+```cron
+*/5 * * * * flock -n /var/lock/tanhub-import.lock /usr/bin/php /var/www/tanhub/spark import:auto >> /var/log/tanhub-import.log 2>&1
+```
+
+Replace `/var/www/tanhub` with the absolute application path and use the PHP
+binary configured for the deployment. The `flock` wrapper prevents a second run
+starting while the previous run is still processing. Choose an interval that
+allows a normal batch to finish and respects the rate limits of the configured
+Indicia Warehouse and NBN Atlas services.
+
+## 4. API Configuration
 
 If tanhub is configured to serve only publicly viewable data, API access can be allowed without
 authentication, in which case rate limits are applied to prevent misuse or denial-of-service
@@ -182,7 +239,7 @@ CORS_SUPPORTS_CREDENTIALS=true
 CORS_ALLOWED_HEADERS=Origin,Content-Type,Accept,Authorization,X-Requested-With
 ```
 
-## 4. Link tanhub to an Indicia Warehouse
+## 5. Link tanhub to an Indicia Warehouse
 
 1. In the warehouse, open `Admin > REST API Clients` from the menu. If you don't have privileges to
    see this menu item then you will have to request that the warehouse administrator does this for
@@ -234,7 +291,7 @@ CORS_ALLOWED_HEADERS=Origin,Content-Type,Accept,Authorization,X-Requested-With
   - `Config\Import.indiciaSecret` - set to the secret given for your API client.
   - `Config\Import.indiciaOccurrencesEsEndpoint` - match the endpoint from step 5.
 
-## 5. Prepare the Indicia Warehouse
+## 6. Prepare the Indicia Warehouse
 
 1. If you are using the BRC Community Warehouse for your Indicia installation, then the required
    reports are already present on the server. If not, then copy the
@@ -248,7 +305,7 @@ grant select on recording_scheme_taxa to indicia_report_user;
 grant select on recording_schemes to indicia_report_user;
 ```
 
-## 6. Next Step
+## 7. Next Step
 
 After installation and warehouse linkage, continue with the import process in [Import](import.md).
 

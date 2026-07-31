@@ -3,6 +3,7 @@
 namespace Tests;
 
 use App\Services\Import\EntityImportOrchestrator;
+use App\Services\Import\ImportOrchestrator;
 use App\Services\Stats\GridSquareStatsCountsService;
 use App\Services\Stats\TaxonRarityService;
 use App\Services\Stats\TaxonStatsService;
@@ -64,7 +65,7 @@ final class ImportsPageTest extends CIUnitTestCase
         $result->assertSee('Blocked by taxon_groups');
         $result->assertSee('grid_square_stats_counts');
         $result->assertSee('taxon_rarity');
-        $result->assertSee('Not implemented');
+        $result->assertDontSee('Not implemented');
     }
 
     public function testRunBlockedTaskShowsError(): void
@@ -116,6 +117,46 @@ final class ImportsPageTest extends CIUnitTestCase
         $queueRow = db_connect()
             ->table('import_task_queue')
             ->where('source_key', 'indicia-taxonomy:taxon_names')
+            ->orderBy('id', 'desc')
+            ->get()
+            ->getRowArray();
+
+        $this->assertNull($queueRow);
+    }
+
+    public function testRunNbnOccurrenceTaskQueuesAndRuns(): void
+    {
+        $this->markTaxonomyDependenciesComplete();
+
+        $mock = $this->createMock(ImportOrchestrator::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->with('nbn', $this->greaterThan(0), $this->greaterThan(0), false, null)
+            ->willReturn([
+                'status' => 'success',
+                'run_id' => 102,
+                'fetched' => 10,
+                'inserted' => 8,
+                'updated' => 1,
+                'skipped' => 1,
+                'errors' => 0,
+            ]);
+
+        \Config\Services::injectMock('occurrenceImportOrchestrator', $mock);
+
+        $this->authenticateAs('imports-admin-nbn@example.com', 'admin');
+
+        $result = $this->post('imports/run', [
+            'source_key' => 'nbn-occurrences:occurrences',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirectTo(site_url('imports'));
+        $result->assertSessionHas('warning');
+
+        $queueRow = db_connect()
+            ->table('import_task_queue')
+            ->where('source_key', 'nbn-occurrences:occurrences')
             ->orderBy('id', 'desc')
             ->get()
             ->getRowArray();
@@ -437,6 +478,7 @@ final class ImportsPageTest extends CIUnitTestCase
                 'indicia-taxonomy:taxon_groups',
                 'indicia-taxonomy:taxon_ranks',
                 'indicia-taxonomy:taxa',
+                'indicia-taxonomy:taxon_names',
                 'indicia-taxonomy:grid_square_stats',
             ])
             ->update([

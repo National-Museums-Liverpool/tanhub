@@ -44,6 +44,7 @@ class TaxonNamesImportService implements EntityImportServiceInterface
                 $name = trim((string) ($row['name'] ?? ''));
 
                 if ($taxonIdentifier === '' || $givenNameIdentifier === '' || $name === '') {
+                    log_message('info', 'Skipping taxa row due to missing taxon identifier, given name identifier, or name: ' . var_export($row, TRUE));
                     $counts['skipped']++;
                     $counts['processed']++;
                     continue;
@@ -52,6 +53,7 @@ class TaxonNamesImportService implements EntityImportServiceInterface
                 $taxonId = $taxonIdByIdentifier[$taxonIdentifier] ?? null;
 
                 if ($taxonId === null) {
+                    log_message('info', 'Skipping taxa row due to missing taxon ID for taxon identifier: ' . $taxonIdentifier);
                     $counts['skipped']++;
                     $counts['processed']++;
                     continue;

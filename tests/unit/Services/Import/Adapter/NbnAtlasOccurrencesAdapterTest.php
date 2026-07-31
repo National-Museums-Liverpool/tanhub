@@ -32,11 +32,13 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         $response = $this->createMock(ResponseInterface::class);
         $response->method('getStatusCode')->willReturn(200);
         $response->method('getBody')->willReturn((string) json_encode([
+            'startIndex' => 25,
+            'pageSize' => 25,
+            'totalRecords' => 200,
             'occurrences' => [
                 [
                     'occurrenceID' => 'occ-1',
-                    'taxonID' => 'tax-1',
-                    'scientificNameID' => 'sn-1',
+                    'taxonConceptID' => 'NHMSYS0001',
                     'eventDate' => '2024-05-01',
                     'gridReference' => 'SU123456',
                     'recordedBy' => 'Recorder One',
@@ -44,8 +46,10 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
                     'decimalLatitude' => '53.4808',
                     'decimalLongitude' => '-2.2426',
                     'gridReferenceSystem' => 'EPSG:4326',
+                    'dataProviderName' => 'Biological Records Centre',
+                    'dataResourceName' => 'iRecord Bats',
+                    'identificationVerificationStatus' => 'V',
                     'coordinateUncertaintyInMeters' => '1500',
-                    'lastModified' => '2025-01-02T12:34:56Z',
                 ],
             ],
         ], JSON_THROW_ON_ERROR));
@@ -54,11 +58,22 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         $client->expects($this->once())
             ->method('get')
             ->with(
-                'https://example.test/nbn',
-                $this->callback(static function (array $options): bool {
-                    return isset($options['query']['limit'])
-                        && $options['query']['limit'] === 25
-                        && $options['query']['since'] === 'checkpoint-1';
+                $this->callback(static function (string $url): bool {
+                    $parts = parse_url($url);
+                    $queryString = (string) ($parts['query'] ?? '');
+                    parse_str($queryString, $query);
+                    preg_match_all('/(?:^|&)fq=([^&]*)/', $queryString, $matches);
+                    $fq = array_map('urldecode', $matches[1] ?? []);
+
+                    return $query['pageSize'] === '25'
+                        && $query['start'] === '25'
+                        && $query['q'] === '*:*'
+                        && in_array('cl254:("Cheshire" OR "South Lancashire")', $fq, true)
+                        && in_array('taxonRankID:[6000 TO *]', $fq, true)
+                        && in_array('kingdom:Animalia', $fq, true)
+                        && in_array('-phylum:Chordata', $fq, true)
+                        && in_array('-order:Lepidoptera', $fq, true)
+                        && in_array('-(user_assertions:"50005" OR user_assertions:"50006" OR user_assertions:"50001")', $fq, true);
                 })
             )
             ->willReturn($response);
@@ -67,27 +82,30 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
             $client,
             [
                 'endpoint' => 'https://example.test/nbn',
-                'checkpoint_param' => 'since',
-                'checkpoint_field' => 'lastModified',
+                'min_taxon_rank_id' => 6000,
+                'geographic_regions' => ['Cheshire', 'South Lancashire'],
+                'nbn_filter_query' => 'fq=kingdom:Animalia&fq=-phylum:Chordata&fq=-order:Lepidoptera',
             ],
             10,
         );
 
-        $page = $adapter->fetchPage('checkpoint-1', 25);
+        $page = $adapter->fetchPage('25', 25);
 
         $this->assertCount(1, $page->records);
-        $this->assertFalse($page->hasMore);
-        $this->assertSame('2025-01-02T12:34:56Z', $page->nextCheckpoint);
+        $this->assertTrue($page->hasMore);
+        $this->assertSame('26', $page->nextCheckpoint);
 
         $record = $page->records[0];
         $this->assertSame('occ-1', $record['remote_id']);
-        $this->assertSame('tax-1', $record['taxon_identifier']);
-        $this->assertSame('sn-1', $record['given_name_identifier']);
+        $this->assertSame('NHMSYS0001', $record['scientific_name_identifier']);
+        $this->assertSame('NHMSYS0001', $record['given_name_identifier']);
+        $this->assertSame('Biological Records Centre', $record['data_provider_name']);
+        $this->assertSame('iRecord Bats', $record['source_name']);
         $this->assertSame('SU123456', $record['grid_ref']);
         $this->assertSame('SU123', $record['grid_ref_2km']);
         $this->assertSame('EPSG:4326', $record['grid_ref_system']);
+        $this->assertSame('V', $record['identification_verification_status']);
         $this->assertSame(1500.0, $record['coordinate_uncertainty_in_meters']);
-        $this->assertSame('2025-01-02T12:34:56Z', $record['_checkpoint']);
     }
 
     public function testFetchPageThrowsForHttpErrors(): void
@@ -136,9 +154,13 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         $response = $this->createMock(ResponseInterface::class);
         $response->method('getStatusCode')->willReturn(200);
         $response->method('getBody')->willReturn((string) json_encode([
+            'totalRecords' => 1,
+            'startIndex' => 0,
+            'pageSize' => 50,
             'records' => [
                 [
-                    'occurrenceID' => 'occ-2',
+                    'uuid' => 'uuid-2',
+                    'taxonConceptID' => 'NHMSYS0002',
                     'grid_ref' => 'SU999999',
                     'grid_ref_2km' => 'SU99A',
                 ],
@@ -160,7 +182,46 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         $page = $adapter->fetchPage(null, 50);
 
         $this->assertCount(1, $page->records);
-        $this->assertSame('occ-2', $page->records[0]['remote_id']);
+        $this->assertSame('uuid-2', $page->records[0]['remote_id']);
+        $this->assertSame('NHMSYS0002', $page->records[0]['scientific_name_identifier']);
         $this->assertSame('SU99A', $page->records[0]['grid_ref_2km']);
+        $this->assertFalse($page->hasMore);
+        $this->assertSame('1', $page->nextCheckpoint);
+    }
+
+    public function testFetchPageSupportsSingleRawConfiguredFilterClause(): void
+    {
+        $response = $this->createMock(ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn(200);
+        $response->method('getBody')->willReturn((string) json_encode([
+            'totalRecords' => 0,
+            'startIndex' => 0,
+            'pageSize' => 10,
+            'occurrences' => [],
+        ], JSON_THROW_ON_ERROR));
+
+        $client = $this->createMock(CURLRequest::class);
+        $client->expects($this->once())
+            ->method('get')
+            ->with(
+                $this->callback(static function (string $url): bool {
+                    return str_contains($url, 'fq=kingdom%3AAnimalia');
+                })
+            )
+            ->willReturn($response);
+
+        $adapter = new NbnAtlasOccurrencesAdapter(
+            $client,
+            [
+                'endpoint' => 'https://example.test/nbn',
+                'nbn_filter_query' => 'kingdom:Animalia',
+            ],
+            10,
+        );
+
+        $page = $adapter->fetchPage(null, 10);
+
+        $this->assertSame([], $page->records);
+        $this->assertFalse($page->hasMore);
     }
 }

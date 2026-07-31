@@ -62,11 +62,12 @@ class TaxonYearStats extends BaseCommand
         CLI::write('Starting taxon year stats recalculation' . ($dryRun ? ' (dry run)' : '') . '.', 'yellow');
 
         try {
-            /** @var \App\Services\Stats\TaxonYearStatsService $service */
-            $service = service('taxonYearStatsService');
-            $result = $service->run($dryRun);
+            /** @var \App\Services\Import\DerivedImportRunner $runner */
+            $runner = service('derivedImportRunner');
+            $result = $runner->run('derived-stats:taxon_year_stats', 'taxonYearStatsService', $dryRun);
 
             CLI::write('Task completed with status: ' . (string) ($result['status'] ?? 'unknown'), 'green');
+            CLI::write(service('importTaskSummaryFormatter')->format('taxon_year_stats', $result));
             CLI::write('Fetched: ' . (int) ($result['fetched'] ?? 0) . ', Processed: ' . (int) ($result['processed'] ?? 0) . ', Inserted: ' . (int) ($result['inserted'] ?? 0) . ', Updated: ' . (int) ($result['updated'] ?? 0) . ', Not changed: ' . (int) ($result['not changed'] ?? 0) . ', Skipped: ' . (int) ($result['skipped'] ?? 0) . ', Errors: ' . (int) ($result['errors'] ?? 0));
         } catch (Throwable $exception) {
             CLI::error($exception->getMessage());

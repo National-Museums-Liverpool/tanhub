@@ -143,6 +143,95 @@ final class ImportOrchestratorRunTest extends CIUnitTestCase
         $orchestrator->run('nbn', 10, 10, false, 'start-cp');
     }
 
+    public function testRunForNbnStartsFromZeroWhenNoCheckpointOverrideProvided(): void
+    {
+        $adapter = $this->createMock(OccurrenceSourceAdapterInterface::class);
+        $adapter->expects($this->once())
+            ->method('fetchPage')
+            ->with('0', 10)
+            ->willReturn(new ImportPage([], '0', false));
+
+        $adapterFactory = $this->mockAdapterFactory($adapter);
+        $occurrenceImportService = $this->createMock(OccurrenceImportService::class);
+        $occurrenceImportService->expects($this->once())
+            ->method('import')
+            ->willReturn([
+                'fetched' => 0,
+                'processed' => 0,
+                'inserted' => 0,
+                'updated' => 0,
+                'skipped' => 0,
+                'errors' => 0,
+                'last_checkpoint' => null,
+            ]);
+
+        $importRunModel = $this->mockImportRunModel();
+        $importOffsetModel = $this->mockImportOffsetModel(true);
+        $importOffsetModel->expects($this->never())->method('setCheckpoint');
+        $importOffsetModel->expects($this->never())->method('setCompletion');
+
+        $orchestrator = new ImportOrchestrator(
+            new ImportConfig(),
+            $adapterFactory,
+            $occurrenceImportService,
+            $importRunModel,
+            $this->mockDataSourceModel(),
+            $importOffsetModel,
+        );
+
+        $result = $orchestrator->run('nbn', 10, 10, true);
+
+        $this->assertSame('success', $result['status']);
+    }
+
+    public function testRunForNbnResumesFromStoredCheckpoint(): void
+    {
+        $adapter = $this->createMock(OccurrenceSourceAdapterInterface::class);
+        $adapter->expects($this->once())
+            ->method('fetchPage')
+            ->with('25', 10)
+            ->willReturn(new ImportPage([
+                ['remote_id' => 'one'],
+            ], '25', true));
+
+        $adapterFactory = $this->mockAdapterFactory($adapter);
+        $occurrenceImportService = $this->createMock(OccurrenceImportService::class);
+        $occurrenceImportService->expects($this->once())
+            ->method('import')
+            ->willReturn([
+                'fetched' => 1,
+                'processed' => 1,
+                'inserted' => 0,
+                'updated' => 0,
+                'skipped' => 0,
+                'errors' => 1,
+                'last_checkpoint' => '25',
+            ]);
+
+        $importRunModel = $this->mockImportRunModel();
+        $importOffsetModel = $this->mockImportOffsetModel(true, '25');
+        $importOffsetModel->expects($this->once())
+            ->method('setCheckpoint')
+            ->with('nbn-occurrences:occurrences', '25');
+        $importOffsetModel->expects($this->once())
+            ->method('setCompletion')
+            ->with('nbn-occurrences:occurrences', false);
+
+        $orchestrator = new ImportOrchestrator(
+            new ImportConfig(),
+            $adapterFactory,
+            $occurrenceImportService,
+            $importRunModel,
+            $this->mockDataSourceModel(),
+            $importOffsetModel,
+        );
+
+        $result = $orchestrator->run('nbn', 10, 10);
+
+        $this->assertSame('failed', $result['status']);
+        $this->assertSame('25', $result['checkpoint']);
+    }
+
     private function mockAdapterFactory(OccurrenceSourceAdapterInterface $adapter): OccurrenceSourceAdapterFactory
     {
         $adapterFactory = $this->createMock(OccurrenceSourceAdapterFactory::class);
@@ -182,11 +271,11 @@ final class ImportOrchestratorRunTest extends CIUnitTestCase
         return $dataSourceModel;
     }
 
-    private function mockImportOffsetModel(bool $complete): ImportOffsetModel
+    private function mockImportOffsetModel(bool $complete, ?string $checkpoint = null): ImportOffsetModel
     {
         $importOffsetModel = $this->createMock(ImportOffsetModel::class);
         $importOffsetModel->method('isComplete')->willReturn($complete);
-        $importOffsetModel->method('getCheckpoint')->willReturn(null);
+        $importOffsetModel->method('getCheckpoint')->willReturn($checkpoint);
 
         return $importOffsetModel;
     }

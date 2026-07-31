@@ -75,7 +75,8 @@ class ImportOrchestrator
         }
 
         $checkpoint = $checkpointOverride
-            ?? $this->lastSuccessfulCheckpoint($importOffsetModel, $importRunModel, $source, $sourceEntityKey);
+            ?? $this->lastSuccessfulCheckpoint($importOffsetModel, $importRunModel, $source, $sourceEntityKey)
+            ?? ($source === 'nbn' ? '0' : null);
 
         $runId = (int) $importRunModel->insert([
             'source_key' => $sourceEntityKey,

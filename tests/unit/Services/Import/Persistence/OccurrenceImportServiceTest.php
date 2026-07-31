@@ -28,10 +28,12 @@ final class OccurrenceImportServiceTest extends CIUnitTestCase
         $this->backupTable('occurrences');
         $this->backupTable('taxon_names');
         $this->backupTable('taxa');
+        $this->backupTable('data_sources');
 
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'occurrences');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_names');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxa');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'data_sources');
 
         $rankColumns = $this->rankColumns();
         $taxaRankColumnsSql = $this->rankColumnsSql($rankColumns);
@@ -40,7 +42,15 @@ final class OccurrenceImportServiceTest extends CIUnitTestCase
         $this->db->query('CREATE TABLE ' . $prefix . 'taxa (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             scientific_name_identifier VARCHAR(100) NOT NULL,
+            taxon_identifier VARCHAR(100) NULL,
             deleted_at DATETIME NULL' . $taxaRankColumnsSql . '
+        )');
+
+        $this->db->query('CREATE TABLE ' . $prefix . 'data_sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            abbr VARCHAR(10) NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            url VARCHAR(255) NULL
         )');
 
         $this->db->query('CREATE TABLE ' . $prefix . 'taxon_names (
@@ -80,6 +90,7 @@ final class OccurrenceImportServiceTest extends CIUnitTestCase
         $this->db->table('taxa')->insert([
             'id' => 1,
             'scientific_name_identifier' => 'TVK-1',
+            'taxon_identifier' => 'ORGANISM-KEY-1',
             'deleted_at' => null,
         ]);
 
@@ -87,6 +98,27 @@ final class OccurrenceImportServiceTest extends CIUnitTestCase
             'id' => 1,
             'given_name_identifier' => 'GIVEN-1',
             'deleted_at' => null,
+        ]);
+
+        $this->db->table('taxon_names')->insert([
+            'id' => 2,
+            'given_name_identifier' => 'TVK-1',
+            'deleted_at' => null,
+        ]);
+
+        $this->db->table('data_sources')->insertBatch([
+            [
+                'id' => 2,
+                'abbr' => 'NBN',
+                'title' => 'NBN Atlas',
+                'url' => 'https://records-ws.nbnatlas.org',
+            ],
+            [
+                'id' => 3,
+                'abbr' => 'IREC',
+                'title' => 'iRecord',
+                'url' => 'https://irecord.org.uk',
+            ],
         ]);
     }
 
@@ -105,10 +137,12 @@ final class OccurrenceImportServiceTest extends CIUnitTestCase
             $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'occurrences');
             $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_names');
             $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxa');
+            $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'data_sources');
 
             $this->restoreTable('taxa');
             $this->restoreTable('taxon_names');
             $this->restoreTable('occurrences');
+            $this->restoreTable('data_sources');
         } finally {
             $this->db->query('PRAGMA foreign_keys = ON');
             $this->tableBackups = [];
@@ -217,6 +251,140 @@ final class OccurrenceImportServiceTest extends CIUnitTestCase
         $this->assertNotNull($row);
         $this->assertSame('SU1234', (string) $row['grid_ref']);
         $this->assertSame('SU13L', (string) $row['grid_ref_2km']);
+    }
+
+    public function testImportNbnIrecordOriginCreatesIrecCanonicalKeyWithNbnOwnership(): void
+    {
+        $service = new OccurrenceImportService(new OsgbGridReferenceBuilder());
+
+        $counts = $service->import([
+            [
+                'remote_id' => '123',
+                'scientific_name_identifier' => 'TVK-1',
+                'given_name_identifier' => 'TVK-1',
+                'source_name' => 'iRecord Bats',
+                'data_provider_name' => 'Biological Records Centre',
+                'grid_ref' => 'SU1234',
+                'grid_ref_system' => 'OSGB',
+                'grid_ref_2km' => 'SU13L',
+                'latitude' => 53.4808,
+                'longitude' => -2.2426,
+            ],
+        ], 2, 'NBN');
+
+        $this->assertSame(1, $counts['inserted']);
+        $this->assertSame(0, $counts['updated']);
+
+        $row = $this->db->table('occurrences')->getWhere(['unique_key' => 'IREC:123'])->getRowArray();
+        $this->assertNotNull($row);
+        $this->assertSame(2, (int) $row['data_source_id']);
+    }
+
+    public function testImportNbnIrecordOriginUpdatesWhenCurrentOwnerIsNbn(): void
+    {
+        $this->db->table('occurrences')->insert([
+            'unique_key' => 'IREC:123',
+            'taxon_id' => 1,
+            'taxon_name_id' => 2,
+            'grid_ref' => 'SU1234',
+            'grid_ref_2km' => 'SU13L',
+            'recorded_by' => 'Old Recorder',
+            'identification_verification_status' => 'UN',
+            'data_source_id' => 2,
+        ]);
+
+        $service = new OccurrenceImportService(new OsgbGridReferenceBuilder());
+
+        $counts = $service->import([
+            [
+                'remote_id' => '123',
+                'scientific_name_identifier' => 'TVK-1',
+                'given_name_identifier' => 'TVK-1',
+                'source_name' => 'iRecord Mammals',
+                'data_provider_name' => 'Biological Records Centre',
+                'recorded_by' => 'New Recorder',
+                'grid_ref' => 'SU1234',
+                'grid_ref_system' => 'OSGB',
+                'grid_ref_2km' => 'SU13L',
+                'latitude' => 53.4808,
+                'longitude' => -2.2426,
+            ],
+        ], 2, 'NBN');
+
+        $this->assertSame(0, $counts['inserted']);
+        $this->assertSame(1, $counts['updated']);
+
+        $row = $this->db->table('occurrences')->getWhere(['unique_key' => 'IREC:123'])->getRowArray();
+        $this->assertNotNull($row);
+        $this->assertSame('New Recorder', (string) $row['recorded_by']);
+        $this->assertSame(2, (int) $row['data_source_id']);
+    }
+
+    public function testImportNbnIrecordOriginSkipsWhenCurrentOwnerIsIrec(): void
+    {
+        $this->db->table('occurrences')->insert([
+            'unique_key' => 'IREC:123',
+            'taxon_id' => 1,
+            'taxon_name_id' => 2,
+            'grid_ref' => 'SU1234',
+            'grid_ref_2km' => 'SU13L',
+            'recorded_by' => 'Authoritative Recorder',
+            'identification_verification_status' => 'UN',
+            'data_source_id' => 3,
+        ]);
+
+        $service = new OccurrenceImportService(new OsgbGridReferenceBuilder());
+
+        $counts = $service->import([
+            [
+                'remote_id' => '123',
+                'scientific_name_identifier' => 'TVK-1',
+                'given_name_identifier' => 'TVK-1',
+                'source_name' => 'iRecord Mammals',
+                'data_provider_name' => 'Biological Records Centre',
+                'recorded_by' => 'Fallback Recorder',
+                'grid_ref' => 'SU1234',
+                'grid_ref_system' => 'OSGB',
+                'grid_ref_2km' => 'SU13L',
+                'latitude' => 53.4808,
+                'longitude' => -2.2426,
+            ],
+        ], 2, 'NBN');
+
+        $this->assertSame(0, $counts['inserted']);
+        $this->assertSame(0, $counts['updated']);
+        $this->assertSame(1, $counts['skipped']);
+
+        $row = $this->db->table('occurrences')->getWhere(['unique_key' => 'IREC:123'])->getRowArray();
+        $this->assertNotNull($row);
+        $this->assertSame('Authoritative Recorder', (string) $row['recorded_by']);
+        $this->assertSame(3, (int) $row['data_source_id']);
+    }
+
+    public function testImportFallsBackToUnknownRecorderWhenRecordedByIsNonScalar(): void
+    {
+        $service = new OccurrenceImportService(new OsgbGridReferenceBuilder());
+
+        $counts = $service->import([
+            [
+                'remote_id' => 'R5',
+                'scientific_name_identifier' => 'TVK-1',
+                'given_name_identifier' => 'GIVEN-1',
+                'grid_ref' => 'SU1234',
+                'grid_ref_system' => 'OSGB',
+                'grid_ref_2km' => 'SU13L',
+                'recorded_by' => ['Recorder One', 'Recorder Two'],
+                'latitude' => 53.4808,
+                'longitude' => -2.2426,
+            ],
+        ], 2, 'NBN');
+
+        $this->assertSame(1, $counts['inserted']);
+        $this->assertSame(0, $counts['errors']);
+
+        $row = $this->db->table('occurrences')->getWhere(['unique_key' => 'NBN:R5'])->getRowArray();
+        $this->assertNotNull($row);
+        $this->assertSame('Unknown', (string) $row['recorded_by']);
     }
 
     /**

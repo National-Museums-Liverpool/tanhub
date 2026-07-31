@@ -30,6 +30,15 @@ class OccurrenceSourceAdapterFactory
         $client = service('curlrequest');
         $resolvedConfig = $sourceConfig;
 
+        if ($source === 'nbn') {
+            $resolvedConfig = array_merge($sourceConfig, [
+                'taxon_ranks' => $this->config->taxonRanks,
+                'geographic_regions' => $this->config->geographicRegions,
+                'min_taxon_rank_id' => $this->config->nbnMinTaxonRankId,
+                'nbn_filter_query' => $this->config->nbnApiFilterQuery,
+            ]);
+        }
+
         if ($source === 'indicia') {
             $resolvedConfig = array_merge($sourceConfig, [
                 'warehouse_url' => $this->config->indiciaWarehouseUrl,
@@ -40,6 +49,7 @@ class OccurrenceSourceAdapterFactory
                 'secret' => $this->config->indiciaSecret,
                 'taxon_groups' => $this->config->taxonGroups,
                 'taxon_ranks' => $this->config->taxonRanks,
+                'min_taxon_rank_sort_order' => $this->config->indiciaMinTaxonRankSortOrder,
                 'geographic_regions' => $this->config->geographicRegions,
                 'geographic_region_location_type' => $this->config->geographicRegionLocationType,
                 'maximum_coordinate_uncertainty_in_meters' => $this->config->maximumCoordinateUncertaintyInMeters,

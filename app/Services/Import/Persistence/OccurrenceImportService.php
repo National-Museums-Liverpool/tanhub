@@ -6,6 +6,7 @@ use App\Models\OccurrenceModel;
 use App\Models\TaxonModel;
 use App\Models\TaxonNameModel;
 use App\Services\Import\Support\OsgbGridReferenceBuilder;
+use Throwable;
 
 /**
  * Persists normalized occurrence records into local tables.
@@ -55,8 +56,6 @@ class OccurrenceImportService
 
         foreach ($records as $record) {
             try {
-                log_message('debug', 'Record: ' . var_export($record, true));
-
                 $remoteId = trim((string) ($record['remote_id'] ?? ''));
                 $tvk = trim((string) ($record['scientific_name_identifier'] ?? ''));
                 $givenNameTvk = trim((string) ($record['given_name_identifier'] ?? ''));
@@ -71,6 +70,10 @@ class OccurrenceImportService
 
                 $linkedTaxon = $TaxonModel->where('scientific_name_identifier', $tvk)->first();
                 $linkedTaxonName = $taxonNameModel->where('given_name_identifier', $givenNameTvk)->first();
+                // If using a redundant given name, can map to the accepted name as a compromise.
+                if ($linkedTaxon !== null && $linkedTaxonName === null) {
+                    $linkedTaxonName = $taxonNameModel->where('given_name_identifier', $tvk)->first();
+                }
 
                 if ($linkedTaxon === null || $linkedTaxonName === null) {
                     log_message('debug', 'Skipping occurrence record due to missing linked taxon: ' . var_export($record, true));
@@ -111,7 +114,7 @@ class OccurrenceImportService
                     continue;
                 }
 
-                $uniqueKey = strtoupper($sourceAbbr) . ':' . $remoteId;
+                $uniqueKey = $this->resolveUniqueKey($record, $sourceAbbr, $remoteId);
 
                 $row = [
                     'unique_key' => $uniqueKey,
@@ -122,7 +125,7 @@ class OccurrenceImportService
                     'grid_ref' => substr($gridRef, 0, 20),
                     'grid_ref_2km' => substr(strtoupper($gridRef2km), 0, 5),
                     'locality' => $this->nullableString($record['locality'] ?? null, 255),
-                    'recorded_by' => substr((string) ($record['recorded_by'] ?? 'Unknown'), 0, 255),
+                    'recorded_by' => $this->nullableString($record['recorded_by'] ?? null, 255) ?? 'Unknown',
                     'identified_by' => $this->nullableString($record['identified_by'] ?? null, 255),
                     'identification_verification_status' => substr((string) ($record['identification_verification_status'] ?? 'UN'), 0, 2),
                     'sex' => $this->nullableString($record['sex'] ?? null, 20),
@@ -137,6 +140,14 @@ class OccurrenceImportService
                 }
 
                 $existing = $occurrenceModel->where('unique_key', $uniqueKey)->first();
+
+                if ($this->shouldSkipIrecordOwnedNbnUpdate($sourceAbbr, $record, $existing)) {
+                    log_message('debug', 'Skipping occurrence record due to being NBN copy of iRecord data: ' . var_export($record, true));
+                    $counts['skipped']++;
+                    $counts['processed']++;
+                    $counts['last_checkpoint'] = $this->recordCheckpoint($record, $counts['last_checkpoint']);
+                    continue;
+                }
 
                 if ($existing !== null) {
                     $counts['updated']++;
@@ -239,6 +250,91 @@ class OccurrenceImportService
         $string = trim((string) $value);
 
         return $string === '' ? null : $string;
+    }
+
+    /**
+     * Resolve the canonical occurrence unique key.
+     *
+     * @param array<string, mixed> $record
+     */
+    private function resolveUniqueKey(array $record, string $sourceAbbr, string $remoteId): string
+    {
+        $normalisedSourceAbbr = strtoupper($sourceAbbr);
+
+        if ($normalisedSourceAbbr === 'NBN' && $this->isIrecordOriginNbnRecord($record, $remoteId)) {
+            return 'IREC:' . ($record['occurrence_id'] ?? $remoteId);
+        }
+
+        return $normalisedSourceAbbr . ':' . $remoteId;
+    }
+
+    /**
+     * Skip updates to iRecord-owned records when processing NBN fallback data.
+     *
+     * @param array<string, mixed>      $record
+     * @param array<string, mixed>|null $existing
+     */
+    private function shouldSkipIrecordOwnedNbnUpdate(string $sourceAbbr, array $record, ?array $existing): bool
+    {
+        if (strtoupper($sourceAbbr) !== 'NBN' || $existing === null) {
+            return false;
+        }
+
+        $remoteId = trim((string) ($record['remote_id'] ?? ''));
+
+        if (! $this->isIrecordOriginNbnRecord($record, $remoteId)) {
+            return false;
+        }
+
+        $irecDataSourceId = $this->resolveDataSourceIdByAbbr('IREC');
+
+        if ($irecDataSourceId === null) {
+            return false;
+        }
+
+        return (int) ($existing['data_source_id'] ?? 0) === $irecDataSourceId;
+    }
+
+    /**
+     * Determine whether the NBN record represents an iRecord-origin occurrence.
+     *
+     * @param array<string, mixed> $record
+     */
+    private function isIrecordOriginNbnRecord(array $record, string $remoteId): bool
+    {
+        if ($remoteId === '' || ! ctype_digit($remoteId)) {
+            return false;
+        }
+
+        $provider = trim((string) ($record['data_provider_name'] ?? ''));
+
+        if ($provider !== 'Biological Records Centre') {
+            return false;
+        }
+
+        $sourceName = trim((string) ($record['source_name'] ?? ''));
+
+        return $sourceName !== '' && stripos($sourceName, 'iRecord') !== false;
+    }
+
+    private function resolveDataSourceIdByAbbr(string $abbr): ?int
+    {
+        try {
+            $row = db_connect()
+                ->table('data_sources')
+                ->select('id')
+                ->where('abbr', strtoupper($abbr))
+                ->get()
+                ->getRowArray();
+        } catch (Throwable) {
+            return null;
+        }
+
+        if (! is_array($row) || ! isset($row['id'])) {
+            return null;
+        }
+
+        return (int) $row['id'];
     }
 
     /**

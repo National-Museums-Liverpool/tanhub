@@ -6,6 +6,54 @@
 
 ### NBN Atlas
 
+Occurrence imports from NBN Atlas use the records web service search endpoint:
+
+- `https://records-ws.nbnatlas.org/occurrences/search`
+
+Requests use `q=*:*`, paged by `start` and `pageSize`, with filters built from import
+configuration:
+
+- geographic regions are applied as a `cl254` filter from `import.geographicRegions`
+- the minimum NBN rank is applied as `taxonRankID:[<minimum> TO *]` from
+  `import.nbnMinTaxonRankId`
+- optional custom NBN clauses are appended from `import.nbnApiFilterQuery`
+
+`import.taxonRanks` controls the taxonomic hierarchy columns available in the local database and
+does not itself create an NBN API filter. `import.nbnMinTaxonRankId` controls the lower rank bound
+for NBN records.
+
+`import.nbnApiFilterQuery` accepts either a single fq clause such as:
+
+- `kingdom:Animalia`
+
+or an API-style repeated fq fragment such as:
+
+- `fq=kingdom:Animalia&fq=-phylum:Chordata&fq=-order:Lepidoptera`
+
+NBN records with unresolved assertions are excluded server-side using:
+
+- `-(user_assertions:"50005" OR user_assertions:"50006" OR user_assertions:"50001")`
+
+Taxonomy identifiers are mapped as follows:
+
+- `taxonConceptID` -> `taxa.scientific_name_identifier`
+- `taxonConceptID` -> `taxon_names.given_name_identifier`
+
+`taxonConceptID` is not matched to `taxa.taxon_identifier`, which stores the UKSI
+`organism_key`.
+
+For standard NBN records, `occurrenceID` is used when present; otherwise `uuid` is used. The
+selected identifier builds the `NBN:<identifier>` unique key.
+
+Special iRecord ownership rule for NBN payloads:
+
+- if `occurrenceID` is integer-only, `dataProviderName` is exactly `Biological Records
+  Centre`, and `dataResourceName` contains `iRecord` (case-insensitive), then the canonical
+  occurrence key is `IREC:<occurrenceID>`
+- NBN import inserts or updates this fallback row while its `data_source_id` is NBN
+- once iRecord import upserts the same key and sets `data_source_id` to IREC, later NBN copies
+  are skipped
+
 ### Indicia occurrences API
 
 Occurrence imports from Indicia are fetched from a warehouse REST API endpoint
@@ -31,9 +79,15 @@ using the same configuration used elsewhere in import:
 By default, the Indicia occurrence checkpoint uses `metadata.tracking` so
 incremental loads can resume deterministically.
 
-Note that data from iRecord should not be imported, as it will be a duplicate
-and the iRecord copy should be more recent. So, any records with
-dataReourceName contains 'iRecord' will be ignored.
+NBN occurrence checkpoints use the Atlas `start` offset. The last checkpoint is stored in
+`import_offsets.next_checkpoint` using the source key `nbn-occurrences:occurrences`, and the next
+run resumes from that value. A new NBN source starts at `0`. Use `--since` to override the stored
+checkpoint for one run. Both NBN and Indicia occurrence checkpoints are written only for
+non-dry-run imports.
+
+Note that data from iRecord should not be imported from Indicia, as it will be a duplicate and the
+iRecord copy should be more recent. Records whose `dataResourceName` contains `iRecord` are
+ignored.
 
 ## Running the imports using the admin user interface
 
@@ -76,8 +130,35 @@ automation or running imports via Cron.
 
 ### Initial Indicia setup
 
-Empty the import_offsets table if refreshing the import. Repeat each command
-until it returns "Has more: no".
+For a new installation, run the automatic task repeatedly. Each invocation runs
+one bounded import batch or one report-stat task, then the next invocation selects
+the next task from the current progress state:
+
+```bash
+$ php spark import:auto
+```
+
+The automatic task uses this order until the initial imports are complete:
+
+1. recording schemes
+2. geographic regions
+3. grid square stats
+4. taxon groups
+5. taxon ranks
+6. taxa
+7. taxon names
+
+After the initial imports, a report-stat task is selected when its last successful
+run is more than two hours old. The least recently run stale report-stat task wins.
+When all report-stat tasks are current, the least recently run occurrence source is
+selected between Indicia and NBN. A task with no successful run is treated as the
+oldest task.
+
+If refreshing an import from the beginning, use the appropriate `--since=0` or `--offset=0`
+override and clear the relevant `import_offsets` rows. Existing `import_runs` history may provide
+backward-compatible occurrence checkpoints when no offset row exists, so use the explicit
+override when restarting a source deliberately.
+The individual commands remain available for targeted imports and troubleshooting:
 
 ```bash
 $ php spark import:indicia --source indicia --entity recording_schemes
@@ -89,6 +170,8 @@ $ php spark import:indicia --source indicia --entity taxa
 $ php spark import:indicia --source indicia --entity taxon_names
 ```
 
+Repeat an individual command until it returns `Has more: no`.
+
 Mandatory parameters:
 - `--source indicia` to specify the type of server that will provide import
   data. Currently only supports indicia.
@@ -99,6 +182,10 @@ Optional parameters:
 - `--dry-run` to fetch data but not load it into tanhub.
 - `--limit n` to override the default limit of 5000 records per fetch.
 - `--offset n` to override the offset
+
+The default entity-import limit is configured by `Config\Import.defaultLimit` and defaults to
+`5000`. Entity imports store their numeric progress in `import_offsets.next_offset` using keys such
+as `indicia-taxonomy:taxa`.
 
 ### Occurrence imports
 
@@ -112,15 +199,26 @@ $ php spark import:occurrences --source nbn --page-size 500 --limit 5000
 Occurrence checkpoints are tracked in `import_offsets` using source keys in the form
 `<source>-occurrences:occurrences` (for example `indicia-occurrences:occurrences`).
 
+The stored occurrence checkpoint is in `import_offsets.next_checkpoint`. Indicia uses the source
+record checkpoint (`metadata.tracking` by default), while NBN uses the Atlas numeric `start` offset.
+Successful, failed, and interrupted non-dry-run imports preserve the latest checkpoint so a later
+run can continue from the last processed point. Completion is tracked separately in
+`import_offsets.is_complete`.
+
 Optional parameters:
 
 - `--dry-run` fetch and validate records without writing to `occurrences`.
 - `--since` override source checkpoint for a run.
 
-Occurrences with a low geospatial precision are not imported, the default is to drop occurrences
-with coordinate uncertainty greater than 10,000m. This can be configured by setting
-`Config\Import.maximumCoordinateUncertaintyInMeters` in `.env`. It can be set to `0` to disable the
-restriction.
+The occurrence defaults are `Config\Import.defaultLimit = 5000`,
+`Config\Import.defaultPageSize = 200`, and `Config\Import.httpTimeout = 30` seconds. The command
+options override these values for the current run only.
+
+Occurrences with low geospatial precision are not imported. The default is to drop occurrences
+with coordinate uncertainty greater than `10,000` metres. This can be configured with
+`Config\Import.maximumCoordinateUncertaintyInMeters` in `.env`; set it to `0` to disable the
+restriction. The setting is applied to the Indicia occurrence request. Coordinate-based
+grid-reference generation uses each record's own uncertainty value.
 
 #### Grid reference handling for occurrence imports
 
@@ -457,8 +555,9 @@ distinct count of `taxa.species_id` values linked by `occurrences.taxon_id`.
 has `<= 100` active gridded records across the full dataset and each occurrence
 contributes `100 / total_records_for_species` to its square and region.
 
-Configure the taxon groups that will be imported in your `env` file's
-`import.taxonRanks` setting.
+Configure the taxon groups that will be imported in your `env` file's `import.taxonGroups`
+setting. Configure the reporting hierarchy separately with `import.taxonRanks`; it must include
+`Species`.
 
 The importer is designed to stop on an error, allowing you to diagnose, fix
 then restart the process from where it left off.

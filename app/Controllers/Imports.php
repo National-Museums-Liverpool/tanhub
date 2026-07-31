@@ -91,8 +91,8 @@ class Imports extends BaseController
             'category' => 'Occurrences',
             'label' => 'occurrences',
             'source' => 'nbn',
-            'kind' => 'unsupported',
-            'supports_run' => false,
+            'kind' => 'occurrence',
+            'supports_run' => true,
         ],
         'derived-stats:taxon_stats' => [
             'category' => 'Report stats',
@@ -309,34 +309,10 @@ class Imports extends BaseController
      */
     private function summarizeTaskResult(array $state, array $result): string
     {
-        $status = strtolower((string) ($result['status'] ?? 'success'));
-        // Convert the result key/value pairs to a list for the summary message.
-        $summaryParts = [];
-        $keysToInclude = ['fetched', 'processed', 'inserted', 'updated', 'not changed', 'skipped', 'errors'];
-        foreach ($result as $key => $value) {
-            if (is_scalar($value) && in_array($key, $keysToInclude)) {
-                $summaryParts[] = $key . ': ' . (string) $value;
-            }
-        }
-
-        $summary = sprintf(
-            'Task %s finished with status %s.',
+        return service('importTaskSummaryFormatter')->format(
             (string) ($state['label'] ?? 'unknown'),
-            $status
+            $result,
         );
-        if (count($summaryParts) > 0) {
-            $summary .= ' ' . ucfirst(implode(', ', $summaryParts)) . '.';
-        }
-
-        if (($result['errors'] ?? 0) > 0) {
-            return $summary . ' Import stopped early because some records failed.';
-        }
-
-        if (($result['skipped'] ?? 0) > 0) {
-            return $summary . ' Some records were skipped; review the import logs if this was unexpected.';
-        }
-
-        return $summary;
     }
 
     /**
@@ -567,60 +543,11 @@ class Imports extends BaseController
     private function runDerivedTask(array $state): array
     {
         $serviceName = trim((string) ($state['service'] ?? ''));
-
-        if ($serviceName === '') {
-            throw new RuntimeException('Derived task service is missing.');
-        }
-
         $sourceKey = (string) ($state['source_key'] ?? '');
 
-        if ($sourceKey === '') {
-            throw new RuntimeException('Derived task source key is missing.');
-        }
+        /** @var \App\Services\Import\DerivedImportRunner $runner */
+        $runner = service('derivedImportRunner');
 
-        /** @var ImportRunModel $importRunModel */
-        $importRunModel = model(ImportRunModel::class);
-
-        $runId = (int) $importRunModel->insert([
-            'source_key' => $sourceKey,
-            'source_abbr' => 'LOCAL',
-            'status' => 'running',
-            'checkpoint' => null,
-            'started_at' => date('Y-m-d H:i:s'),
-        ]);
-
-        try {
-            $service = service($serviceName);
-            $result = $service->run(false);
-            $status = strtolower((string) ($result['status'] ?? 'success')) === 'success' ? 'success' : 'failed';
-            $fetched = (int) ($result['fetched'] ?? $result['processed'] ?? 0);
-            $summary = $this->summarizeTaskResult($state, $result);
-
-            $importRunModel->update($runId, [
-                'status' => $status,
-                'checkpoint' => null,
-                'fetched_count' => $fetched,
-                'inserted_count' => (int) ($result['inserted'] ?? 0),
-                'updated_count' => (int) ($result['updated'] ?? 0),
-                'skipped_count' => (int) ($result['skipped'] ?? 0),
-                'error_count' => (int) ($result['errors'] ?? 0),
-                'message' => $summary,
-                'finished_at' => date('Y-m-d H:i:s'),
-            ]);
-
-            $result['run_id'] = $runId;
-
-            return $result;
-        } catch (Throwable $exception) {
-            $importRunModel->update($runId, [
-                'status' => 'failed',
-                'checkpoint' => null,
-                'error_count' => 1,
-                'message' => $exception->getMessage(),
-                'finished_at' => date('Y-m-d H:i:s'),
-            ]);
-
-            throw $exception;
-        }
+        return $runner->run($sourceKey, $serviceName);
     }
 }

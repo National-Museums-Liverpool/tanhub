@@ -125,6 +125,15 @@ Config\Import.nbnUrl = ''
 
 # Uncomment to alter the geographic regions to import data for. They will be
 # loaded from Indicia's locations table.
-# import.geographicRegions = 'Cheshire,South Lancashire,West Lancashire';
-# import.geographicRegionLocationType = 'Vice County';
+# import.geographicRegions = 'Cheshire,South Lancashire,West Lancashire'
+# import.geographicRegionLocationType = 'Vice County'
+
+# Uncomment to changed default limit which is genus or lower.
+# import.indiciaMinTaxonRankSortOrder = 230
+# import.nbnMinTaxonRankId = 6000
+
+# Optional NBN Atlas occurrence fq clauses. Provide either a single clause or repeated fq
+# parameters joined with &. The following example includes animals, excludes chordates and
+# lepidoptera and limits the rank to genus or lower.
+# import.nbnApiFilterQuery = 'fq=kingdom:Animalia&fq=-phylum:Chordata&fq=-order:Lepidoptera'
 

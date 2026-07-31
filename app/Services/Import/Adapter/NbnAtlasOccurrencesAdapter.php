@@ -31,17 +31,10 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             throw new RuntimeException('NBN endpoint is not configured. Set import.nbn.endpoint.');
         }
 
-        $query = (array) ($this->config['query'] ?? []);
-        $query['limit'] = $limit;
-
-        $checkpointParam = (string) ($this->config['checkpoint_param'] ?? 'since');
-
-        if ($checkpoint !== null && $checkpoint !== '') {
-            $query[$checkpointParam] = $checkpoint;
-        }
-
-        $response = $this->client->get($endpoint, [
-            'query' => $query,
+        $query = $this->buildQuery($checkpoint, $limit);
+        $requestUrl = $this->buildRequestUrl($endpoint, $query);
+        log_message('debug', 'NBN request URL: ' . $requestUrl);
+        $response = $this->client->get($requestUrl, [
             'http_errors' => false,
             'timeout' => $this->timeout,
         ]);
@@ -58,27 +51,136 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
 
         $records = $this->extractRecords($payload);
         $normalized = [];
-        $lastCheckpointValue = $checkpoint;
-        $checkpointField = (string) ($this->config['checkpoint_field'] ?? 'lastModified');
+        $startIndex = $this->intFromAny([
+            $payload['startIndex'] ?? null,
+            $payload['start'] ?? null,
+            $query['start'] ?? null,
+        ]) ?? 0;
+        $pageSize = $this->intFromAny([
+            $payload['pageSize'] ?? null,
+            $query['pageSize'] ?? null,
+            $limit,
+        ]) ?? max(1, $limit);
+        $nextOffset = $startIndex + count($records);
+        $totalRecords = $this->intFromAny([$payload['totalRecords'] ?? null]);
 
         foreach ($records as $record) {
             if (! is_array($record)) {
                 continue;
             }
 
-            $normalizedRecord = $this->normalizeRecord($record);
-
-            if (isset($record[$checkpointField]) && is_scalar($record[$checkpointField])) {
-                $lastCheckpointValue = (string) $record[$checkpointField];
-                $normalizedRecord['_checkpoint'] = $lastCheckpointValue;
-            }
-
-            $normalized[] = $normalizedRecord;
+            $normalized[] = $this->normalizeRecord($record);
         }
 
-        $hasMore = count($records) >= $limit;
+        $hasMore = count($records) >= $pageSize;
 
-        return new ImportPage($normalized, $lastCheckpointValue, $hasMore);
+        if ($totalRecords !== null) {
+            $hasMore = $nextOffset < $totalRecords;
+        }
+
+        $nextCheckpoint = (string) $nextOffset;
+
+        return new ImportPage($normalized, $nextCheckpoint, $hasMore);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildQuery(?string $checkpoint, int $limit): array
+    {
+        $query = (array) ($this->config['query'] ?? []);
+        $query['q'] = trim((string) ($query['q'] ?? '*:*'));
+        $query['pageSize'] = max(1, $limit);
+        $query['sort'] = 'occurrenceID';
+        $query['start'] = $this->normaliseStartCheckpoint($checkpoint);
+
+        $filters = [];
+        $regionFilter = $this->buildOrFilter('cl254', $this->normalisedListValues($this->config['geographic_regions'] ?? []));
+
+        if ($regionFilter !== null) {
+            $filters[] = $regionFilter;
+        }
+
+        if ($this->config['min_taxon_rank_id'] ?? null) {
+            $filters[] = 'taxonRankID:[' . (int) $this->config['min_taxon_rank_id'] . ' TO *]';
+        }
+
+        foreach ($this->configuredNbnFqClauses() as $configuredClause) {
+            $filters[] = $configuredClause;
+        }
+
+        $filters[] = '-(user_assertions:"50005" OR user_assertions:"50006" OR user_assertions:"50001")';
+        $query['fq'] = implode('&fq=', $filters);
+
+        return $query;
+    }
+
+    /**
+     * Build a URL with each NBN fq filter represented as its own parameter.
+     *
+     * @param string               $endpoint NBN API endpoint.
+     * @param array<string, mixed> $query    Request query values.
+     *
+     * @return string Request URL.
+     */
+    private function buildRequestUrl(string $endpoint, array $query): string
+    {
+        $filterString = (string) ($query['fq'] ?? '');
+        unset($query['fq']);
+
+        $queryString = http_build_query($query);
+        $filters = explode('&fq=', $filterString);
+
+        foreach ($filters as $filter) {
+            if (trim($filter) === '') {
+                continue;
+            }
+
+            $queryString .= ($queryString === '' ? '' : '&') . 'fq=' . rawurlencode($filter);
+        }
+
+        return $endpoint . (str_contains($endpoint, '?') ? '&' : '?') . $queryString;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function configuredNbnFqClauses(): array
+    {
+        $configured = trim((string) ($this->config['nbn_filter_query'] ?? $this->config['filter_query'] ?? ''));
+
+        if ($configured === '') {
+            return [];
+        }
+
+        // Accept either a full query-fragment (fq=...&fq=...) or a single raw fq clause.
+        if (! str_contains($configured, '&') && ! str_starts_with($configured, 'fq=')) {
+            return [$configured];
+        }
+
+        $clauses = [];
+
+        foreach (explode('&', $configured) as $part) {
+            $segment = trim($part);
+
+            if ($segment === '') {
+                continue;
+            }
+
+            if (str_starts_with($segment, 'fq=')) {
+                $segment = substr($segment, 3);
+            }
+
+            $segment = trim(urldecode($segment));
+
+            if ($segment === '') {
+                continue;
+            }
+
+            $clauses[] = $segment;
+        }
+
+        return array_values(array_unique($clauses));
     }
 
     /**
@@ -132,11 +234,25 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             $gridRef2km = strtoupper(substr(str_replace(' ', '', $gridRef), 0, 5));
         }
 
+        $remoteId = trim((string) ($record['uuid'] ?? ''));
+
+        if ($remoteId === '') {
+            $remoteId = trim((string) ($record['uuid'] ?? ''));
+        }
+
+        $taxonConceptId = trim((string) ($record['taxonConceptID'] ?? $record['taxonConceptId'] ?? ''));
+
+        if ($taxonConceptId === '') {
+            $taxonConceptId = trim((string) ($record['scientificNameID'] ?? ''));
+        }
+
         return [
-            'remote_id' => (string) ($record['occurrenceID'] ?? ''),
+            'remote_id' => $remoteId,
+            'occurrence_id' => trim((string) ($record['occurrenceID'] ?? '')),
             'source_name' => (string) ($record['dataResourceName'] ?? $record['source_name'] ?? 'NBN Atlas'),
-            'taxon_identifier' => (string) ($record['taxon_identifier'] ?? $record['taxonID'] ?? ''),
-            'given_name_identifier' => (string) ($record['given_name_identifier'] ?? $record['scientificNameID'] ?? ''),
+            'data_provider_name' => (string) ($record['dataProviderName'] ?? $record['data_provider_name'] ?? ''),
+            'scientific_name_identifier' => $taxonConceptId,
+            'given_name_identifier' => $taxonConceptId,
             'from_date' => $record['from_date'] ?? $record['eventDate'] ?? null,
             'to_date' => $record['to_date'] ?? null,
             'grid_ref' => $gridRef,
@@ -145,7 +261,7 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             'locality' => $record['locality'] ?? null,
             'recorded_by' => $record['recorded_by'] ?? $record['recordedBy'] ?? null,
             'identified_by' => $record['identified_by'] ?? $record['identifiedBy'] ?? null,
-            'identification_verification_status' => $record['identification_verification_status'] ?? 'UN',
+            'identification_verification_status' => $record['identification_verification_status'] ?? $record['identificationVerificationStatus'] ?? 'UN',
             'sex' => $record['sex'] ?? null,
             'life_stage' => $record['life_stage'] ?? null,
             'organism_quantity' => $record['organism_quantity'] ?? null,
@@ -155,6 +271,91 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             'blocked' => (bool) ($record['blocked'] ?? false),
             'blocked_reason' => $record['blocked_reason'] ?? null,
         ];
+    }
+
+    /**
+     * @param array<int, string> $values
+     */
+    private function buildOrFilter(string $field, array $values): ?string
+    {
+        if ($values === []) {
+            return null;
+        }
+
+        $escapedValues = array_map(fn (string $value): string => '"' . $this->escapeFilterValue($value) . '"', $values);
+
+        return $field . ':(' . implode(' OR ', $escapedValues) . ')';
+    }
+
+    private function escapeFilterValue(string $value): string
+    {
+        return str_replace(['\\', '"'], ['\\\\', '\\"'], $value);
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function normaliseStartCheckpoint($value): int
+    {
+        if (! is_scalar($value)) {
+            return 0;
+        }
+
+        $string = trim((string) $value);
+
+        if ($string === '' || ! ctype_digit($string)) {
+            return 0;
+        }
+
+        return max(0, (int) $string);
+    }
+
+    /**
+     * @param mixed $value
+     * @return array<int, string>
+     */
+    private function normalisedListValues($value): array
+    {
+        $values = is_array($value) ? $value : explode(',', (string) $value);
+        $normalised = [];
+
+        foreach ($values as $item) {
+            if (! is_scalar($item)) {
+                continue;
+            }
+
+            $string = trim((string) $item);
+
+            if ($string === '') {
+                continue;
+            }
+
+            $normalised[] = $string;
+        }
+
+        return array_values(array_unique($normalised));
+    }
+
+    /**
+     * @param array<int, mixed> $values
+     */
+    private function intFromAny(array $values): ?int
+    {
+        foreach ($values as $value) {
+            if (! is_scalar($value)) {
+                continue;
+            }
+
+            $string = trim((string) $value);
+
+            if ($string === '' || ! ctype_digit($string)) {
+                continue;
+            }
+
+            return (int) $string;
+        }
+
+        return null;
     }
 
     /**

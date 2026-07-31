@@ -138,6 +138,48 @@ class Services extends BaseService
     }
 
     /**
+     * Derived import task runner.
+     */
+    public static function derivedImportRunner(bool $getShared = true): \App\Services\Import\DerivedImportRunner
+    {
+        if ($getShared) {
+            return static::getSharedInstance('derivedImportRunner');
+        }
+
+        return new \App\Services\Import\DerivedImportRunner(
+            model(\App\Models\ImportRunModel::class),
+        );
+    }
+
+    /**
+     * Import task result summary formatter.
+     */
+    public static function importTaskSummaryFormatter(bool $getShared = true): \App\Services\Import\ImportTaskSummaryFormatter
+    {
+        if ($getShared) {
+            return static::getSharedInstance('importTaskSummaryFormatter');
+        }
+
+        return new \App\Services\Import\ImportTaskSummaryFormatter();
+    }
+
+    /**
+     * Automated import task selector and executor.
+     */
+    public static function autoImportService(bool $getShared = true): \App\Services\Import\AutoImportService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('autoImportService');
+        }
+
+        return new \App\Services\Import\AutoImportService(
+            model(\App\Models\ImportOffsetModel::class),
+            model(\App\Models\ImportRunModel::class),
+            static::derivedImportRunner(false),
+        );
+    }
+
+    /**
      * Geographic regions to occurrences assignment service.
      */
     public static function geographicRegionsOccurrenceImportService(bool $getShared = true): \App\Services\Import\Persistence\GeographicRegionsOccurrenceImportService

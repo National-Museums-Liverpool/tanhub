@@ -260,6 +260,7 @@ final class OccurrenceImportServiceTest extends CIUnitTestCase
         $counts = $service->import([
             [
                 'remote_id' => '123',
+                'occurrence_id' => '123',
                 'scientific_name_identifier' => 'TVK-1',
                 'given_name_identifier' => 'TVK-1',
                 'source_name' => 'iRecord Bats',
@@ -298,6 +299,7 @@ final class OccurrenceImportServiceTest extends CIUnitTestCase
         $counts = $service->import([
             [
                 'remote_id' => '123',
+                'occurrence_id' => '123',
                 'scientific_name_identifier' => 'TVK-1',
                 'given_name_identifier' => 'TVK-1',
                 'source_name' => 'iRecord Mammals',
@@ -338,6 +340,7 @@ final class OccurrenceImportServiceTest extends CIUnitTestCase
         $counts = $service->import([
             [
                 'remote_id' => '123',
+                'occurrence_id' => '123',
                 'scientific_name_identifier' => 'TVK-1',
                 'given_name_identifier' => 'TVK-1',
                 'source_name' => 'iRecord Mammals',

@@ -236,10 +236,6 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
 
         $remoteId = trim((string) ($record['uuid'] ?? ''));
 
-        if ($remoteId === '') {
-            $remoteId = trim((string) ($record['uuid'] ?? ''));
-        }
-
         $taxonConceptId = trim((string) ($record['taxonConceptID'] ?? $record['taxonConceptId'] ?? ''));
 
         if ($taxonConceptId === '') {

@@ -37,6 +37,7 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
             'totalRecords' => 200,
             'occurrences' => [
                 [
+                    'uuid' => 'nbn-uuid-1',
                     'occurrenceID' => 'occ-1',
                     'taxonConceptID' => 'NHMSYS0001',
                     'eventDate' => '2024-05-01',
@@ -96,7 +97,8 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         $this->assertSame('26', $page->nextCheckpoint);
 
         $record = $page->records[0];
-        $this->assertSame('occ-1', $record['remote_id']);
+        $this->assertSame('nbn-uuid-1', $record['remote_id']);
+        $this->assertSame('occ-1', $record['occurrence_id']);
         $this->assertSame('NHMSYS0001', $record['scientific_name_identifier']);
         $this->assertSame('NHMSYS0001', $record['given_name_identifier']);
         $this->assertSame('Biological Records Centre', $record['data_provider_name']);

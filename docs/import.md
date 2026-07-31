@@ -42,8 +42,8 @@ Taxonomy identifiers are mapped as follows:
 `taxonConceptID` is not matched to `taxa.taxon_identifier`, which stores the UKSI
 `organism_key`.
 
-For standard NBN records, `occurrenceID` is used when present; otherwise `uuid` is used. The
-selected identifier builds the `NBN:<identifier>` unique key.
+For standard NBN records, `uuid` builds the `NBN:<uuid>` unique key. The NBN `occurrenceID` is
+stored separately as `occurrence_id` and is used for the iRecord ownership rule below.
 
 Special iRecord ownership rule for NBN payloads:
 

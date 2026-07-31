@@ -261,8 +261,8 @@ class OccurrenceImportService
     {
         $normalisedSourceAbbr = strtoupper($sourceAbbr);
 
-        if ($normalisedSourceAbbr === 'NBN' && $this->isIrecordOriginNbnRecord($record, $remoteId)) {
-            return 'IREC:' . ($record['occurrence_id'] ?? $remoteId);
+        if ($normalisedSourceAbbr === 'NBN' && $this->isIrecordOriginNbnRecord($record)) {
+            return 'IREC:' . trim((string) $record['occurrence_id']);
         }
 
         return $normalisedSourceAbbr . ':' . $remoteId;
@@ -280,9 +280,7 @@ class OccurrenceImportService
             return false;
         }
 
-        $remoteId = trim((string) ($record['remote_id'] ?? ''));
-
-        if (! $this->isIrecordOriginNbnRecord($record, $remoteId)) {
+        if (! $this->isIrecordOriginNbnRecord($record)) {
             return false;
         }
 
@@ -300,9 +298,11 @@ class OccurrenceImportService
      *
      * @param array<string, mixed> $record
      */
-    private function isIrecordOriginNbnRecord(array $record, string $remoteId): bool
+    private function isIrecordOriginNbnRecord(array $record): bool
     {
-        if ($remoteId === '' || ! ctype_digit($remoteId)) {
+        $occurrenceId = trim((string) ($record['occurrence_id'] ?? ''));
+
+        if ($occurrenceId === '' || ! ctype_digit($occurrenceId)) {
             return false;
         }
 

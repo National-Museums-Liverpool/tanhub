@@ -207,7 +207,7 @@ class Occurrences extends ApiResourceController
             ->where('o.blocked = 0', null, false);
 
         if ($this->hasInclude($includes, 'data-source')) {
-            $builder->join('data_sources ds', 'ds.id = o.data_source_id AND ds.deleted_at IS NULL', 'left');
+            $builder->join('data_sources ds', 'ds.id = o.data_source_id', 'left');
         }
 
         if ($this->hasInclude($includes, 'grid-square-stats')) {

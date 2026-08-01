@@ -173,6 +173,7 @@ class Imports extends BaseController
      */
     public function index(): string
     {
+        $this->recoverStaleTasks(model(ImportTaskQueueModel::class));
         $taskStates = $this->buildTaskStates();
 
         return $this->renderPage('imports/index', [

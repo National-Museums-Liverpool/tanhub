@@ -164,6 +164,60 @@ final class ImportsPageTest extends CIUnitTestCase
         $this->assertNull($queueRow);
     }
 
+    public function testRunRecoversStaleRunningOccurrenceTask(): void
+    {
+        $this->markTaxonomyDependenciesComplete();
+
+        $db = db_connect();
+        $runId = $db->table('import_runs')->insert([
+            'source_key' => 'indicia-occurrences:occurrences',
+            'source_abbr' => 'IREC',
+            'status' => 'running',
+            'checkpoint' => 'tracking-123',
+            'started_at' => date('Y-m-d H:i:s', time() - 7200),
+        ], true);
+        $db->table('import_task_queue')->insert([
+            'source_key' => 'indicia-occurrences:occurrences',
+            'run_id' => $runId,
+            'status' => 'running',
+            'started_at' => date('Y-m-d H:i:s', time() - 7200),
+        ]);
+
+        $mock = $this->createMock(ImportOrchestrator::class);
+        $mock->expects($this->once())
+            ->method('run')
+            ->with('indicia', $this->greaterThan(0), $this->greaterThan(0), false, null)
+            ->willReturn([
+                'status' => 'success',
+                'run_id' => 103,
+                'fetched' => 0,
+                'inserted' => 0,
+                'updated' => 0,
+                'skipped' => 0,
+                'errors' => 0,
+            ]);
+
+        \Config\Services::injectMock('occurrenceImportOrchestrator', $mock);
+
+        $this->authenticateAs('imports-admin-recovery@example.com', 'admin');
+
+        $result = $this->post('imports/run', [
+            'source_key' => 'indicia-occurrences:occurrences',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirectTo(site_url('imports'));
+        $result->assertSessionHas('message');
+
+        $staleRun = $db->table('import_runs')->where('id', $runId)->get()->getRowArray();
+        $this->assertIsArray($staleRun);
+        $this->assertSame('failed', (string) $staleRun['status']);
+
+        $staleQueue = $db->table('import_task_queue')->where('run_id', $runId)->get()->getRowArray();
+        $this->assertIsArray($staleQueue);
+        $this->assertSame('failed', (string) $staleQueue['status']);
+    }
+
     public function testRunTaskWithSkippedRecordsShowsWarning(): void
     {
         $this->markTaxonomyDependenciesComplete();

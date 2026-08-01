@@ -25,6 +25,13 @@ class Import extends BaseConfig
      */
     public int $httpTimeout = 30;
 
+    /**
+     * Maximum age in seconds for a UI import task to remain running before recovery.
+     *
+     * @var int
+     */
+    public int $uiTaskStaleAfter = 3600;
+
     public string $indiciaWarehouseUrl = '';
 
     public string $indiciaProjId = '';
@@ -199,6 +206,10 @@ class Import extends BaseConfig
             if ($this->nbnApiFilterQuery !== '') {
                 log_message('info', 'Configured NBN API filter query overriden: ' . $this->nbnApiFilterQuery);
             }
+        }
+        $configuredUiTaskStaleAfter = $this->validateInt(env('import.uiTaskStaleAfter'));
+        if ($configuredUiTaskStaleAfter !== null && $configuredUiTaskStaleAfter > 0) {
+            $this->uiTaskStaleAfter = $configuredUiTaskStaleAfter;
         }
 
         $this->assertSpeciesRankConfigured();

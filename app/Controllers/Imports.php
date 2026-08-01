@@ -196,6 +196,7 @@ class Imports extends BaseController
         }
 
         $queueModel = model(ImportTaskQueueModel::class);
+        $this->recoverStaleTasks($queueModel);
 
         if (! $this->isTaskQueued($queueModel, $sourceKey)) {
             $queueModel->insert([
@@ -497,6 +498,55 @@ class Imports extends BaseController
     private function hasRunningTask(ImportTaskQueueModel $queueModel): bool
     {
         return $queueModel->where('status', 'running')->countAllResults() > 0;
+    }
+
+    /**
+     * Mark UI tasks abandoned by a timed-out request as failed so the queue can resume.
+     *
+     * @param ImportTaskQueueModel $queueModel Queue model.
+     *
+     * @return void
+     */
+    private function recoverStaleTasks(ImportTaskQueueModel $queueModel): void
+    {
+        $staleAfter = max(1, (int) config(ImportConfig::class)->uiTaskStaleAfter);
+        $staleBefore = date('Y-m-d H:i:s', time() - $staleAfter);
+        $staleTasks = $queueModel
+            ->where('status', 'running')
+            ->where('started_at <', $staleBefore)
+            ->findAll();
+
+        if ($staleTasks === []) {
+            return;
+        }
+
+        $importRunModel = model(ImportRunModel::class);
+        $finishedAt = date('Y-m-d H:i:s');
+
+        foreach ($staleTasks as $staleTask) {
+            $runId = (int) ($staleTask['run_id'] ?? 0);
+            $message = 'UI import task was recovered after exceeding the stale task timeout.';
+            $queueStatus = 'failed';
+
+            if ($runId > 0) {
+                $run = $importRunModel->find($runId);
+
+                if (is_array($run) && (string) ($run['status'] ?? '') === 'running') {
+                    $importRunModel->update($runId, [
+                        'status' => 'failed',
+                        'message' => $message,
+                        'finished_at' => $finishedAt,
+                    ]);
+                } elseif (is_array($run) && (string) ($run['status'] ?? '') === 'success') {
+                    $queueStatus = 'completed';
+                }
+            }
+
+            $queueModel->update((int) $staleTask['id'], [
+                'status' => $queueStatus,
+                'finished_at' => $finishedAt,
+            ]);
+        }
     }
 
     /**

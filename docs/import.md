@@ -123,6 +123,13 @@ any modification of the occurrence data using the `occurrences` imports.
 The admin Imports page queue is transient and shows only active tasks. For execution history,
 status, and run summaries, use the `import_runs` table.
 
+The admin page runs imports synchronously in the web request. For large Indicia occurrence imports,
+prefer `php spark import:occurrences --source indicia` or the scheduled `import:auto` command so
+the work is not limited by browser, PHP, or web-server request timeouts. If a UI request is
+terminated, the next UI task request recovers a `running` queue row older than
+`import.uiTaskStaleAfter` (one hour by default), marks its linked run failed, and retries from the
+persisted checkpoint. Set this value above the longest expected legitimate UI run.
+
 ## Running the import using CodeIgniter Spark commands
 
 You may prefer to use command-line Spark commands to run the import, which can be useful for script

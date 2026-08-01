@@ -5,7 +5,15 @@ namespace App\Controllers\Api\V1;
 use CodeIgniter\Database\BaseBuilder;
 
 /**
- * API endpoints for taxon stats.
+ * API endpoints for the `taxon_stats` resource (per-taxon, per-region occurrence aggregates).
+ *
+ * Serves `GET api/v1/taxon-stats` (list) and `GET api/v1/taxon-stats/{uuid}` (show); see
+ * {@see ApiResourceController} for the shared pagination/sort/filter behavior and
+ * {@see ApiController} for the public-read/rate-limit model that applies to all endpoints
+ * in this namespace. Every row is inner-joined to its owning {@see Taxa} row (blocked and
+ * soft-deleted taxa excluded) and left-joined to {@see GeographicRegions} for the region key
+ * column. Supports `?include=` expansions for `geographic-region`, `taxon` (base taxon
+ * fields, itself gating `parent-taxa`, `taxon-media`, `taxon-group`, and `taxon-rank`).
  */
 class TaxonStats extends ApiResourceController
 {
@@ -125,6 +133,11 @@ class TaxonStats extends ApiResourceController
 
     /**
      * Builds the base query used for the API.
+     *
+     * Inner-joins `taxa` (blocked/soft-deleted rows excluded) and left-joins
+     * `geographic_regions` (soft-deleted regions excluded) so the region key column is
+     * always available. Joins for `parent-taxa`, `taxon-group`, and `taxon-rank` are only
+     * added when the corresponding include is requested.
      *
      * @return object
      *   The query builder instance.

@@ -8,6 +8,9 @@ use Throwable;
 
 /**
  * Recomputes derived taxon rarity categories.
+ *
+ * Thin CLI wrapper around {@see \App\Services\Import\DerivedImportRunner}
+ * running the `derived-stats:taxon_rarity` task via the `taxonRarityService`.
  */
 class TaxonRarity extends BaseCommand
 {

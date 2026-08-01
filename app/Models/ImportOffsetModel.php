@@ -5,7 +5,14 @@ namespace App\Models;
 use CodeIgniter\Model;
 
 /**
- * Persistence model for import offsets by source key.
+ * Model for the `import_offsets` table.
+ *
+ * Tracks resumable-fetch progress per import source key (e.g.
+ * `indicia-taxonomy:taxa`), used by import orchestrators to resume paged or
+ * checkpoint-based fetches across runs, and by
+ * {@see \App\Controllers\Imports} to display/gate task status and
+ * dependency completion. One row exists per `source_key`, upserted lazily
+ * by the setter methods below.
  */
 class ImportOffsetModel extends Model
 {
@@ -25,6 +32,13 @@ class ImportOffsetModel extends Model
     protected $returnType = 'array';
 
     /**
+     * Mass-assignable columns.
+     *
+     * - `source_key`       Unique key identifying the import task/entity being tracked.
+     * - `next_offset`      Numeric offset/page to resume a paged fetch from.
+     * - `next_checkpoint`  Opaque checkpoint token to resume a token-based fetch from.
+     * - `is_complete`      1 once the source has been fully imported (no more pages/tokens).
+     *
      * @var array<int, string>
      */
     protected $allowedFields = [

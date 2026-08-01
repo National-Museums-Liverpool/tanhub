@@ -4,12 +4,37 @@ namespace App\Services\Import\Persistence;
 
 /**
  * Persists normalized grid square stats rows.
+ *
+ * Upserts each row into `grid_square_stats` keyed by the composite of
+ * `square` (2km OSGB grid reference) and `geographic_region_id`, the latter
+ * resolved by looking up `higher_geography_identifier` against
+ * `geographic_regions`. This populates only the static grid geometry; actual
+ * occurrence/species counts are computed later by
+ * {@see \App\Services\Stats\GridSquareStatsCountsService}.
  */
 class GridSquareStatsImportService implements EntityImportServiceInterface
 {
     /**
-     * @param array<int, array<string, mixed>> $rows
-     * @return array<string, int>
+     * Persist a batch of normalized grid square stats rows.
+     *
+     * Rows are skipped when required fields (`higher_geography_identifier`,
+     * `square`, easting/northing, or lat/lon) are missing, or when the
+     * `higher_geography_identifier` does not resolve to a known, non-deleted
+     * `geographic_regions` row (region lookups are cached per-batch by
+     * identifier). The upsert key is the pair (`square`, `geographic_region_id`);
+     * a deterministic UUID is derived from
+     * `higher_geography_identifier|square` via {@see self::stableUuid()} so
+     * re-imports produce the same row identity.
+     *
+     * @param array<int, array<string, mixed>> $rows   Normalized grid square rows.
+     *                                                  Expected keys: `higher_geography_identifier`,
+     *                                                  `square`, `centre_easting`, `centre_northing`,
+     *                                                  `centre_lat`, `centre_lon`, `partial`.
+     * @param bool                             $dryRun When true, compute counts without
+     *                                                  writing changes.
+     *
+     * @return array<string, int> Result counts: `fetched`, `processed`, `inserted`,
+     *                            `updated`, `skipped`, `errors`.
      */
     public function import(array $rows, bool $dryRun = false): array
     {
@@ -123,7 +148,11 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
     }
 
     /**
-     * @param mixed $value
+     * Coerce a scalar value into a trimmed nullable integer.
+     *
+     * @param mixed $value Raw value to coerce; non-numeric/non-scalar values become null.
+     *
+     * @return int|null Integer value, or null when empty/non-numeric.
      */
     private function nullableInt($value): ?int
     {
@@ -141,7 +170,14 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
     }
 
     /**
-     * @param mixed $value
+     * Coerce a scalar value into a trimmed decimal string for storage.
+     *
+     * Kept as a string (rather than float) to avoid floating-point rounding
+     * when writing to decimal database columns.
+     *
+     * @param mixed $value Raw value to coerce; non-scalar values become null.
+     *
+     * @return string|null Trimmed decimal string, or null when empty/non-scalar.
      */
     private function nullableDecimal($value): ?string
     {
@@ -155,7 +191,15 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
     }
 
     /**
-     * @param mixed $value
+     * Normalize a loosely-typed truthy/falsy value into a `0`/`1` flag.
+     *
+     * Accepts booleans, numeric values (`>0` is true), and common string
+     * representations (`1`, `true`, `t`, `yes`, `y`, case-insensitive).
+     * Anything else is treated as false.
+     *
+     * @param mixed $value Raw value to normalize.
+     *
+     * @return int `1` when truthy, otherwise `0`.
      */
     private function toFlag($value): int
     {
@@ -178,6 +222,17 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
         return 0;
     }
 
+    /**
+     * Build a deterministic UUID-like value from a seed string.
+     *
+     * Used so repeated imports of the same `higher_geography_identifier|square`
+     * combination generate the same `uuid`, keeping row identity stable
+     * across re-imports.
+     *
+     * @param string $seed Identifier seed, e.g. `<higher_geography_identifier>|<square>`.
+     *
+     * @return string Deterministic UUID-v4-shaped string derived from the seed.
+     */
     private function stableUuid(string $seed): string
     {
         $hex = md5($seed);

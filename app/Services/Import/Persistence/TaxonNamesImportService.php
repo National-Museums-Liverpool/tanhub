@@ -4,12 +4,33 @@ namespace App\Services\Import\Persistence;
 
 /**
  * Persists normalized taxon name rows.
+ *
+ * Upserts each row into `taxon_names` keyed by the composite of `taxon_id`
+ * (resolved from `taxon_identifier` via {@see \App\Models\TaxonModel}-backed
+ * lookup on the `taxa` table) and `given_name_identifier`.
  */
 class TaxonNamesImportService implements EntityImportServiceInterface
 {
     /**
-     * @param array<int, array<string, mixed>> $rows
-     * @return array<string, int>
+     * Persist a batch of normalized taxon name rows.
+     *
+     * Rows missing `taxon_identifier`, `given_name_identifier`, or `name`
+     * are skipped, as are rows whose `taxon_identifier` does not resolve to
+     * a known, non-deleted `taxa` row (the taxon lookup is built once up
+     * front via {@see self::prepareTaxonLookup()}). The upsert key is the
+     * pair (`taxon_id`, `given_name_identifier`); a deterministic UUID is
+     * derived from `taxon_identifier|given_name_identifier` via
+     * {@see self::stableUuid()} so re-imports produce the same row identity.
+     *
+     * @param array<int, array<string, mixed>> $rows   Normalized taxon name rows.
+     *                                                  Expected keys: `taxon_identifier`,
+     *                                                  `given_name_identifier`, `name`,
+     *                                                  `accepted`, `scientific`.
+     * @param bool                             $dryRun When true, compute counts without
+     *                                                  writing changes.
+     *
+     * @return array<string, int> Result counts: `fetched`, `processed`, `inserted`,
+     *                            `updated`, `skipped`, `errors`.
      */
     public function import(array $rows, bool $dryRun = false): array
     {
@@ -103,7 +124,12 @@ class TaxonNamesImportService implements EntityImportServiceInterface
     }
 
     /**
-     * @return array<string, int>
+     * Build an in-memory lookup of taxon primary keys by `taxon_identifier`.
+     *
+     * Loaded once per batch so each row can resolve its owning taxon without
+     * a per-row query.
+     *
+     * @return array<string, int> Map of `taxon_identifier` to `taxa.id`.
      */
     private function prepareTaxonLookup(): array
     {
@@ -124,7 +150,15 @@ class TaxonNamesImportService implements EntityImportServiceInterface
     }
 
     /**
-     * @param mixed $value
+     * Normalize a loosely-typed truthy/falsy value into a `0`/`1` flag.
+     *
+     * Accepts booleans, numeric values (`>0` is true), and common string
+     * representations (`1`, `true`, `t`, `yes`, `y`, case-insensitive).
+     * Anything else is treated as false.
+     *
+     * @param mixed $value Raw value to normalize.
+     *
+     * @return int `1` when truthy, otherwise `0`.
      */
     private function toFlag($value): int
     {
@@ -147,6 +181,17 @@ class TaxonNamesImportService implements EntityImportServiceInterface
         return 0;
     }
 
+    /**
+     * Build a deterministic UUID-like value from a seed string.
+     *
+     * Used so repeated imports of the same `taxon_identifier|given_name_identifier`
+     * combination generate the same `uuid`, keeping row identity stable
+     * across re-imports.
+     *
+     * @param string $seed Identifier seed, e.g. `<taxon_identifier>|<given_name_identifier>`.
+     *
+     * @return string Deterministic UUID-v4-shaped string derived from the seed.
+     */
     private function stableUuid(string $seed): string
     {
         $hex = md5($seed);

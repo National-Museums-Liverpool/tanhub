@@ -5,7 +5,13 @@ namespace App\Models;
 use CodeIgniter\Model;
 
 /**
- * Persistence model for taxon ranks.
+ * Model for the `taxon_ranks` table.
+ *
+ * Taxon ranks are the ordered taxonomic levels (e.g. kingdom, phylum, ...,
+ * species) configured via `Config\Import::$taxonRanks`. {@see TaxonModel}
+ * and {@see OccurrenceModel} each dynamically add one `<rank>_id` foreign
+ * key column per configured rank, so the row set here effectively drives
+ * part of the schema of those tables.
  */
 class TaxonRankModel extends Model
 {
@@ -30,6 +36,12 @@ class TaxonRankModel extends Model
     protected $useSoftDeletes = true;
 
     /**
+     * Mass-assignable columns.
+     *
+     * - `rank`       Rank name, matched against `Config\Import::$taxonRanks` entries.
+     * - `abbr`       Short display abbreviation for the rank.
+     * - `sort_order` Position of this rank in the taxonomic hierarchy (lower sorts first).
+     *
      * @var array<int, string>
      */
     protected $allowedFields = [

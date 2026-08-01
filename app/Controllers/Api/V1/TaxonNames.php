@@ -5,7 +5,16 @@ namespace App\Controllers\Api\V1;
 use CodeIgniter\Database\BaseBuilder;
 
 /**
- * API endpoints for taxon names.
+ * API endpoints for the `taxon_names` resource (synonyms/vernacular names for a taxon).
+ *
+ * Serves `GET api/v1/taxon-names` (list) and `GET api/v1/taxon-names/{uuid}` (show); see
+ * {@see ApiResourceController} for the shared pagination/sort/filter behavior and
+ * {@see ApiController} for the public-read/rate-limit model that applies to all endpoints
+ * in this namespace. Every row is inner-joined to its owning {@see Taxa} row (blocked and
+ * soft-deleted taxa excluded), so a taxon_name with no valid parent taxon is never returned.
+ * Supports `?include=` expansions for `parent-taxa`, `taxon` (base taxon fields), `taxon-media`
+ * (nested media hydrated post-query via {@see ApiResourceController::hydrateTaxonMedia()}),
+ * `taxon-group`, and `taxon-rank`.
  */
 class TaxonNames extends ApiResourceController
 {
@@ -63,7 +72,6 @@ class TaxonNames extends ApiResourceController
      */
     protected function getAllowedFields(array $includes = []): array
     {
-        // `uuid`, `taxon_identifier`, `name`, `scientific_name_identifier`, `accepted`, `scientific`
         $fields = [
             'uuid' => 'tn.uuid',
             'taxon_identifier' => 't.taxon_identifier',
@@ -108,6 +116,10 @@ class TaxonNames extends ApiResourceController
 
     /**
      * Builds the base query used for the API.
+     *
+     * Inner-joins `taxa` (blocked/soft-deleted rows excluded) so every returned taxon_name
+     * has a valid owning taxon. Joins for `parent-taxa`, `taxon-group`, and `taxon-rank` are
+     * only added when the corresponding include is requested.
      *
      * @return object
      *   The query builder instance.

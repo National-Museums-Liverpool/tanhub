@@ -5,7 +5,15 @@ namespace App\Controllers\Api\V1;
 use CodeIgniter\Database\BaseBuilder;
 
 /**
- * API endpoints for geographic regions.
+ * API endpoints for the `geographic_regions` resource.
+ *
+ * Serves `GET api/v1/geographic-regions` (list) and
+ * `GET api/v1/geographic-regions/{higher_geography_identifier}` (show); see
+ * {@see ApiResourceController} for the shared pagination/sort/filter behavior and
+ * {@see ApiController} for the public-read/rate-limit model that applies to all endpoints
+ * in this namespace. Supports an optional `?include=data-source` expansion that left-joins
+ * the originating {@see DataSources} row. Soft-deleted rows (`deleted_at IS NOT NULL`) are
+ * excluded from all queries.
  */
 class GeographicRegions extends ApiResourceController
 {
@@ -44,6 +52,9 @@ class GeographicRegions extends ApiResourceController
 
     /**
      * Builds the base query used for the API.
+     *
+     * Left-joins `data_sources` only when the `data-source` include is requested, so the
+     * join cost is only paid when the caller actually asked for those fields.
      *
      * @return object
      *   The query builder instance.

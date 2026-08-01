@@ -6,13 +6,30 @@ use RuntimeException;
 
 /**
  * Rebuilds geographic region memberships for imported occurrences.
+ *
+ * Unlike the other persistence services, this is not an incremental upsert:
+ * each non-dry-run invocation empties `geographic_regions_occurrences`
+ * entirely and reinserts every current active-occurrence-to-region
+ * assignment, so it must be re-run after any occurrence data changes.
  */
 class GeographicRegionsOccurrenceImportService
 {
     /**
      * Recompute all geographic region to occurrence links.
      *
-     * @return array<string, int|string>
+     * Determines membership for every occurrence with coordinates that is
+     * not soft-deleted or blocked, using database-native spatial predicates
+     * where available (see {@see self::buildAssignmentsWithSpatialSql()}) or
+     * a PHP point-in-polygon fallback for drivers without spatial support
+     * (see {@see self::buildAssignmentsInPhp()}). On a non-dry-run, the
+     * target table is truncated and repopulated in batches of 1000.
+     *
+     * @param bool $dryRun When true, compute the assignment count without
+     *                     truncating or writing to `geographic_regions_occurrences`.
+     *
+     * @return array<string, int|string> Result summary: `status` (`success`|`failed`),
+     *                                   `fetched`, `processed`, `inserted`, `updated`,
+     *                                   `skipped`, `errors`.
      */
     public function run(bool $dryRun = false): array
     {

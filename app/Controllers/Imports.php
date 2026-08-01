@@ -11,16 +11,39 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Admin page for import task status and execution.
+ * Admin controller for reviewing and running import tasks.
+ *
+ * Provides the imports dashboard (task list with per-task offset/status and
+ * the task queue) and the endpoint used to enqueue a task and drain the
+ * queue in FIFO order until a task is blocked, fails, or throws. The full
+ * task registry and dependency graph are declared as class constants; see
+ * {@see self::TASKS} and {@see self::DEPENDENCIES}.
  */
 class Imports extends BaseController
 {
     /**
+     * Queue row statuses that are considered "active" (not yet finished).
+     *
      * @var array<int, string>
      */
     private const ACTIVE_QUEUE_STATUSES = ['queued', 'running'];
 
     /**
+     * Registry of every import task that can be displayed and run from this page.
+     *
+     * Each entry is keyed by a unique source key (e.g. `indicia-taxonomy:taxa`)
+     * and describes how the task is presented and executed:
+     * - `category`     (string)      Group heading used on the imports page.
+     * - `label`        (string)      Human-readable task name.
+     * - `source`       (string|null) Data source passed to the orchestrator
+     *                                (`indicia`, `nbn`), or null for derived tasks.
+     * - `kind`         (string)      One of `entity`, `occurrence`, or `derived`;
+     *                                determines which orchestrator/service runs the task
+     *                                (see {@see self::runTask()}).
+     * - `entity`       (string)      Entity name; only present for `entity` kind tasks.
+     * - `service`      (string)      Service name; only present for `derived` kind tasks.
+     * - `supports_run` (bool)        Whether the "Run" action is currently implemented.
+     *
      * @var array<string, array<string, mixed>>
      */
     private const TASKS = [
@@ -129,6 +152,13 @@ class Imports extends BaseController
     ];
 
     /**
+     * Dependency graph for the tasks declared in {@see self::TASKS}.
+     *
+     * Each entry maps a source key to the source keys that must be complete
+     * (see {@see ImportOffsetModel::isComplete()}) before that task may run.
+     * Consumed by {@see self::buildTaskStates()} to populate each task's
+     * `blocked_by` list.
+     *
      * @var array<string, array<int, string>>
      */
     private const DEPENDENCIES = [
@@ -169,7 +199,13 @@ class Imports extends BaseController
     ];
 
     /**
-     * Show import task list, statuses, and queue.
+     * Render the imports dashboard.
+     *
+     * Recovers any stale (abandoned) running tasks, then builds the full
+     * task registry with each task's completion state and blocking
+     * dependencies, alongside the current task queue.
+     *
+     * @return string Rendered HTML for the imports page.
      */
     public function index(): string
     {
@@ -186,7 +222,17 @@ class Imports extends BaseController
     }
 
     /**
-     * Queue a task and process the queue in-order until blocked.
+     * Queue the requested task, then drain the queue in FIFO order.
+     *
+     * Reads `source_key` from the POST body and adds it to the queue if it
+     * is not already queued/running. If no task is currently running, the
+     * queue is then processed one task at a time: each queued task is run
+     * and removed from the queue, stopping as soon as a task is blocked by
+     * an incomplete dependency, fails, or throws. Info/warning/error
+     * messages accumulated while processing are flashed to the redirect.
+     *
+     * @return RedirectResponse Redirect back to the imports page with
+     *                          flashed status messages.
      */
     public function run(): RedirectResponse
     {
@@ -305,9 +351,10 @@ class Imports extends BaseController
     /**
      * Format a user-facing summary for a completed task run.
      *
-     * @param array<string, mixed> $state
-     * @param array<string, mixed> $result
-     * @return string
+     * @param array<string, mixed> $state  Task state as built by {@see self::buildTaskStates()}.
+     * @param array<string, mixed> $result Result returned by the orchestrator/service that ran the task.
+     *
+     * @return string Human-readable summary message.
      */
     private function summarizeTaskResult(array $state, array $result): string
     {
@@ -318,7 +365,17 @@ class Imports extends BaseController
     }
 
     /**
-     * @return array<string, array<string, mixed>>
+     * Build the current display state for every task in the registry.
+     *
+     * For each task in {@see self::TASKS}, resolves its stored offset
+     * (`is_complete`, `next_offset`, `next_checkpoint`), its current queue
+     * status, and which of its dependencies (if any) are not yet complete.
+     *
+     * @return array<string, array<string, mixed>> Task state keyed by source key; each
+     *                                              entry extends its {@see self::TASKS}
+     *                                              definition with `is_complete`,
+     *                                              `next_offset`, `next_checkpoint`,
+     *                                              `queue_status`, and `blocked_by`.
      */
     private function buildTaskStates(): array
     {
@@ -384,8 +441,18 @@ class Imports extends BaseController
     }
 
     /**
-     * @param array<string, mixed> $state
-     * @return array<string, mixed>
+     * Execute a single task and return its raw orchestrator/service result.
+     *
+     * Dispatches to the entity import orchestrator, the occurrence import
+     * orchestrator, or a derived stats service depending on the task's `kind`.
+     *
+     * @param array<string, mixed> $state Task state as built by {@see self::buildTaskStates()}.
+     *
+     * @return array<string, mixed> Result reported by the orchestrator/service; expected
+     *                              to include at least a `status` key (and typically
+     *                              `run_id` and `skipped`).
+     *
+     * @throws RuntimeException If the task's entity is missing, or its `kind` is not runnable.
      */
     private function runTask(array $state): array
     {
@@ -437,7 +504,7 @@ class Imports extends BaseController
     /**
      * Return active queued/running rows in queue order.
      *
-     * @return array<int, array<string, mixed>>
+     * @return array<int, array<string, mixed>> Queue rows ordered oldest first (FIFO).
      */
     private function taskQueueRows(): array
     {
@@ -453,7 +520,8 @@ class Imports extends BaseController
     /**
      * Return active queue status keyed by source key.
      *
-     * @return array<string, string>
+     * @return array<string, string> Queue `status` (`queued` or `running`) indexed by
+     *                               task source key.
      */
     private function queueStatusBySourceKey(): array
     {
@@ -477,9 +545,9 @@ class Imports extends BaseController
      * Determine whether a task is already queued or running.
      *
      * @param ImportTaskQueueModel $queueModel Queue model.
-     * @param string               $sourceKey Source key.
+     * @param string               $sourceKey  Task source key to check.
      *
-     * @return bool
+     * @return bool True if a queue row for this task already has an active status.
      */
     private function isTaskQueued(ImportTaskQueueModel $queueModel, string $sourceKey): bool
     {
@@ -494,7 +562,7 @@ class Imports extends BaseController
      *
      * @param ImportTaskQueueModel $queueModel Queue model.
      *
-     * @return bool
+     * @return bool True if at least one queue row has status `running`.
      */
     private function hasRunningTask(ImportTaskQueueModel $queueModel): bool
     {
@@ -502,7 +570,14 @@ class Imports extends BaseController
     }
 
     /**
-     * Mark UI tasks abandoned by a timed-out request as failed so the queue can resume.
+     * Recover queue rows stuck in "running" past the configured stale timeout.
+     *
+     * A UI request can be interrupted (e.g. by a browser timeout) after a
+     * task has started but before its queue row is updated. This finds any
+     * such rows older than `Config\Import::$uiTaskStaleAfter`, marks their
+     * linked import run as failed if it is still recorded as running, and
+     * updates the queue row to `failed` (or `completed` if the run had in
+     * fact succeeded) so the queue is not left permanently blocked.
      *
      * @param ImportTaskQueueModel $queueModel Queue model.
      *
@@ -555,7 +630,8 @@ class Imports extends BaseController
      *
      * @param ImportTaskQueueModel $queueModel Queue model.
      *
-     * @return array<string, mixed>|null
+     * @return array<string, mixed>|null The oldest row with status `queued`, or null if
+     *                                   the queue holds no queued rows.
      */
     private function nextQueuedTask(ImportTaskQueueModel $queueModel): ?array
     {
@@ -568,10 +644,11 @@ class Imports extends BaseController
     }
 
     /**
-     * Check whether an import run row exists.
+     * Check whether an import run row exists for the given ID.
      *
-     * @param int $runId
-     * @return bool
+     * @param int $runId Import run ID; values <= 0 are treated as non-existent.
+     *
+     * @return bool True if a matching `import_runs` row exists.
      */
     private function importRunExists(int $runId): bool
     {
@@ -586,10 +663,15 @@ class Imports extends BaseController
     }
 
     /**
-     * Execute a derived task and persist a matching import_runs row.
+     * Execute a derived stats task and persist a matching import_runs row.
      *
-     * @param array<string, mixed> $state
-     * @return array<string, mixed>
+     * Resolves the state's `service` name via {@see \App\Services\Import\DerivedImportRunner}.
+     *
+     * @param array<string, mixed> $state Task state as built by {@see self::buildTaskStates()};
+     *                                    must include `source_key` and `service`.
+     *
+     * @return array<string, mixed> Result reported by the derived service, including a
+     *                              `status` key.
      */
     private function runDerivedTask(array $state): array
     {

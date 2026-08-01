@@ -9,6 +9,13 @@ use CodeIgniter\HTTP\RedirectResponse;
 
 /**
  * Admin views for taxa and moderation controls.
+ *
+ * Combines read-only taxonomic data (imported via {@see \App\Services\Import})
+ * with two editable concerns layered on top: manager-level detail fields
+ * (rarity group, remarks) and admin-level moderation (blocked/blocked
+ * reason), plus taxon media upload/edit delegated to
+ * {@see \App\Services\TaxonMediaUploadService} and
+ * {@see \App\Services\TaxonMediaReadService}.
  */
 class Taxa extends BaseController
 {
@@ -66,9 +73,14 @@ class Taxa extends BaseController
 
     /**
      * Show taxon details with associated taxon names.
-        *
-        * @param int $id
-        * @return string
+     *
+     * Also resolves human-readable labels for classification foreign keys,
+     * loads associated media, and computes the current user's edit/moderate
+     * permissions for the view.
+     *
+     * @param int $id Taxon identifier.
+     * @return string Rendered HTML for the taxon details view.
+     * @throws PageNotFoundException If no taxon exists with the given ID.
      */
     public function details(int $id): string
     {
@@ -112,8 +124,16 @@ class Taxa extends BaseController
     /**
      * Upload media for the given taxon.
      *
-     * @param int $id
-     * @return RedirectResponse
+     * Requires `admin` or `manager` group membership. Validates the shared
+     * media metadata rules ({@see self::mediaMetadataRules()}) before
+     * delegating storage and variant generation to the
+     * `taxonMediaUploadService`. Upload/storage errors are logged and
+     * reported to the user as a generic failure message rather than exposing
+     * internal details.
+     *
+     * @param int $id Taxon identifier to attach the media to.
+     * @return RedirectResponse Redirect back to the taxon details page.
+     * @throws PageNotFoundException If no taxon exists with the given ID.
      */
     public function uploadMedia(int $id): RedirectResponse
     {
@@ -169,8 +189,14 @@ class Taxa extends BaseController
     /**
      * Update metadata for an existing media file on a taxon.
      *
-     * @param int $id
-     * @return RedirectResponse
+     * Requires `admin` or `manager` group membership and a `media_uuid`
+     * identifying which media record to update. Validation/lookup failures
+     * redirect back with the selected UUID preserved so the correct edit
+     * form re-opens with errors.
+     *
+     * @param int $id Taxon identifier that owns the media.
+     * @return RedirectResponse Redirect back to the taxon details page.
+     * @throws PageNotFoundException If no taxon exists with the given ID.
      */
     public function updateMedia(int $id): RedirectResponse
     {
@@ -243,6 +269,17 @@ class Taxa extends BaseController
 
     /**
      * Update admin moderation fields for a taxon.
+     *
+     * Which fields are accepted depends on the current user's role: managers
+     * (and admins) may update `rarity_group_name` and `taxon_remarks`;
+     * admins may additionally update `blocked`/`blocked_reason`. Only the
+     * fields actually present in the submitted data (and permitted for the
+     * user's role) are validated and written, so this single action serves
+     * both the details-edit and moderation forms.
+     *
+     * @param int $id Taxon identifier.
+     * @return RedirectResponse Redirect back to the taxon details page, or with validation errors.
+     * @throws PageNotFoundException If no taxon exists with the given ID.
      */
     public function update(int $id): RedirectResponse
     {
@@ -310,8 +347,15 @@ class Taxa extends BaseController
     }
 
     /**
-     * @param array<string, mixed> $taxon
-     * @return array<int, string>
+     * Determine the dynamic classification foreign-key columns for a taxon.
+     *
+     * The `taxa` table has a variable set of `*_id` columns representing
+     * higher classification levels (kingdom/phylum/class/etc.); this returns
+     * those column names while excluding the well-known FK columns that are
+     * handled separately ({@see self::referenceLabels()}).
+     *
+     * @param array<string, mixed> $taxon Taxon row, keyed by column name.
+     * @return array<int, string> Column names representing classification foreign keys.
      */
     private function classificationColumns(array $taxon): array
     {
@@ -339,8 +383,14 @@ class Taxa extends BaseController
     /**
      * Resolve reference labels for core FK fields and dynamic classification FK fields.
      *
-     * @param array<string, mixed> $taxon
-     * @return array<string, string>
+     * Looks up display labels for `taxon_rank_id`, `taxon_group_id`,
+     * `recording_scheme_id`, `rarity_category` (via the `Rarity` config's
+     * label map), and any dynamic classification columns identified by
+     * {@see self::classificationColumns()} (each resolved against `taxa`
+     * itself, since classification parents are other taxa rows).
+     *
+     * @param array<string, mixed> $taxon Taxon row, keyed by column name.
+     * @return array<string, string> Human-readable label keyed by the source column name.
      */
     private function referenceLabels(array $taxon): array
     {

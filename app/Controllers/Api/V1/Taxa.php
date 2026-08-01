@@ -5,7 +5,16 @@ namespace App\Controllers\Api\V1;
 use CodeIgniter\Database\BaseBuilder;
 
 /**
- * API endpoints for taxa.
+ * API endpoints for the `taxa` resource.
+ *
+ * Serves `GET api/v1/taxa` (list) and `GET api/v1/taxa/{taxon_identifier}` (show); see
+ * {@see ApiResourceController} for the shared pagination/sort/filter behavior and
+ * {@see ApiController} for the public-read/rate-limit model that applies to all endpoints
+ * in this namespace. Blocked (`blocked = 1`) and soft-deleted taxa are always excluded.
+ * Supports `?include=` expansions for `parent-taxa` (dynamic per-rank self-joins, see
+ * {@see ApiResourceController::dynamicRankAliases()}), `recording-scheme`, `taxon-media`
+ * (nested media hydrated post-query via {@see ApiResourceController::hydrateTaxonMedia()}),
+ * `taxon-group`, and `taxon-rank`.
  */
 class Taxa extends ApiResourceController
 {
@@ -107,6 +116,11 @@ class Taxa extends ApiResourceController
 
     /**
      * Builds the base query used for the API.
+     *
+     * Excludes blocked and soft-deleted taxa unconditionally. Joins for `parent-taxa`,
+     * `recording-scheme`, `taxon-group`, and `taxon-rank` are only added when the
+     * corresponding include is requested, so the query cost scales with what the
+     * caller actually asked for.
      *
      * @return object
      *   The query builder instance.

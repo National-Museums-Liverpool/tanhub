@@ -6,9 +6,18 @@ use Config\Auth;
 
 /**
  * Provides installation state checks used by setup and update flows.
+ *
+ * Used by the setup/update controllers to decide whether to show the initial
+ * admin-user setup screen or the pending-migrations warning, before any
+ * import tasks can be run.
  */
 class InstallStatusService
 {
+    /**
+     * Absolute path to the marker file written once initial admin setup has
+     * completed, so setup is not re-offered after the first admin user is
+     * deleted or renamed.
+     */
     private const SETUP_LOCK_FILE = WRITEPATH . 'setupAdminUser.lock';
 
     /**
@@ -26,6 +35,11 @@ class InstallStatusService
 
     /**
      * Count migrations that have not yet been applied.
+     *
+     * Compares every migration file discoverable on the default namespace
+     * against the migration history table, removing any migration whose
+     * unique object ID already appears in history. What remains is the set
+     * of pending (not-yet-run) migrations.
      *
      * @return int Number of pending migrations.
      */

@@ -5,7 +5,13 @@ namespace App\Controllers\Api\V1;
 use CodeIgniter\Database\BaseBuilder;
 
 /**
- * API endpoints for data sources.
+ * API endpoints for the `data_sources` lookup resource.
+ *
+ * Serves `GET api/v1/data-sources` (list) and `GET api/v1/data-sources/{abbr}` (show); see
+ * {@see ApiResourceController} for the shared pagination/sort/filter behavior and
+ * {@see ApiController} for the public-read/rate-limit model that applies to all endpoints
+ * in this namespace. All three fields ({@see self::getAllowedFields()}) are filterable and
+ * sortable; no `?include=` expansions are supported.
  */
 class DataSources extends ApiResourceController
 {

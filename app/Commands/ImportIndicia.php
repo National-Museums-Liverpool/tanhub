@@ -9,6 +9,11 @@ use Throwable;
 
 /**
  * Imports records from configured external data sources.
+ *
+ * Supports two modes selected by `--entity`: a dedicated occurrence import
+ * (via `occurrenceImportOrchestrator`) when `--entity=occurrences`, and a
+ * generic lookup/taxonomy entity import (via `importOrchestrator`)
+ * otherwise.
  */
 class ImportIndicia extends BaseCommand
 {
@@ -57,6 +62,13 @@ class ImportIndicia extends BaseCommand
 
     /**
      * Execute the import command.
+     *
+     * Runs the occurrence import orchestrator when `--entity=occurrences`,
+     * otherwise runs the generic entity import orchestrator.
+     *
+     * @param array<int|string, mixed> $params Command parameters.
+     *
+     * @return void
      */
     public function run(array $params)
     {
@@ -135,7 +147,10 @@ class ImportIndicia extends BaseCommand
     /**
      * Resolve a boolean flag from CLI options or fallback param formats.
      *
-     * @param array<string, mixed> $params
+     * @param array<string, mixed> $params Command parameters.
+     * @param string               $name   Flag name without leading dashes (e.g. `dry-run`).
+     *
+     * @return bool Whether the flag was supplied in any recognised format.
      */
     private function resolveFlag(array $params, string $name): bool
     {

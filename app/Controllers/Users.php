@@ -9,6 +9,11 @@ use CodeIgniter\Shield\Models\UserModel;
 
 /**
  * Admin-only user management pages.
+ *
+ * Wraps CodeIgniter Shield's {@see UserModel}/{@see User} to provide a
+ * simple three-group (`user`, `manager`, `admin`) account admin UI. Group
+ * membership is treated as exclusive to those three groups: any other
+ * groups a user might have are not touched by {@see self::syncGroups()}.
  */
 class Users extends BaseController
 {
@@ -267,8 +272,15 @@ class Users extends BaseController
     /**
      * Build search conditions for username and email.
      *
-     * @param UserModel $users
-     * @param string $q
+     * Email is not a column on the users table itself (Shield stores it as
+     * an `email_password` identity), so the email match is expressed as a
+     * raw `IN (SELECT ...)` subquery fragment. All interpolated values
+     * (`$identityTable`, `$escapedType`, `$escapedLike`) are produced via
+     * `$db->escape()`/`$db->escapeLikeString()` before concatenation, so
+     * this is not vulnerable to SQL injection despite building raw SQL.
+     *
+     * @param UserModel $users Query builder to constrain in place.
+     * @param string    $q     Raw search term as submitted by the user.
      * @return void
      */
     private function applySearch(UserModel $users, string $q): void

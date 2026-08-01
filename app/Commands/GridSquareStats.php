@@ -8,6 +8,10 @@ use Throwable;
 
 /**
  * Recomputes derived grid square stats counts.
+ *
+ * Thin CLI wrapper around {@see \App\Services\Import\DerivedImportRunner}
+ * running the `derived-stats:grid_square_stats_counts` task via the
+ * `gridSquareStatsCountsService`.
  */
 class GridSquareStats extends BaseCommand
 {
@@ -50,6 +54,10 @@ class GridSquareStats extends BaseCommand
 
     /**
      * Execute the command.
+     *
+     * @param array<int|string, mixed> $params Command parameters.
+     *
+     * @return void
      */
     public function run(array $params)
     {

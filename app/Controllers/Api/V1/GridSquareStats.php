@@ -5,7 +5,14 @@ namespace App\Controllers\Api\V1;
 use CodeIgniter\Database\BaseBuilder;
 
 /**
- * API endpoints for grid square stats.
+ * API endpoints for the `grid_square_stats` resource.
+ *
+ * Serves `GET api/v1/grid-square-stats` (list) and `GET api/v1/grid-square-stats/{uuid}`
+ * (show); see {@see ApiResourceController} for the shared pagination/sort/filter behavior
+ * and {@see ApiController} for the public-read/rate-limit model that applies to all
+ * endpoints in this namespace. Each row is always left-joined to its
+ * {@see GeographicRegions} row (for the `higher_geography_identifier` key column), with
+ * additional descriptive region fields exposed via an optional `?include=geographic-region`.
  */
 class GridSquareStats extends ApiResourceController
 {
@@ -52,6 +59,10 @@ class GridSquareStats extends ApiResourceController
 
     /**
      * Builds the base query used for the API.
+     *
+     * Always left-joins `geographic_regions` (soft-deleted regions excluded) so the
+     * `higher_geography_identifier` key column is available regardless of includes;
+     * additional region fields are only selected when `?include=geographic-region` is set.
      *
      * @return object
      *   The query builder instance.

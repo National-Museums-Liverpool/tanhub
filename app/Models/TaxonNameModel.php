@@ -5,7 +5,17 @@ namespace App\Models;
 use CodeIgniter\Model;
 
 /**
- * Persistence model for taxon names.
+ * Model for the `taxon_names` table.
+ *
+ * Represents an alternate/vernacular or scientific name for a
+ * {@see TaxonModel}, distinct from the taxon's primary `scientific_name`.
+ *
+ * NOTE: unlike the other models in this namespace, no `$allowedFields` are
+ * declared here, so the base CodeIgniter Model's field protection will
+ * strip all fields from any `insert()`/`update()` array call, effectively
+ * preventing mass assignment via this model as written. This looked like it
+ * may be an oversight rather than intentional, but no logic was changed as
+ * part of this documentation pass — flagged here for human review.
  */
 class TaxonNameModel extends Model
 {

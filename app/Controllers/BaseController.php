@@ -37,8 +37,17 @@ abstract class BaseController extends Controller
     /**
      * Render a page with shared defaults and role-aware navigation.
      *
-     * @param array<string, mixed> $page
-     * @return string
+     * Merges caller-supplied `$page` data over a set of site-wide defaults
+     * (nav items, footer, meta description, etc.) and renders the given view
+     * with the combined data under the `page` variable. Auth lookups are
+     * wrapped in a try/catch because this method is also used before the
+     * database schema (including Shield's auth tables) has been migrated,
+     * e.g. on the `/update` and `/setup-admin-user` pages during initial
+     * installation; in that case the visitor is treated as logged out.
+     *
+     * @param string              $view Dot/slash view path passed to the `view()` helper.
+     * @param array<string, mixed> $page Page-specific overrides merged over the shared defaults.
+     * @return string Rendered HTML for the view.
      */
     protected function renderPage(string $view, array $page = []): string
     {
@@ -47,6 +56,7 @@ abstract class BaseController extends Controller
             $isAdmin = $isLoggedIn && auth()->user() !== null && auth()->user()->inGroup('admin');
             $isStaff = $isLoggedIn && auth()->user() !== null && auth()->user()->inGroup('admin', 'manager');
         } catch (\CodeIgniter\Database\Exceptions\DatabaseException $exception) {
+            // Auth tables may not exist yet (pre-migration/setup flow); treat as anonymous.
             $isLoggedIn = false;
             $isAdmin = false;
             $isStaff = false;
@@ -154,6 +164,14 @@ abstract class BaseController extends Controller
     }
 
     /**
+     * Initialize the controller with the current request/response/logger.
+     *
+     * Framework-invoked hook; subclasses should preload shared models,
+     * libraries, or helpers here rather than overriding this method.
+     *
+     * @param RequestInterface  $request  Current HTTP request.
+     * @param ResponseInterface $response Current HTTP response.
+     * @param LoggerInterface   $logger   Application logger instance.
      * @return void
      */
     public function initController(RequestInterface $request, ResponseInterface $response, LoggerInterface $logger)

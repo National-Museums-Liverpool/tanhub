@@ -8,11 +8,18 @@ use CodeIgniter\HTTP\RedirectResponse;
 
 /**
  * Admin management for taxon groups.
+ *
+ * Taxon groups are imported from Indicia (see {@see \App\Services\Import})
+ * and mostly read-only here; the only editable field exposed by this
+ * controller is the local `friendly` display name override, via
+ * {@see self::update()}.
  */
 class TaxonGroups extends BaseController
 {
     /**
      * Display a paginated, sortable list of taxon groups.
+     *
+     * @return string Rendered HTML for the taxon groups index view.
      */
     public function index(): string
     {
@@ -57,6 +64,10 @@ class TaxonGroups extends BaseController
 
     /**
      * Render the edit form for a single taxon group.
+     *
+     * @param int $id Taxon group identifier.
+     * @return string Rendered HTML for the taxon group edit view.
+     * @throws PageNotFoundException If no taxon group exists with the given ID.
      */
     public function details(int $id): string
     {
@@ -77,6 +88,14 @@ class TaxonGroups extends BaseController
 
     /**
      * Update the editable fields for a taxon group.
+     *
+     * Currently only the `friendly` display name is editable; an empty
+     * submitted value clears the override back to `null` (falling back to
+     * the imported `title`/`external_key` elsewhere in the UI).
+     *
+     * @param int $id Taxon group identifier.
+     * @return RedirectResponse Redirect back to the taxon group details page.
+     * @throws PageNotFoundException If no taxon group exists with the given ID.
      */
     public function update(int $id): RedirectResponse
     {

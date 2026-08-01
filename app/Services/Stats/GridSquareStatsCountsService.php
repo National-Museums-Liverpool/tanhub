@@ -16,7 +16,21 @@ class GridSquareStatsCountsService
     /**
      * Recompute occurrences_count, species_count and rarity_score for all grid square stats rows.
      *
-     * @return array<string, int|string>
+     * Counts are scoped to "active" occurrences (not soft-deleted, not
+     * `blocked`, with a non-empty `grid_ref_2km`) joined to their assigned
+     * geographic region(s). The rarity score treats a species as "rare" when
+     * it has 100 or fewer active gridded occurrences overall
+     * ({@see self::RARITY_THRESHOLD}); for each such qualifying occurrence,
+     * `100 / <species total active gridded records>` is added to the score
+     * of the grid square/region where that occurrence falls, so widely
+     * scattered rare species contribute fractional amounts to many squares.
+     * On a non-dry-run, all `grid_square_stats` counts are first reset to
+     * zero before the freshly computed aggregates are written back.
+     *
+     * @param bool $dryRun When true, compute counts without writing changes.
+     *
+     * @return array<string, int|string> Result summary: `status` (`success`|`failed`),
+     *                                   `fetched`, `processed`, `updated`, `skipped`, `errors`.
      */
     public function run(bool $dryRun = false): array
     {
@@ -41,6 +55,9 @@ class GridSquareStatsCountsService
                     AND TRIM(o.grid_ref_2km) <> ""';
 
             $aggregates = $db->query(
+                // Outer query: for every (square, geographic_region_id) pair, combine the
+                // plain occurrence/species counts ("aggregates") with the rarity score
+                // ("rarity"), defaulting to 0 when no rare species fall in that square.
                 'SELECT
                     aggregates.square,
                     aggregates.geographic_region_id,
@@ -62,11 +79,17 @@ class GridSquareStatsCountsService
                     GROUP BY UPPER(TRIM(o.grid_ref_2km)), gro.geographic_region_id
                 ) aggregates
                 LEFT JOIN (
+                    -- rarity: for each square, sum (100 / species total active gridded
+                    -- records) across every qualifying rare species occurrence that
+                    -- falls in that square, so a rare species contribution is split
+                    -- proportionally across every square/region it appears in.
                     SELECT
                         square_species.square,
                         square_species.geographic_region_id,
                         ROUND(SUM((100.0 / species_totals.total_records) * square_species.square_occurrences_count), 4) AS rarity_score
                     FROM (
+                        -- square_species: active gridded occurrence count per
+                        -- (square, region, species).
                         SELECT
                             UPPER(TRIM(o.grid_ref_2km)) AS square,
                             gro.geographic_region_id AS geographic_region_id,
@@ -82,6 +105,9 @@ class GridSquareStatsCountsService
                         GROUP BY UPPER(TRIM(o.grid_ref_2km)), gro.geographic_region_id, t.species_id
                     ) square_species
                     INNER JOIN (
+                        -- species_totals: total active gridded occurrences per species,
+                        -- restricted to species with RARITY_THRESHOLD or fewer records
+                        -- (i.e. the "rare" species that contribute to rarity_score).
                         SELECT
                             t.species_id AS species_id,
                             COUNT(*) AS total_records

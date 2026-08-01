@@ -4,12 +4,26 @@ namespace App\Services\Import\Persistence;
 
 /**
  * Persists normalized recording scheme rows.
+ *
+ * Upserts each row into `recording_schemes` keyed by `external_key`.
  */
 class RecordingSchemesImportService implements EntityImportServiceInterface
 {
     /**
-     * @param array<int, array<string, mixed>> $rows
-     * @return array<string, int>
+     * Persist a batch of normalized recording scheme rows.
+     *
+     * Rows missing `external_key` or `title` are skipped. Matching rows are
+     * identified solely by `external_key`; matches are updated in place,
+     * everything else is inserted.
+     *
+     * @param array<int, array<string, mixed>> $rows   Normalized recording scheme rows.
+     *                                                  Expected keys: `external_key`,
+     *                                                  `title`, `description`.
+     * @param bool                             $dryRun When true, compute counts without
+     *                                                  writing changes.
+     *
+     * @return array<string, int> Result counts: `fetched`, `processed`, `inserted`,
+     *                            `updated`, `skipped`, `errors`.
      */
     public function import(array $rows, bool $dryRun = false): array
     {

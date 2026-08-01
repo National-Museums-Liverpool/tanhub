@@ -9,22 +9,48 @@ use Throwable;
 
 /**
  * Selects and runs the next automated import task.
+ *
+ * Delegates selection and execution to `autoImportService`, which chooses
+ * the next runnable task based on completion state and dependencies (see
+ * {@see \App\Controllers\Imports::TASKS} and
+ * {@see \App\Controllers\Imports::DEPENDENCIES} for the registry this
+ * selection is based on).
  */
 class ImportAuto extends BaseCommand
 {
-    /** @var string */
+    /**
+     * The group the command is lumped under when using Spark list.
+     *
+     * @var string
+     */
     protected $group = 'tanhub';
 
-    /** @var string */
+    /**
+     * The command's name.
+     *
+     * @var string
+     */
     protected $name = 'import:auto';
 
-    /** @var string */
+    /**
+     * The command's description.
+     *
+     * @var string
+     */
     protected $description = 'Select and run the next automated import task.';
 
-    /** @var string */
+    /**
+     * The command's usage description for the --help Spark option.
+     *
+     * @var string
+     */
     protected $usage = 'import:auto [options]';
 
-    /** @var array<string, string> */
+    /**
+     * CLI options.
+     *
+     * @var array<string, string>
+     */
     protected $options = [
         '--limit' => 'Maximum records to fetch in this run.',
         '--page-size' => 'Page size per occurrence source request.',

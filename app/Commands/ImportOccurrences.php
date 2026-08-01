@@ -9,6 +9,9 @@ use Throwable;
 
 /**
  * Imports occurrence records from configured external data sources.
+ *
+ * Thin CLI wrapper around `occurrenceImportOrchestrator` for the `nbn` and
+ * `indicia` occurrence sources.
  */
 class ImportOccurrences extends BaseCommand
 {
@@ -27,8 +30,6 @@ class ImportOccurrences extends BaseCommand
     protected $name = 'import:occurrences';
 
     /**
-     * CLI options.
-     *
      * The command's description.
      *
      * @var string
@@ -43,6 +44,8 @@ class ImportOccurrences extends BaseCommand
     protected $usage = 'import:occurrences [options]';
 
     /**
+     * CLI options.
+     *
      * @var array<string, string>
      */
     protected $options = [
@@ -55,6 +58,10 @@ class ImportOccurrences extends BaseCommand
 
     /**
      * Execute the import command.
+     *
+     * @param array<int|string, mixed> $params Command parameters.
+     *
+     * @return void
      */
     public function run(array $params)
     {

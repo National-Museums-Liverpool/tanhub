@@ -5,11 +5,26 @@ namespace App\Models;
 use CodeIgniter\Model;
 
 /**
- * Persistence model for occurrences.
+ * Model for the `occurrences` table.
+ *
+ * Represents a single species occurrence record imported from an external
+ * source (e.g. Indicia, NBN Atlas). Beyond the fixed columns below, the
+ * table has one `<rank>_id` foreign key column per entry in
+ * `Config\Import::$taxonRanks` (mirroring {@see TaxonModel}); these are
+ * appended to `$allowedFields` at construction time by
+ * {@see self::rankColumnsFromConfig()} rather than being listed statically,
+ * since the configured rank list can vary by deployment. `blocked` /
+ * `blocked_reason` implement moderation: blocked occurrences are excluded
+ * from public counts and derived-stats imports (see
+ * {@see \App\Services\HomeCountsService} and
+ * {@see \App\Services\Import\Persistence\GeographicRegionsOccurrenceImportService}).
  */
 class OccurrenceModel extends Model
 {
     /**
+     * Statically-known mass-assignable columns, i.e. every occurrence column
+     * except the dynamic per-rank foreign keys added in the constructor.
+     *
      * @var array<int, string>
      */
     private const BASE_ALLOWED_FIELDS = [
@@ -55,6 +70,9 @@ class OccurrenceModel extends Model
     protected $useSoftDeletes = true;
 
     /**
+     * Overwritten in the constructor to append dynamic rank columns; see
+     * {@see self::BASE_ALLOWED_FIELDS} and {@see self::rankColumnsFromConfig()}.
+     *
      * @var array<int, string>
      */
     protected $allowedFields = self::BASE_ALLOWED_FIELDS;
@@ -79,6 +97,20 @@ class OccurrenceModel extends Model
      */
     protected $deletedField = 'deleted_at';
 
+    /**
+     * Build the model, extending `$allowedFields` with the configured taxon
+     * rank columns.
+     *
+     * The `<rank>_id` columns on `occurrences` are created dynamically by
+     * the migration from `Config\Import::$taxonRanks`, so the list of
+     * mass-assignable rank columns must be computed at runtime rather than
+     * hard-coded, to stay in sync with whatever ranks are configured.
+     *
+     * @param \CodeIgniter\Database\ConnectionInterface|null $db         Database connection to use, or null for the default.
+     * @param \CodeIgniter\Validation\ValidationInterface|null $validation Validation instance to use, or null for the default.
+     *
+     * @return void
+     */
     public function __construct(?\CodeIgniter\Database\ConnectionInterface $db = null, ?\CodeIgniter\Validation\ValidationInterface $validation = null)
     {
         parent::__construct($db, $validation);
@@ -90,7 +122,14 @@ class OccurrenceModel extends Model
     }
 
     /**
-     * @return array<int, string>
+     * Derive `<rank>_id` column names from the configured taxon ranks.
+     *
+     * Each configured rank name is lower-cased and any run of non-alphanumeric
+     * characters is collapsed to a single underscore (matching the column
+     * naming used by the `occurrences` table migration), then suffixed with
+     * `_id`. Non-scalar or blank rank entries are silently skipped.
+     *
+     * @return array<int, string> Rank foreign key column names, e.g. `['kingdom_id', 'phylum_id']`.
      */
     private function rankColumnsFromConfig(): array
     {

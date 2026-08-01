@@ -6,13 +6,30 @@ use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\RawSql;
 
 /**
- * API endpoints for occurrences.
+ * API endpoints for the `occurrences` resource (individual species records).
+ *
+ * Serves `GET api/v1/occurrences` (list) and `GET api/v1/occurrences/{unique_key}` (show);
+ * see {@see ApiResourceController} for the shared pagination/sort/filter behavior and
+ * {@see ApiController} for the public-read/rate-limit model that applies to all endpoints
+ * in this namespace. Every row is inner-joined to its owning {@see Taxa} row (blocked and
+ * soft-deleted taxa excluded), so an occurrence with no valid taxon is never returned.
+ * Supports `?include=` expansions for `data-source`, `geographic-region` (many-to-many via
+ * `geographic_regions_occurrences`, hydrated post-query, see
+ * {@see self::hydrateGeographicRegions()}), `grid-square-stats`, `taxon` (base taxon fields,
+ * itself gating `parent-taxa`, `taxon-media`, `taxon-rank`, and `taxon-group`), and
+ * `taxon-name`. Also exposes a `higher_geography_identifier` helper filter (see
+ * {@see self::allowedFilters()}) that queries the region join table directly rather than a
+ * plain selected column.
  */
 class Occurrences extends ApiResourceController
 {
 
     /**
      * Retrieve list of resources that can be included (joined) in requests.
+     *
+     * `taxon`-dependent includes (`taxon-media`, `taxon-rank`, `taxon-group`, `parent-taxa`)
+     * are only advertised as supported once `taxon` itself has been requested, since their
+     * fields/joins are meaningless without the base taxon data.
      *
      * @return string[]
      *   Resource name list.
@@ -41,6 +58,11 @@ class Occurrences extends ApiResourceController
 
     /**
      * Retrieve API fields array.
+     *
+     * `higher_geography_identifier` is a computed, driver-specific aggregate expression
+     * (see {@see self::buildHigherGeographyIdentifierSql()}) rather than a plain column,
+     * since an occurrence can belong to multiple geographic regions via the
+     * `geographic_regions_occurrences` join table.
      *
      * @return array<string, string>
      *   Array of field identifiers and their corresponding query columns.
@@ -124,6 +146,12 @@ class Occurrences extends ApiResourceController
     /**
      * Retrieve API fields array.
      *
+     * `__occurrence_id` is always selected so {@see self::hydrateGeographicRegions()} can
+     * batch-load region data after the main query runs; `__taxon_id` is added only when the
+     * `taxon-media` include is active, for the same reason ({@see
+     * ApiResourceController::hydrateTaxonMedia()}). Both are stripped from the response by
+     * {@see ApiResourceController::removeInternalFields()}.
+     *
      * @return array<string, string>
      *   Array of field identifiers and their corresponding query columns.
      */
@@ -143,8 +171,8 @@ class Occurrences extends ApiResourceController
     /**
      * Add include-dependent nested data to each response row.
      *
-     * @param array<int, array<string, mixed>> $data
-     * @return void
+     * @param array<int, array<string, mixed>> $data     Result rows, modified in place.
+     * @param array<int, string>               $includes Requested/validated include names for this request.
      */
     protected function augmentResponseData(array &$data, array $includes = []): void
     {
@@ -160,8 +188,14 @@ class Occurrences extends ApiResourceController
     /**
      * Allow helper region filter while keeping the exposed field expression simple.
      *
-     * @param array<string, bool> $includes
-     * @return array<string, string>
+     * Adds a synthetic `higher_geography_identifier` filter field (marked with the
+     * sentinel column `'__higher_geography_identifier__'`) so that filtering by region
+     * identifier can query the `geographic_regions_occurrences` join table directly (see
+     * {@see self::applyHigherGeographyIdentifierFilter()}), rather than relying on the
+     * plain (and lossy, since one occurrence can span multiple regions) selected field.
+     *
+     * @param array<string, bool> $includes Requested/validated include names for this request.
+     * @return array<string, string> Filterable field map, extended with the region helper filter.
      */
     protected function allowedFilters(array $includes = []): array
     {
@@ -174,7 +208,13 @@ class Occurrences extends ApiResourceController
     /**
      * Apply parsed filters with special handling for region helper filters.
      *
-     * @param array<int, array<string, mixed>> $filters
+     * Filters targeting the `higher_geography_identifier` sentinel column are routed to
+     * {@see self::applyHigherGeographyIdentifierFilter()} (an `EXISTS` subquery against the
+     * join table); all other filters are delegated unchanged to the parent implementation.
+     *
+     * @param BaseBuilder $builder Query builder to apply conditions to, modified in place.
+     * @param array<int, array{column: string, operator: string, value: mixed}> $filters Parsed
+     *        filter descriptors from {@see ApiResourceController::getFilters()}.
      */
     protected function applyFilters(BaseBuilder $builder, array $filters): void
     {
@@ -194,6 +234,11 @@ class Occurrences extends ApiResourceController
 
     /**
      * Builds the base query used for the API.
+     *
+     * Inner-joins `taxa` (blocked/soft-deleted rows excluded) so every returned occurrence
+     * has a valid taxon, and excludes blocked/soft-deleted occurrences themselves. Joins for
+     * `data-source`, `grid-square-stats`, `parent-taxa`, `taxon-name`, `taxon-rank`, and
+     * `taxon-group` are only added when the corresponding include is requested.
      *
      * @return object
      *   The query builder instance.
@@ -259,7 +304,14 @@ class Occurrences extends ApiResourceController
     /**
      * Add nested geographic region data for each occurrence.
      *
-     * @param array<int, array<string, mixed>> $rows
+     * Batches a single query for all distinct occurrence IDs present across `$rows` (via the
+     * `__occurrence_id` internal field, see {@see self::getInternalFields()}), since an
+     * occurrence can belong to multiple regions through `geographic_regions_occurrences` and
+     * that many-to-many relationship cannot be expressed as a plain selected column.
+     * Soft-deleted regions are excluded. Rows without a resolvable occurrence ID get an
+     * empty array.
+     *
+     * @param array<int, array<string, mixed>> $rows Result rows, modified in place.
      */
     private function hydrateGeographicRegions(array &$rows): void
     {
@@ -303,7 +355,15 @@ class Occurrences extends ApiResourceController
     /**
      * Apply filter condition for higher_geography_identifier through the join table.
      *
-     * @param array<string, mixed> $filter
+     * Builds a correlated `EXISTS` subquery against `geographic_regions_occurrences` joined
+     * to `geographic_regions` (soft-deleted regions excluded), since the identifier is not a
+     * plain column on `occurrences`. All values are escaped via the driver's `escape()`
+     * before interpolation into the raw SQL, since they originate from user-supplied filter
+     * query parameters.
+     *
+     * @param BaseBuilder $builder Query builder to apply the condition to, modified in place.
+     * @param array<string, mixed> $filter Parsed filter descriptor with `operator` (`eq`,
+     *        `in`, `gte`, or `lte`) and `value` keys.
      */
     private function applyHigherGeographyIdentifierFilter(BaseBuilder $builder, array $filter): void
     {
@@ -340,7 +400,16 @@ class Occurrences extends ApiResourceController
     /**
      * SQL expression for helper higher geography identifier field.
      *
+     * Returns a correlated scalar subquery that aggregates every distinct
+     * `higher_geography_identifier` linked to the current occurrence row (`o.id`) via
+     * `geographic_regions_occurrences`, joined into a single `;`-separated string. The
+     * aggregate function differs per database driver (MySQL `GROUP_CONCAT`, PostgreSQL
+     * `STRING_AGG`, SQL Server `FOR XML PATH`, SQLite `GROUP_CONCAT` + `REPLACE`), since
+     * there is no portable multi-row string aggregation syntax across CodeIgniter's
+     * supported drivers.
+     *
      * @return string
+     *   SQL expression for the `higher_geography_identifier` field.
      */
     private function buildHigherGeographyIdentifierSql(): string
     {

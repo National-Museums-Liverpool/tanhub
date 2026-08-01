@@ -6,12 +6,22 @@ use App\Models\GeographicRegionModel;
 use CodeIgniter\Exceptions\PageNotFoundException;
 
 /**
- * Admin read-only views for geographic regions.
+ * Admin read-only views for the `geographic_regions` lookup table.
+ *
+ * Regions are imported from Indicia (see {@see \App\Services\Import}) rather
+ * than created here, so this controller only exposes a searchable/sortable
+ * listing and a details page, both enriched with occurrence counts from the
+ * `geographic_regions_occurrences` join table.
  */
 class GeographicRegions extends BaseController
 {
     /**
      * Display a paginated, sortable list of geographic regions.
+     *
+     * Joins in a per-region occurrence count so the list can show usage at a
+     * glance without an N+1 query per row.
+     *
+     * @return string Rendered HTML for the geographic regions index view.
      */
     public function index(): string
     {
@@ -64,6 +74,10 @@ class GeographicRegions extends BaseController
 
     /**
      * Show read-only details for a single geographic region.
+     *
+     * @param int $id Geographic region identifier.
+     * @return string Rendered HTML for the geographic region details view.
+     * @throws PageNotFoundException If no region exists with the given ID.
      */
     public function details(int $id): string
     {
@@ -97,8 +111,8 @@ class GeographicRegions extends BaseController
     /**
      * Return occurrence counts keyed by region ID.
      *
-     * @param array<int, int> $regionIds
-     * @return array<int, int>
+     * @param array<int, int> $regionIds Region IDs to count occurrences for.
+     * @return array<int, int> Occurrence count keyed by `geographic_region_id`.
      */
     private function getOccurrenceCountsByRegionId(array $regionIds): array
     {
@@ -125,6 +139,9 @@ class GeographicRegions extends BaseController
 
     /**
      * Return the occurrence count for a single region ID.
+     *
+     * @param int $id Geographic region identifier.
+     * @return int Number of linked rows in `geographic_regions_occurrences`.
      */
     private function getOccurrenceCountForRegionId(int $id): int
     {

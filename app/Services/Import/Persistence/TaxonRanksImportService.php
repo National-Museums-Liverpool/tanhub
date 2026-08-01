@@ -4,12 +4,28 @@ namespace App\Services\Import\Persistence;
 
 /**
  * Persists normalized taxon rank rows.
+ *
+ * Upserts each row into `taxon_ranks` keyed by `rank`.
  */
 class TaxonRanksImportService implements EntityImportServiceInterface
 {
     /**
-     * @param array<int, array<string, mixed>> $rows
-     * @return array<string, int>
+     * Persist a batch of normalized taxon rank rows.
+     *
+     * Rows missing `rank` are skipped. Matching rows are identified solely
+     * by `rank`; matches are updated in place, everything else is inserted.
+     * When `abbr` is not supplied, it is derived from `rank` by
+     * lower-casing and replacing runs of non-alphanumeric characters with
+     * underscores (e.g. `Sub Species` -> `sub_species`).
+     *
+     * @param array<int, array<string, mixed>> $rows   Normalized taxon rank rows.
+     *                                                  Expected keys: `rank`, `abbr`,
+     *                                                  `sort_order`.
+     * @param bool                             $dryRun When true, compute counts without
+     *                                                  writing changes.
+     *
+     * @return array<string, int> Result counts: `fetched`, `processed`, `inserted`,
+     *                            `updated`, `skipped`, `errors`.
      */
     public function import(array $rows, bool $dryRun = false): array
     {

@@ -8,6 +8,10 @@ use CodeIgniter\HTTP\RedirectResponse;
 
 /**
  * Admin views for occurrences and moderation controls.
+ *
+ * Occurrences are imported from external sources (Indicia, NBN Atlas; see
+ * {@see \App\Services\Import}) and are read-only apart from the moderation
+ * fields (`blocked`/`blocked_reason`) exposed by {@see self::update()}.
  */
 class Occurrences extends BaseController
 {
@@ -85,6 +89,7 @@ class Occurrences extends BaseController
      *
      * @param int $id Occurrence identifier.
      * @return string
+     * @throws PageNotFoundException If no occurrence exists with the given ID.
      */
     public function details(int $id): string
     {
@@ -102,8 +107,14 @@ class Occurrences extends BaseController
     /**
      * Update occurrence moderation fields.
      *
+     * When `blocked` is set to `1`, `blocked_reason` is required (enforced
+     * manually rather than via a validation rule so the message can be
+     * attached to the reason field); when unblocked, any stored reason is
+     * cleared to `null`.
+     *
      * @param int $id Occurrence identifier.
      * @return RedirectResponse
+     * @throws PageNotFoundException If no occurrence exists with the given ID.
      */
     public function update(int $id): RedirectResponse
     {
@@ -140,6 +151,7 @@ class Occurrences extends BaseController
      *
      * @param int $id Occurrence identifier.
      * @return array<string, mixed>
+     * @throws PageNotFoundException If no occurrence exists with the given ID.
      */
     private function findOccurrence(int $id): array
     {

@@ -5,7 +5,14 @@ namespace App\Controllers\Api\V1;
 use CodeIgniter\Database\BaseBuilder;
 
 /**
- * API endpoints for taxon groups.
+ * API endpoints for the `taxon_groups` lookup resource.
+ *
+ * Serves `GET api/v1/taxon-groups` (list) and `GET api/v1/taxon-groups/{external_key}` (show);
+ * see {@see ApiResourceController} for the shared pagination/sort/filter behavior and
+ * {@see ApiController} for the public-read/rate-limit model that applies to all endpoints in
+ * this namespace. Soft-deleted rows (`deleted_at IS NOT NULL`) are excluded from all queries.
+ * No `?include=` expansions are supported; other resources (e.g. {@see Taxa}, {@see Occurrences})
+ * join into this table via their own `taxon-group` include.
  */
 class TaxonGroups extends ApiResourceController
 {

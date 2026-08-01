@@ -8,6 +8,9 @@ use Throwable;
 
 /**
  * Recomputes derived taxon stats.
+ *
+ * Thin CLI wrapper around {@see \App\Services\Import\DerivedImportRunner}
+ * running the `derived-stats:taxon_stats` task via the `taxonStatsService`.
  */
 class TaxonStats extends BaseCommand
 {

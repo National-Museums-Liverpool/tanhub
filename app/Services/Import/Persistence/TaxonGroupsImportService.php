@@ -4,12 +4,28 @@ namespace App\Services\Import\Persistence;
 
 /**
  * Persists normalized taxon group rows.
+ *
+ * Upserts each row into `taxon_groups` keyed by `external_key`.
  */
 class TaxonGroupsImportService implements EntityImportServiceInterface
 {
     /**
-     * @param array<int, array<string, mixed>> $rows
-     * @return array<string, int>
+     * Persist a batch of normalized taxon group rows.
+     *
+     * Rows missing `external_key`, `title`, or a positive
+     * `indicia_taxon_group_id` are skipped. Matching rows are identified
+     * solely by `external_key`; matches are updated in place, everything
+     * else is inserted.
+     *
+     * @param array<int, array<string, mixed>> $rows   Normalized taxon group rows.
+     *                                                  Expected keys: `external_key`,
+     *                                                  `title`, `indicia_taxon_group_id`,
+     *                                                  `implied`.
+     * @param bool                             $dryRun When true, compute counts without
+     *                                                  writing changes.
+     *
+     * @return array<string, int> Result counts: `fetched`, `processed`, `inserted`,
+     *                            `updated`, `skipped`, `errors`.
      */
     public function import(array $rows, bool $dryRun = false): array
     {
@@ -80,7 +96,15 @@ class TaxonGroupsImportService implements EntityImportServiceInterface
     }
 
     /**
-     * @param mixed $value
+     * Normalize a loosely-typed truthy/falsy value into a `0`/`1` flag.
+     *
+     * Accepts booleans, numeric values (`>0` is true), and common string
+     * representations (`1`, `true`, `t`, `yes`, `y`, case-insensitive).
+     * Anything else is treated as false.
+     *
+     * @param mixed $value Raw value to normalize.
+     *
+     * @return int `1` when truthy, otherwise `0`.
      */
     private function toFlag($value): int
     {

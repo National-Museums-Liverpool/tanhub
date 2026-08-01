@@ -5,7 +5,13 @@ namespace App\Models;
 use CodeIgniter\Model;
 
 /**
- * Persistence model for geographic regions.
+ * Model for the `geographic_regions` table.
+ *
+ * Geographic regions are imported administrative/named areas (e.g. from
+ * `grid_squares.xml`) used to tag occurrences via
+ * {@see GeographicRegionsOccurrenceModel}. `higher_geography_identifier` is
+ * the external key used to resolve a region during import (e.g. by grid
+ * square stats imports); see repo docs for the import pipeline.
  */
 class GeographicRegionModel extends Model
 {
@@ -30,6 +36,14 @@ class GeographicRegionModel extends Model
     protected $useSoftDeletes = true;
 
     /**
+     * Mass-assignable columns.
+     *
+     * - `higher_geography_identifier` External key used to match/resolve this region during import.
+     * - `higher_geography`            Human-readable name of the region.
+     * - `location_type`               Type/level of the region (e.g. county, vice-county).
+     * - `footprint_geometry`          Serialised boundary geometry for the region.
+     * - `data_source_id`              Originating {@see DataSourceModel} record.
+     *
      * @var array<int, string>
      */
     protected $allowedFields = [

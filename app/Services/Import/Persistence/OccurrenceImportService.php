@@ -10,11 +10,24 @@ use Throwable;
 
 /**
  * Persists normalized occurrence records into local tables.
+/**
+ * Persists normalized occurrence records into local tables.
+ *
+ * Resolves each incoming record's taxon (via `scientific_name_identifier`)
+ * and taxon name (via `given_name_identifier`, falling back to a redundant
+ * given name mapped to the accepted name), regenerates the OSGB `grid_ref`
+ * from coordinates when the source system is not already OSGB (see
+ * {@see OsgbGridReferenceBuilder}), and upserts into `occurrences` keyed by
+ * a source-specific `unique_key`. Implements the iRecord/NBN ownership rule
+ * so NBN copies of iRecord-sourced occurrences are skipped once iRecord has
+ * imported the canonical row (see {@see self::isIrecordOriginNbnRecord()}).
  */
 class OccurrenceImportService
 {
     /**
-     * @param OsgbGridReferenceBuilder|null $osgbGridReferenceBuilder Grid reference conversion helper.
+     * @param OsgbGridReferenceBuilder|null $osgbGridReferenceBuilder Grid reference conversion
+     *                                                                helper; a default instance is
+     *                                                                created when null.
      */
     public function __construct(
         private readonly ?OsgbGridReferenceBuilder $osgbGridReferenceBuilder = null,
@@ -22,8 +35,55 @@ class OccurrenceImportService
     }
 
     /**
-     * @param array<int, array<string, mixed>> $records
-     * @return array<string, int>
+     * Persist a batch of normalized occurrence records.
+     *
+     * A record is skipped (counted in both `skipped` and `processed`) when:
+     * - `remote_id`, `scientific_name_identifier`, or `given_name_identifier` is missing.
+     * - the taxon (`scientific_name_identifier`) or taxon name
+     *   (`given_name_identifier`, or the redundant-name fallback) cannot be
+     *   resolved against `taxa`/`taxon_names`.
+     * - the source's `grid_ref_system` is non-OSGB and regenerating
+     *   `grid_ref` from `latitude`/`longitude`/`coordinate_uncertainty_in_meters`
+     *   fails (see {@see OsgbGridReferenceBuilder::buildFromWgs84()}), or the
+     *   resulting/supplied `grid_ref` is still empty.
+     * - the record is an NBN copy of an occurrence already owned by iRecord
+     *   (see {@see self::shouldSkipIrecordOwnedNbnUpdate()}).
+     *
+     * The upsert key is `unique_key`, resolved via
+     * {@see self::resolveUniqueKey()} (`<SOURCE>:<remote_id>`, or
+     * `IREC:<occurrence_id>` for NBN records that originated from iRecord).
+     * Matching rows are updated in place, everything else is inserted. Every
+     * rank column configured in `Config\Import::$taxonRanks` (e.g.
+     * `family_id`, `genus_id`) is copied from the resolved taxon onto the
+     * occurrence row. `last_checkpoint` tracks the highest `_checkpoint`
+     * value seen across all processed records (including skips), so the
+     * caller can persist incremental import progress even when some records
+     * are skipped or the batch stops early on error.
+     *
+     * @param array<int, array<string, mixed>> $records      Normalized occurrence records.
+     *                                                        Expected keys: `remote_id`,
+     *                                                        `scientific_name_identifier`,
+     *                                                        `given_name_identifier`, `grid_ref`,
+     *                                                        `grid_ref_system`, `grid_ref_2km`,
+     *                                                        `latitude`, `longitude`,
+     *                                                        `coordinate_uncertainty_in_meters`,
+     *                                                        `from_date`, `to_date`, `locality`,
+     *                                                        `recorded_by`, `identified_by`,
+     *                                                        `identification_verification_status`,
+     *                                                        `sex`, `life_stage`, `organism_quantity`,
+     *                                                        `occurrence_id`, `data_provider_name`,
+     *                                                        `source_name`, `_checkpoint`.
+     * @param int                               $dataSourceId Foreign key of the owning `data_sources` row.
+     * @param string                            $sourceAbbr   Data source abbreviation (e.g. `NBN`,
+     *                                                        `IREC`, `INDI`) used to build `unique_key`
+     *                                                        and to detect the iRecord ownership rule.
+     * @param bool                              $dryRun       When true, compute counts without
+     *                                                        writing changes.
+     *
+     * @return array<string, int|string|null> Result counts: `fetched`, `processed`, `inserted`,
+     *                                        `updated`, `skipped`, `errors`, and
+     *                                        `last_checkpoint` (highest `_checkpoint` value seen,
+     *                                        or null).
      */
     public function import(array $records, int $dataSourceId, string $sourceAbbr, bool $dryRun = false): array
     {
@@ -181,7 +241,11 @@ class OccurrenceImportService
     }
 
     /**
-     * @param mixed $value
+     * Coerce a scalar value into a `YYYY-MM-DD` date string.
+     *
+     * @param mixed $value Raw value; non-scalar or too-short values become null.
+     *
+     * @return string|null First 10 characters of the trimmed value, or null when invalid.
      */
     private function nullableDate($value): ?string
     {
@@ -203,7 +267,12 @@ class OccurrenceImportService
     }
 
     /**
-     * @param mixed $value
+     * Coerce a scalar value into a trimmed, length-limited string.
+     *
+     * @param mixed $value     Raw value to coerce; non-scalar values become null.
+     * @param int   $maxLength Maximum string length to keep.
+     *
+     * @return string|null Trimmed string, or null when empty/non-scalar.
      */
     private function nullableString($value, int $maxLength): ?string
     {
@@ -221,7 +290,11 @@ class OccurrenceImportService
     }
 
     /**
-     * @param mixed $value
+     * Coerce a scalar value into a nullable float.
+     *
+     * @param mixed $value Raw value to coerce; non-numeric/non-scalar values become null.
+     *
+     * @return float|null Float value, or null when empty/non-numeric.
      */
     private function nullableFloat($value): ?float
     {
@@ -239,7 +312,11 @@ class OccurrenceImportService
     }
 
     /**
-     * @param mixed $value
+     * Coerce a scalar value into a trimmed, unlimited-length string.
+     *
+     * @param mixed $value Raw value to coerce; non-scalar values become null.
+     *
+     * @return string|null Trimmed string, or null when empty/non-scalar.
      */
     private function nullableText($value): ?string
     {
@@ -255,7 +332,15 @@ class OccurrenceImportService
     /**
      * Resolve the canonical occurrence unique key.
      *
-     * @param array<string, mixed> $record
+     * NBN records that represent an iRecord-origin occurrence (see
+     * {@see self::isIrecordOriginNbnRecord()}) use the iRecord key format so
+     * they line up with the row iRecord itself will later import.
+     *
+     * @param array<string, mixed> $record     Normalized source record.
+     * @param string                $sourceAbbr Data source abbreviation (e.g. `NBN`, `IREC`).
+     * @param string                $remoteId   Source-native record identifier.
+     *
+     * @return string Unique key in the form `<SOURCE>:<id>`.
      */
     private function resolveUniqueKey(array $record, string $sourceAbbr, string $remoteId): string
     {
@@ -271,8 +356,18 @@ class OccurrenceImportService
     /**
      * Skip updates to iRecord-owned records when processing NBN fallback data.
      *
-     * @param array<string, mixed>      $record
-     * @param array<string, mixed>|null $existing
+     * Once the iRecord importer has claimed a shared `IREC:<occurrenceID>`
+     * row (i.e. `existing.data_source_id` points at the `IREC` data source),
+     * later NBN copies of that same iRecord-origin occurrence must not
+     * overwrite it, since the NBN copy of the data is expected to lag behind
+     * iRecord's own copy.
+     *
+     * @param string                     $sourceAbbr Data source abbreviation of the incoming record.
+     * @param array<string, mixed>      $record     Normalized source record.
+     * @param array<string, mixed>|null $existing   Existing `occurrences` row matched by
+     *                                               `unique_key`, or null when none exists.
+     *
+     * @return bool True when this NBN record must be skipped rather than applied.
      */
     private function shouldSkipIrecordOwnedNbnUpdate(string $sourceAbbr, array $record, ?array $existing): bool
     {
@@ -296,7 +391,14 @@ class OccurrenceImportService
     /**
      * Determine whether the NBN record represents an iRecord-origin occurrence.
      *
-     * @param array<string, mixed> $record
+     * True only when `occurrence_id` is a purely numeric iRecord ID, the
+     * `data_provider_name` is exactly `Biological Records Centre`, and
+     * `source_name` mentions `iRecord` (case-insensitive) — matching the
+     * special ownership rule documented in `docs/import.md`.
+     *
+     * @param array<string, mixed> $record Normalized source record.
+     *
+     * @return bool True when the record should be treated as iRecord-origin.
      */
     private function isIrecordOriginNbnRecord(array $record): bool
     {
@@ -317,6 +419,13 @@ class OccurrenceImportService
         return $sourceName !== '' && stripos($sourceName, 'iRecord') !== false;
     }
 
+    /**
+     * Resolve a `data_sources.id` value by its `abbr` column.
+     *
+     * @param string $abbr Data source abbreviation to look up (case-insensitive).
+     *
+     * @return int|null Matching data source id, or null when not found or on query failure.
+     */
     private function resolveDataSourceIdByAbbr(string $abbr): ?int
     {
         try {
@@ -356,7 +465,16 @@ class OccurrenceImportService
     }
 
     /**
-     * @param array<string, mixed> $record
+     * Advance the running checkpoint using a record's `_checkpoint` value.
+     *
+     * Called for every processed record (including skips) so the caller can
+     * always persist the furthest point reached, even when the batch stops
+     * early due to a per-record skip or an unhandled exception.
+     *
+     * @param array<string, mixed> $record   Normalized source record.
+     * @param string|null           $fallback Current running checkpoint value.
+     *
+     * @return string|null New checkpoint value, or `$fallback` when the record has none.
      */
     private function recordCheckpoint(array $record, ?string $fallback): ?string
     {

@@ -8,6 +8,9 @@ use Throwable;
 
 /**
  * Rebuilds taxon media variants from original files.
+ *
+ * Thin CLI wrapper around {@see \App\Services\TaxonMediaUploadService::rebuildExistingVariants()},
+ * optionally filtered to a single media row or taxon.
  */
 class RebuildTaxonMediaVariants extends BaseCommand
 {
@@ -53,7 +56,8 @@ class RebuildTaxonMediaVariants extends BaseCommand
     /**
      * Execute the command.
      *
-     * @param array<string, mixed> $params
+     * @param array<string, mixed> $params Command parameters.
+     *
      * @return void
      */
     public function run(array $params)

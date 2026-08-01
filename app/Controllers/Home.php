@@ -6,13 +6,23 @@ use CodeIgniter\HTTP\RedirectResponse;
 
 /**
  * Default public-facing homepage controller.
+ *
+ * Also acts as the entry point for the install flow: if pending migrations
+ * exist and initial setup has not completed, visitors are redirected to
+ * {@see Update} before the homepage is ever rendered.
  */
 class Home extends BaseController
 {
     /**
      * Render the homepage.
      *
-     * @return string|RedirectResponse
+     * Redirects to `/update` when database migrations are pending and
+     * initial setup has not yet completed. Otherwise renders the homepage,
+     * including a migration-available warning banner for logged-in users
+     * when non-blocking migrations are pending, and summary counts from
+     * {@see \App\Services\HomeCountsService}.
+     *
+     * @return string|RedirectResponse Rendered homepage, or a redirect to `/update`.
      */
     public function index(): string|RedirectResponse
     {

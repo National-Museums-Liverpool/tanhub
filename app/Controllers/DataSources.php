@@ -7,7 +7,12 @@ use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\HTTP\RedirectResponse;
 
 /**
- * Admin views for data sources.
+ * Admin CRUD controller for the `data_sources` lookup table.
+ *
+ * Provides a searchable/sortable listing, a details/edit page, and create
+ * and update actions, delegating persistence to {@see DataSourceModel}.
+ * Uniqueness of `abbr` and `title` is enforced in the controller (case
+ * insensitively) before any database write.
  */
 class DataSources extends BaseController
 {
@@ -62,6 +67,7 @@ class DataSources extends BaseController
      *
      * @param int $id Data source identifier.
      * @return string
+     * @throws PageNotFoundException If no data source exists with the given ID.
      */
     public function details(int $id): string
     {
@@ -163,6 +169,7 @@ class DataSources extends BaseController
      *
      * @param int $id Data source identifier.
      * @return array<string, mixed>
+     * @throws PageNotFoundException If no data source exists with the given ID.
      */
     private function findDataSource(int $id): array
     {

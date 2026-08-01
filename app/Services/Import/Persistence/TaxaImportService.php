@@ -4,12 +4,55 @@ namespace App\Services\Import\Persistence;
 
 /**
  * Persists normalized taxa rows and accepted taxon names.
+ *
+ * Upserts each row into `taxa` keyed by `taxon_identifier` (the UKSI
+ * `organism_key`), resolving `taxon_group_id` (required), `recording_scheme_id`,
+ * and `taxon_rank_id` foreign keys by external key/name lookup, and populating
+ * one FK column per configured taxon rank (e.g. `family_id`, `genus_id`) from
+ * the row's `higher_taxa` hierarchy via {@see self::lookupParentTaxon()}.
  */
 class TaxaImportService implements EntityImportServiceInterface
 {
     /**
-     * @param array<int, array<string, mixed>> $rows
-     * @return array<string, int>
+     * Persist a batch of normalized taxa rows.
+     *
+     * Rows missing `taxon_identifier`, `scientific_name_identifier`, or
+     * `scientific_name` are skipped, as are rows whose
+     * `taxon_group_external_key` does not resolve to a known `taxon_groups`
+     * row (taxon group is required; recording scheme and taxon rank are
+     * optional and simply left null when unresolved). Lookup maps for
+     * `taxon_groups`, `recording_schemes` (id and title), and `taxon_ranks`
+     * are built once up front via {@see self::prepareLookup()} and
+     * {@see self::prepareStringLookup()}; a failure while building these
+     * lookups aborts the whole batch with a single error.
+     *
+     * For each row, `higher_taxa` (a list of ancestor taxon summaries keyed
+     * by `taxon_rank`) is reindexed by rank, then for every configured
+     * taxon rank other than the row's own rank, the corresponding `<rank>_id`
+     * column is populated by looking up the ancestor's `organism_key` via
+     * {@see self::lookupParentTaxon()} (or left null when no ancestor of
+     * that rank is present). The row is upserted by `taxon_identifier`; on
+     * insert, `rarity_group_name` defaults to the recording scheme's title
+     * (see {@see self::defaultRarityGroupName()}). After insert/update, the
+     * taxon's own rank FK column (e.g. `species_id` for a species row) is
+     * set to self-reference its own primary key, so the taxon is included
+     * when searching for descendants/self at its own rank. `id_difficulty`
+     * is copied through verbatim when present in the row.
+     *
+     * @param array<int, array<string, mixed>> $rows   Normalized taxa rows. Expected keys:
+     *                                                  `taxon_identifier`, `scientific_name_identifier`,
+     *                                                  `scientific_name`, `scientific_name_authorship`,
+     *                                                  `vernacular_name`, `taxon_group_external_key`,
+     *                                                  `recording_scheme_external_key`, `taxon_rank`,
+     *                                                  `id_difficulty`, `conservation_status`,
+     *                                                  `higher_taxa` (list of ancestor objects with
+     *                                                  `taxon_rank` and `organism_key`).
+     * @param bool                             $dryRun When true, compute counts without
+     *                                                  writing changes (foreign-key self-reference
+     *                                                  updates are also skipped).
+     *
+     * @return array<string, int> Result counts: `fetched`, `processed`, `inserted`,
+     *                            `updated`, `skipped`, `errors`.
      */
     public function import(array $rows, bool $dryRun = false): array
     {
@@ -169,7 +212,17 @@ class TaxaImportService implements EntityImportServiceInterface
     }
 
     /**
-     * @return array<string, int>
+     * Build an in-memory lookup map from a table's key column to its value column.
+     *
+     * Used to resolve foreign keys (taxon group, recording scheme, taxon rank)
+     * once per batch instead of once per row.
+     *
+     * @param string $table       Source table name.
+     * @param string $keyColumn   Column to use as the lookup key (default `external_key`).
+     * @param string $valueColumn Column to use as the lookup value (default `id`).
+     *
+     * @return array<string, int> Map of key column value to value column value,
+     *                            restricted to non-deleted rows with a non-null key.
      */
     private function prepareLookup(string $table, string $keyColumn = 'external_key', string $valueColumn = 'id'): array
     {
@@ -226,7 +279,16 @@ class TaxaImportService implements EntityImportServiceInterface
     }
 
     /**
-     * @param array<string, string> $schemeTitleMap
+     * Resolve the default `rarity_group_name` for a newly inserted taxon.
+     *
+     * Falls back to `Unassigned` when the taxon's recording scheme is
+     * missing or has no title, so every taxon always has a non-empty rarity
+     * group for {@see \App\Services\Stats\TaxonRarityService} to group by.
+     *
+     * @param string                $schemeExternalKey Row's recording scheme external key.
+     * @param array<string, string> $schemeTitleMap    Map of recording scheme external key to title.
+     *
+     * @return string Rarity group name, truncated to 100 characters.
      */
     private function defaultRarityGroupName(string $schemeExternalKey, array $schemeTitleMap): string
     {
@@ -240,7 +302,12 @@ class TaxaImportService implements EntityImportServiceInterface
     }
 
     /**
-     * @param mixed $value
+     * Coerce a scalar value into a trimmed, length-limited string.
+     *
+     * @param mixed $value     Raw value to coerce; non-scalar values become null.
+     * @param int   $maxLength Maximum string length to keep.
+     *
+     * @return string|null Trimmed string, or null when empty/non-scalar.
      */
     private function nullableString($value, int $maxLength): ?string
     {
@@ -257,6 +324,17 @@ class TaxaImportService implements EntityImportServiceInterface
         return substr($string, 0, $maxLength);
     }
 
+    /**
+     * Build a deterministic UUID-like value from a seed string.
+     *
+     * Note: retained for parity with the other import services' UUID helper
+     * but not currently called from {@see self::import()}, since `taxa` rows
+     * are keyed by `taxon_identifier` rather than a generated UUID.
+     *
+     * @param string $seed Identifier seed.
+     *
+     * @return string Deterministic UUID-v4-shaped string derived from the seed.
+     */
     private function stableUuid(string $seed): string
     {
         $hex = md5($seed);

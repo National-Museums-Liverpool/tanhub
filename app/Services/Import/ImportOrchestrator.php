@@ -13,6 +13,17 @@ use RuntimeException;
 
 /**
  * Orchestrates adapter fetch, persistence, and checkpoint tracking.
+ *
+ * Drives a full occurrence import run for one source (`indicia` or `nbn`):
+ * pages through {@see \App\Services\Import\Adapter\OccurrenceSourceAdapterInterface}
+ * (created by {@see \App\Services\Import\Adapter\OccurrenceSourceAdapterFactory}),
+ * persists each page via {@see \App\Services\Import\Persistence\OccurrenceImportService},
+ * then re-assigns geographic regions via
+ * {@see \App\Services\Import\Persistence\GeographicRegionsOccurrenceImportService}
+ * and advances the source's checkpoint/completion state in
+ * {@see \App\Models\ImportOffsetModel}. This is the occurrence-import
+ * counterpart to {@see \App\Services\Import\EntityImportOrchestrator}, which
+ * handles taxonomy entity imports.
  */
 class ImportOrchestrator
 {
@@ -39,13 +50,44 @@ class ImportOrchestrator
     /**
      * Execute an occurrence import run for a source.
      *
-     * @param string      $sourceKey Source key to import from.
+     * Resolves a starting checkpoint (an explicit override, else the last
+     * successful checkpoint, else `'0'` for a brand-new `nbn` source), then
+     * repeatedly fetches and persists pages of up to `$pageSize` records
+     * until either `$limit` records have been processed, the adapter reports
+     * no more pages, a page returns zero records, or a row error occurs.
+     * After each page, the checkpoint advances to the persistence service's
+     * reported `last_checkpoint` (falling back to the adapter's
+     * `nextCheckpoint`), so a failed run can resume from the last
+     * successfully-persisted record rather than re-fetching everything.
+     *
+     * A row error during persistence stops paging immediately (`break`) and
+     * leaves the checkpoint at the last value where an error was reported by
+     * the persistence layer, so the next run retries from there rather than
+     * skipping the failed records. On success, and only when not `$dryRun`,
+     * {@see \App\Services\Import\Persistence\GeographicRegionsOccurrenceImportService}
+     * is run once to (re)assign geographic regions to newly-imported
+     * occurrences; any errors from that step are folded into the run's total
+     * error count and can flip the run to `failed`.
+     *
+     * @param string      $sourceKey Source key to import from (`indicia` or `nbn`).
      * @param int         $limit Maximum records to process in this run.
      * @param int         $pageSize Source page size per fetch.
-     * @param bool        $dryRun Whether persistence is disabled for this run.
-     * @param string|null $checkpointOverride Optional checkpoint override.
+     * @param bool        $dryRun Whether persistence and checkpoint/completion
+     *                            updates are disabled for this run.
+     * @param string|null $checkpointOverride Optional checkpoint to resume from instead
+     *                                        of the last successful checkpoint.
      *
-     * @return array<string, int|string|null>
+     * @return array<string, int|string|null> Result with `run_id`, `status`
+     *         (`success`|`failed`), `checkpoint` (final checkpoint reached),
+     *         `fetched`, `inserted`, `updated`, `skipped`, and `errors`
+     *         (totals across all pages processed in this run).
+     *
+     * @throws InvalidArgumentException When no `data_sources` row exists for the
+     *                                  source's configured abbreviation.
+     * @throws RuntimeException         When any taxonomy dependency is incomplete, or
+     *                                  when a page fetch/persist step throws (the
+     *                                  original exception is wrapped and the run is
+     *                                  marked failed before rethrowing).
      */
     public function run(
         string $sourceKey,
@@ -254,9 +296,16 @@ class ImportOrchestrator
     /**
      * Ensure taxonomy prerequisites are complete before importing occurrences.
      *
+     * Occurrence records reference taxa, recording schemes, and geographic
+     * regions, so all taxonomy entities must be fully imported first. The
+     * taxonomy source key is derived from the first configured entry in
+     * `Config\Import::$taxonomySources`, defaulting to `indicia`.
+     *
      * @param ImportOffsetModel $importOffsetModel Import offset/checkpoint model.
      *
      * @return void
+     *
+     * @throws RuntimeException When one or more taxonomy entities are incomplete.
      */
     private function assertTaxonomyDependenciesComplete(ImportOffsetModel $importOffsetModel): void
     {

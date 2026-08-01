@@ -5,7 +5,13 @@ namespace App\Controllers\Api\V1;
 use CodeIgniter\Database\BaseBuilder;
 
 /**
- * API endpoints for recording schemes.
+ * API endpoints for the `recording_schemes` lookup resource.
+ *
+ * Serves `GET api/v1/recording-schemes` (list) and `GET api/v1/recording-schemes/{external_key}`
+ * (show); see {@see ApiResourceController} for the shared pagination/sort/filter behavior and
+ * {@see ApiController} for the public-read/rate-limit model that applies to all endpoints in
+ * this namespace. Soft-deleted rows (`deleted_at IS NOT NULL`) are excluded from all queries.
+ * No `?include=` expansions are supported.
  */
 class RecordingSchemes extends ApiResourceController
 {

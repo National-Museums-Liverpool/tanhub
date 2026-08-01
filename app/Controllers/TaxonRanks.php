@@ -7,11 +7,17 @@ use CodeIgniter\Exceptions\PageNotFoundException;
 
 /**
  * Admin management for taxon ranks.
+ *
+ * Taxon ranks are imported from Indicia (see {@see \App\Services\Import})
+ * and this controller currently exposes only a read-only listing and
+ * details view, delegating persistence lookups to {@see TaxonRankModel}.
  */
 class TaxonRanks extends BaseController
 {
     /**
      * Display a paginated, sortable list of taxon ranks.
+     *
+     * @return string Rendered HTML for the taxon ranks index view.
      */
     public function index(): string
     {
@@ -55,6 +61,10 @@ class TaxonRanks extends BaseController
 
     /**
      * Render read-only details for a single taxon rank.
+     *
+     * @param int $id Taxon rank identifier.
+     * @return string Rendered HTML for the taxon rank details view.
+     * @throws PageNotFoundException If no taxon rank exists with the given ID.
      */
     public function details(int $id): string
     {

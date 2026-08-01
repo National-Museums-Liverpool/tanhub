@@ -10,11 +10,19 @@ use Config\Import as ImportConfig;
 
 /**
  * Handles database migrations and seed updates from the web UI.
+ *
+ * This is the first step of the install/upgrade flow: it runs any pending
+ * migrations (including package migrations such as Shield's) and the
+ * baseline lookup-data seeder, then hands off to {@see SetupAdminUser} if
+ * no administrator account exists yet, or reports success otherwise.
  */
 class Update extends BaseController
 {
     /**
      * Show update status or process an update request.
+     *
+     * @return string|RedirectResponse Rendered update page for GET requests,
+     *                                 or the result of {@see self::handleSubmit()} for POST.
      */
     public function index(): string|RedirectResponse
     {
@@ -37,6 +45,17 @@ class Update extends BaseController
 
     /**
      * Execute the update workflow and render the result page.
+     *
+     * Runs migrations then seeders; on any failure, redirects back with the
+     * exception message so the operator can diagnose the problem (this page
+     * is admin/installer-only, so surfacing raw exception text is
+     * acceptable here). On success, redirects to the admin setup page if no
+     * administrator account exists yet, otherwise re-renders the update page
+     * with a success flash message.
+     *
+     * @return string|RedirectResponse Redirect on failure or when handing off to setup,
+     *                                 or rendered update page on success.
+     * @throws \Throwable Not thrown to the caller; caught internally and converted to a redirect.
      */
     private function handleSubmit(): string|RedirectResponse
     {
@@ -69,6 +88,9 @@ class Update extends BaseController
 
     /**
      * Run all pending migrations, including package migrations.
+     *
+     * @return void
+     * @throws DatabaseException If the migration runner reports failure.
      */
     private function runMigrations(): void
     {
@@ -84,6 +106,13 @@ class Update extends BaseController
 
     /**
      * Run required seeders for baseline lookup data.
+     *
+     * Currently only runs {@see DataSourcesSeeder}; additional baseline
+     * seeders should be added here rather than in migrations (see repo
+     * convention: baseline `data_sources` records live in the seeder, not
+     * migrations).
+     *
+     * @return void
      */
     private function runSeeders(): void
     {

@@ -6,12 +6,34 @@ use CodeIgniter\Database\RawSql;
 
 /**
  * Persists normalized geographic region rows.
+ *
+ * Upserts each row into `geographic_regions` keyed by
+ * `higher_geography_identifier`, resolving the owning `data_source_id` from
+ * the row's `data_source_abbr` (defaulting to `IREC`) via the
+ * `data_sources` table.
  */
 class GeographicRegionsImportService implements EntityImportServiceInterface
 {
     /**
-     * @param array<int, array<string, mixed>> $rows
-     * @return array<string, int>
+     * Persist a batch of normalized geographic region rows.
+     *
+     * Rows missing `higher_geography_identifier`, `higher_geography`, or
+     * `location_type` are skipped, as are rows whose `data_source_abbr` does
+     * not resolve to a known `data_sources` row (data source lookups are
+     * cached per-batch to avoid repeated queries). Matching rows are
+     * identified solely by `higher_geography_identifier`; matches are
+     * updated in place, everything else is inserted.
+     *
+     * @param array<int, array<string, mixed>> $rows   Normalized region rows. Expected
+     *                                                  keys: `higher_geography_identifier`,
+     *                                                  `higher_geography`, `location_type`,
+     *                                                  `data_source_abbr`, `footprint_geometry`
+     *                                                  (WKT string or null).
+     * @param bool                             $dryRun When true, compute counts without
+     *                                                  writing changes.
+     *
+     * @return array<string, int> Result counts: `fetched`, `processed`, `inserted`,
+     *                            `updated`, `skipped`, `errors`.
      */
     public function import(array $rows, bool $dryRun = false): array
     {
@@ -103,8 +125,12 @@ class GeographicRegionsImportService implements EntityImportServiceInterface
     }
 
     /**
-     * @param mixed $value
-     * @param ?int $maxLength
+     * Coerce a scalar value into a trimmed, optionally length-limited string.
+     *
+     * @param mixed $value     Raw value to coerce; non-scalar values become null.
+     * @param ?int  $maxLength Maximum string length to keep, or null for no limit.
+     *
+     * @return string|null Trimmed string, or null when empty/non-scalar.
      */
     private function nullableString($value, ?int $maxLength = null): ?string
     {
@@ -124,8 +150,14 @@ class GeographicRegionsImportService implements EntityImportServiceInterface
     /**
      * Convert a stored polygon string into the correct database value.
      *
-     * @param object $db
-     * @param string|null $geometry
+     * SQLite (used in tests) has no spatial functions, so the WKT string is
+     * stored as-is; other drivers wrap it in `ST_GeomFromText()` so the
+     * database stores a proper geometry value.
+     *
+     * @param object      $db       Active database connection.
+     * @param string|null $geometry WKT polygon/multipolygon string, or null.
+     *
+     * @return mixed Raw WKT string, a {@see RawSql} expression, or null.
      */
     private function databaseGeometryValue(object $db, ?string $geometry): mixed
     {

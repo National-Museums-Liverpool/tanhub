@@ -8,15 +8,35 @@ use CodeIgniter\Shield\Entities\AccessToken;
 use CodeIgniter\Shield\Models\UserIdentityModel;
 
 /**
- * API endpoints for auth token lifecycle.
+ * API endpoints for issuing, refreshing, and revoking bearer tokens used against `api/v1/*`.
+ *
+ * Serves `POST api/v1/auth/token`, `auth/token/refresh`, and `auth/token/revoke` (see
+ * `app/Config/Routes.php`); these routes are public (protected only by the `cors` and
+ * `api-rate-limit` filters, see {@see \App\Filters\ApiRateLimit}), since obtaining a token
+ * requires only valid username/password credentials. Tokens issued here do not gate access
+ * to read endpoints under {@see ApiResourceController} — they only grant the higher
+ * authenticated rate-limit tier. Access and refresh tokens are both implemented as
+ * CodeIgniter Shield access tokens ({@see \CodeIgniter\Shield\Entities\AccessToken})
+ * distinguished by scope (`api:read` vs `refresh`).
  */
 class AuthTokens extends ApiController
 {
+    /**
+     * Lifetime, in seconds, of an issued access token (1 hour).
+     */
     private const ACCESS_TTL_SECONDS = 3600;
+
+    /**
+     * Lifetime, in seconds, of an issued refresh token (30 days).
+     */
     private const REFRESH_TTL_SECONDS = 2592000;
 
     /**
-     * Issue access and refresh tokens for valid credentials.
+     * Issue an access/refresh token pair for valid username and password credentials.
+     *
+     * @return ResponseInterface Token pair JSON body ({@see self::issueTokenPair()}) on success;
+     *                           a 400 problem response for a missing/invalid JSON body or missing
+     *                           credentials; or a 401 problem response for invalid credentials.
      */
     public function token(): ResponseInterface
     {
@@ -50,7 +70,16 @@ class AuthTokens extends ApiController
     }
 
     /**
-     * Rotate refresh token and issue a new token pair.
+     * Rotate a valid refresh token for a new access/refresh token pair.
+     *
+     * The presented refresh token is revoked immediately after being validated (before the
+     * new pair is issued) so that a refresh token can only be used once, reducing the impact
+     * of a leaked/replayed token.
+     *
+     * @return ResponseInterface New token pair JSON body on success; a 400 problem response
+     *                           for a missing/invalid JSON body or missing `refresh_token`; or
+     *                           a 401 problem response if the token is invalid, expired, or not
+     *                           scoped for refresh.
      */
     public function refresh(): ResponseInterface
     {
@@ -90,7 +119,14 @@ class AuthTokens extends ApiController
     }
 
     /**
-     * Revoke one or more tokens.
+     * Revoke one or more tokens: an explicit access/refresh token from the request body,
+     * or (if neither is supplied) the bearer token from the `Authorization` header.
+     *
+     * Unknown/already-revoked tokens are silently ignored (no error is raised) to avoid
+     * leaking whether a given token value ever existed; the response is always 204 regardless
+     * of whether any token was actually found and revoked.
+     *
+     * @return ResponseInterface Empty 204 No Content response.
      */
     public function revoke(): ResponseInterface
     {
@@ -119,8 +155,14 @@ class AuthTokens extends ApiController
     }
 
     /**
-     * @param object $user
-     * @return array<string, mixed>
+     * Generate and persist a new access/refresh token pair for a user.
+     *
+     * @param object $user             Authenticated Shield user entity to issue tokens for.
+     * @param string $tokenNamePrefix  Prefix used to name the generated tokens (e.g. `'refresh'`
+     *                                 or the submitted username), for identification in the
+     *                                 user's token list; has no bearing on token validity.
+     * @return array<string, mixed> Token pair body with keys `access_token`, `token_type`,
+     *                              `expires_in`, and `refresh_token`.
      */
     private function issueTokenPair(object $user, string $tokenNamePrefix): array
     {
@@ -146,6 +188,12 @@ class AuthTokens extends ApiController
         ];
     }
 
+    /**
+     * Determine whether a refresh token is present, scoped for refresh, and not expired.
+     *
+     * @param AccessToken|null $token Token looked up by raw value, or null if not found.
+     * @return bool True if the token exists, has the `refresh` scope, and has not expired.
+     */
     private function isValidRefreshToken(?AccessToken $token): bool
     {
         if ($token === null) {
@@ -163,6 +211,11 @@ class AuthTokens extends ApiController
         return true;
     }
 
+    /**
+     * Look up a raw token value and revoke it on its owning user, if found.
+     *
+     * @param string $rawToken Raw (unhashed) token value as presented by the client.
+     */
     private function revokeRawToken(string $rawToken): void
     {
         /** @var UserIdentityModel $identityModel */
@@ -183,6 +236,11 @@ class AuthTokens extends ApiController
         $user->revokeAccessToken($rawToken);
     }
 
+    /**
+     * Extract the raw bearer token from the request's `Authorization` header, if present.
+     *
+     * @return string|null Raw token value, or null if the header is missing or not a `Bearer` scheme.
+     */
     private function bearerTokenFromHeader(): ?string
     {
         $header = trim((string) $this->request->getHeaderLine('Authorization'));

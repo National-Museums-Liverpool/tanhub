@@ -3,24 +3,36 @@
 namespace App\Services;
 
 /**
- * Provides cached homepage record counts.
+ * Provides cached homepage record counts (occurrences, taxa, geographic regions).
+ *
+ * Not part of the import pipeline itself; it reads the tables that the import
+ * services (e.g. {@see \App\Services\Import\ImportOrchestrator},
+ * {@see \App\Services\Import\EntityImportOrchestrator}) populate, and caches the
+ * resulting counts for cheap homepage rendering.
  */
 class HomeCountsService
 {
     /**
-     * Cache key for homepage table counts.
+     * Cache key under which the homepage table counts array is stored.
      */
     private const CACHE_KEY = 'home_panel_counts_v1';
 
     /**
-     * Cache lifetime for homepage table counts in seconds.
+     * How long cached homepage table counts remain valid, in seconds.
      */
     private const CACHE_TTL_SECONDS = 300;
 
     /**
      * Get active-record counts for homepage display.
      *
-     * @return array<string, int>
+     * Returns the cached value when present and shaped correctly. Otherwise
+     * recomputes the counts from the database and caches them for
+     * {@see self::CACHE_TTL_SECONDS}. If any database error occurs while
+     * recomputing, the error is logged and a zeroed result is returned
+     * instead of throwing, so a database hiccup never breaks the homepage.
+     *
+     * @return array<string, int> Counts keyed by `occurrences`, `taxa`, and
+     *                            `geographic_regions`.
      */
     public function getCounts(): array
     {

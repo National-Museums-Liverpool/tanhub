@@ -10,8 +10,18 @@ use CodeIgniter\Test\CIUnitTestCase;
  */
 final class GeographicRegionsOccurrenceImportServiceTest extends CIUnitTestCase
 {
+    /**
+     * Database connection used to prepare and inspect the SQLite test tables.
+     *
+     * @var \CodeIgniter\Database\BaseConnection
+     */
     protected $db;
 
+    /**
+     * Create the minimal geographic-region test schema.
+     *
+     * @return void
+     */
     protected function setUp(): void
     {
         parent::setUp();
@@ -51,6 +61,11 @@ final class GeographicRegionsOccurrenceImportServiceTest extends CIUnitTestCase
         $this->db->table('geographic_regions_occurrences')->emptyTable();
     }
 
+    /**
+     * Verify that a full rebuild creates stable, idempotent assignments.
+     *
+     * @return void
+     */
     public function testRunRebuildsAssignmentsAndIsIdempotent(): void
     {
         $this->db->table('geographic_regions')->insertBatch([
@@ -128,6 +143,11 @@ final class GeographicRegionsOccurrenceImportServiceTest extends CIUnitTestCase
         $this->assertCount(2, $rowsAfterSecondRun);
     }
 
+    /**
+     * Verify that rebuilding selected occurrences preserves other assignments.
+     *
+     * @return void
+     */
     public function testRunWithOccurrenceIdsOnlyRebuildsSelectedOccurrences(): void
     {
         $this->db->table('geographic_regions')->insert([

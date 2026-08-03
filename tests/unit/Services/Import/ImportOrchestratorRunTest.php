@@ -20,6 +20,11 @@ use RuntimeException;
  */
 final class ImportOrchestratorRunTest extends CIUnitTestCase
 {
+    /**
+     * Verify that dry-run imports return counts without persisting offsets.
+     *
+     * @return void
+     */
     public function testRunDryRunSuccessReturnsCountsAndSkipsOffsetPersistence(): void
     {
         $adapter = $this->createMock(OccurrenceSourceAdapterInterface::class);
@@ -70,6 +75,11 @@ final class ImportOrchestratorRunTest extends CIUnitTestCase
         $this->assertSame(0, $result['errors']);
     }
 
+    /**
+     * Verify that a row failure marks the import incomplete.
+     *
+     * @return void
+     */
     public function testRunNonDryFailedImportSetsCompletionFalse(): void
     {
         $adapter = $this->createMock(OccurrenceSourceAdapterInterface::class);
@@ -114,6 +124,11 @@ final class ImportOrchestratorRunTest extends CIUnitTestCase
         $this->assertSame(1, $result['errors']);
     }
 
+    /**
+     * Verify that geographic reassignment runs once for each persisted page.
+     *
+     * @return void
+     */
     public function testRunReassignsGeographicRegionsAfterEachPersistedPage(): void
     {
         $adapter = $this->createMock(OccurrenceSourceAdapterInterface::class);
@@ -186,6 +201,11 @@ final class ImportOrchestratorRunTest extends CIUnitTestCase
         $this->assertSame([[false, [101]], [false, [102]]], $assignmentCalls);
     }
 
+    /**
+     * Verify that adapter exceptions are wrapped and the offset is incomplete.
+     *
+     * @return void
+     */
     public function testRunWrapsAdapterExceptionsAndMarksOffsetIncomplete(): void
     {
         $adapter = $this->createMock(OccurrenceSourceAdapterInterface::class);
@@ -216,6 +236,11 @@ final class ImportOrchestratorRunTest extends CIUnitTestCase
         $orchestrator->run('nbn', 10, 10, false, 'start-cp');
     }
 
+    /**
+     * Verify that a new NBN import starts at checkpoint zero.
+     *
+     * @return void
+     */
     public function testRunForNbnStartsFromZeroWhenNoCheckpointOverrideProvided(): void
     {
         $adapter = $this->createMock(OccurrenceSourceAdapterInterface::class);
@@ -257,6 +282,11 @@ final class ImportOrchestratorRunTest extends CIUnitTestCase
         $this->assertSame('success', $result['status']);
     }
 
+    /**
+     * Verify that an NBN import resumes from its stored checkpoint.
+     *
+     * @return void
+     */
     public function testRunForNbnResumesFromStoredCheckpoint(): void
     {
         $adapter = $this->createMock(OccurrenceSourceAdapterInterface::class);
@@ -305,6 +335,12 @@ final class ImportOrchestratorRunTest extends CIUnitTestCase
         $this->assertSame('25', $result['checkpoint']);
     }
 
+    /**
+     * Build an adapter factory returning the supplied adapter.
+     *
+     * @param OccurrenceSourceAdapterInterface $adapter Adapter mock to return.
+     * @return OccurrenceSourceAdapterFactory Configured adapter factory mock.
+     */
     private function mockAdapterFactory(OccurrenceSourceAdapterInterface $adapter): OccurrenceSourceAdapterFactory
     {
         $adapterFactory = $this->createMock(OccurrenceSourceAdapterFactory::class);
@@ -314,6 +350,11 @@ final class ImportOrchestratorRunTest extends CIUnitTestCase
         return $adapterFactory;
     }
 
+    /**
+     * Build a mock import-run model with fluent query methods.
+     *
+     * @return ImportRunModel Import-run model mock.
+     */
     private function mockImportRunModel(): ImportRunModel
     {
         $importRunModel = $this->getMockBuilder(ImportRunModel::class)
@@ -331,6 +372,11 @@ final class ImportOrchestratorRunTest extends CIUnitTestCase
         return $importRunModel;
     }
 
+    /**
+     * Build a data-source model returning the NBN data source.
+     *
+     * @return DataSourceModel Data-source model mock.
+     */
     private function mockDataSourceModel(): DataSourceModel
     {
         $dataSourceModel = $this->getMockBuilder(DataSourceModel::class)
@@ -344,6 +390,13 @@ final class ImportOrchestratorRunTest extends CIUnitTestCase
         return $dataSourceModel;
     }
 
+    /**
+     * Build an import-offset model with configured checkpoint state.
+     *
+     * @param bool        $complete   Whether the dependency state is complete.
+     * @param string|null $checkpoint Stored checkpoint, when available.
+     * @return ImportOffsetModel Import-offset model mock.
+     */
     private function mockImportOffsetModel(bool $complete, ?string $checkpoint = null): ImportOffsetModel
     {
         $importOffsetModel = $this->createMock(ImportOffsetModel::class);

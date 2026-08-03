@@ -161,6 +161,14 @@ mkdir -p writable/uploads/taxon-media
 chmod -R ug+rwX writable/uploads
 ```
 
+   The scheduled import command writes its console output to a separate directory. Create it
+   and make it writable by the user that runs the cron job:
+
+```bash
+mkdir -p writable/import-logs
+chmod -R ug+rwX writable/import-logs
+```
+
 12. Optional taxon media configuration in `.env`:
 
 ```dotenv
@@ -191,7 +199,7 @@ Use `--limit` and `--page-size` to override the configured defaults for one auto
 For example, edit the crontab for the web-server or deployment user:
 
 ```cron
-*/5 * * * * flock -n /var/lock/tanhub-import.lock /usr/bin/php /var/www/tanhub/spark import:auto >> /var/log/tanhub-import.log 2>&1
+*/5 * * * * flock -n /var/www/tanhub/writable/tanhub-import.lock /usr/bin/php /var/www/tanhub/spark import:auto >> /var/www/tanhub/writable/import-logs/import-$(date +\%F).log 2>&1
 ```
 
 Replace `/var/www/tanhub` with the absolute application path and use the PHP
@@ -199,6 +207,16 @@ binary configured for the deployment. The `flock` wrapper prevents a second run
 starting while the previous run is still processing. Choose an interval that
 allows a normal batch to finish and respects the rate limits of the configured
 Indicia Warehouse and NBN Atlas services.
+
+The `\%F` format produces filenames such as `import-2026-08-03.log`. The backslash is required
+because cron treats an unescaped `%` as a special character. These are Spark command logs and
+are separate from CodeIgniter's application logs in `writable/logs`.
+
+To remove import logs older than 30 days, add a separate scheduled cleanup command:
+
+```cron
+15 3 * * * find /var/www/tanhub/writable/import-logs -type f -name 'import-*.log' -mtime +30 -delete
+```
 
 ## 4. API Configuration
 

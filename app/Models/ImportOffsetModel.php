@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use CodeIgniter\Database\Exceptions\DatabaseException;
 use CodeIgniter\Model;
 
 /**
@@ -72,7 +73,7 @@ class ImportOffsetModel extends Model
      */
     public function getOffset(string $sourceKey): int
     {
-        $row = $this->where('source_key', $sourceKey)->first();
+        $row = $this->findBySourceKey($sourceKey);
 
         if (! is_array($row)) {
             return 0;
@@ -92,7 +93,7 @@ class ImportOffsetModel extends Model
     public function setOffset(string $sourceKey, int $nextOffset): void
     {
         $offset = max(0, $nextOffset);
-        $existing = $this->where('source_key', $sourceKey)->first();
+        $existing = $this->findBySourceKey($sourceKey);
 
         if (is_array($existing) && isset($existing['id'])) {
             $this->update((int) $existing['id'], ['next_offset' => $offset]);
@@ -115,7 +116,7 @@ class ImportOffsetModel extends Model
      */
     public function getCheckpoint(string $sourceKey): ?string
     {
-        $row = $this->where('source_key', $sourceKey)->first();
+        $row = $this->findBySourceKey($sourceKey);
 
         if (! is_array($row)) {
             return null;
@@ -144,19 +145,23 @@ class ImportOffsetModel extends Model
     {
         $checkpoint = $nextCheckpoint === null ? null : trim($nextCheckpoint);
         $checkpoint = $checkpoint === '' ? null : $checkpoint;
-        $existing = $this->where('source_key', $sourceKey)->first();
 
-        if (is_array($existing) && isset($existing['id'])) {
-            $this->update((int) $existing['id'], ['next_checkpoint' => $checkpoint]);
-            return;
-        }
+        $this->runWithReconnect(function () use ($sourceKey, $checkpoint): void {
+            $existing = $this->findBySourceKey($sourceKey);
 
-        $this->insert([
-            'source_key' => $sourceKey,
-            'next_offset' => 0,
-            'next_checkpoint' => $checkpoint,
-            'is_complete' => 0,
-        ]);
+            if (is_array($existing) && isset($existing['id'])) {
+                $this->update((int) $existing['id'], ['next_checkpoint' => $checkpoint]);
+
+                return;
+            }
+
+            $this->insert([
+                'source_key' => $sourceKey,
+                'next_offset' => 0,
+                'next_checkpoint' => $checkpoint,
+                'is_complete' => 0,
+            ]);
+        });
     }
 
     /**
@@ -168,7 +173,7 @@ class ImportOffsetModel extends Model
      */
     public function isComplete(string $sourceKey): bool
     {
-        $row = $this->where('source_key', $sourceKey)->first();
+        $row = $this->findBySourceKey($sourceKey);
 
         if (! is_array($row)) {
             return false;
@@ -187,7 +192,7 @@ class ImportOffsetModel extends Model
      */
     public function setCompletion(string $sourceKey, bool $isComplete): void
     {
-        $existing = $this->where('source_key', $sourceKey)->first();
+        $existing = $this->findBySourceKey($sourceKey);
         $value = $isComplete ? 1 : 0;
 
         if (is_array($existing) && isset($existing['id'])) {
@@ -202,5 +207,66 @@ class ImportOffsetModel extends Model
             'next_checkpoint' => null,
             'is_complete' => $value,
         ]);
+    }
+
+    /**
+     * Find an offset row using a new builder so conditions cannot leak between queries.
+     *
+     * @param string $sourceKey Source/entity tracking key.
+     *
+     * @return array<string, mixed>|null Matching row, or null when it does not exist.
+     */
+    private function findBySourceKey(string $sourceKey): ?array
+    {
+        $row = $this->db
+            ->table($this->table)
+            ->where('source_key', $sourceKey)
+            ->get()
+            ->getRowArray();
+
+        return is_array($row) ? $row : null;
+    }
+
+    /**
+     * Run checkpoint persistence, reconnecting once after a lost database connection.
+     *
+     * The import can spend more than the server's 60-second `wait_timeout` waiting
+     * for an external API. Only this idempotent checkpoint operation is retried; the
+     * occurrence import itself is never repeated here.
+     *
+     * @param callable(): void $operation Persistence operation to execute.
+     *
+     * @return void
+     *
+     * @throws DatabaseException If the operation fails for a reason other than a lost
+     *                            connection, or still fails after one reconnect.
+     */
+    private function runWithReconnect(callable $operation): void
+    {
+        try {
+            $operation();
+        } catch (DatabaseException $exception) {
+            if (! $this->isLostConnection($exception)) {
+                throw $exception;
+            }
+
+            $this->db->reconnect();
+            $operation();
+        }
+    }
+
+    /**
+     * Determine whether a database exception indicates a connection loss.
+     *
+     * @param DatabaseException $exception Database exception to inspect.
+     *
+     * @return bool True for common MySQL lost-connection messages.
+     */
+    private function isLostConnection(DatabaseException $exception): bool
+    {
+        $message = strtolower($exception->getMessage());
+
+        return str_contains($message, 'server has gone away')
+            || str_contains($message, 'lost connection');
     }
 }

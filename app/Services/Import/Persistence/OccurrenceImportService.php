@@ -80,10 +80,9 @@ class OccurrenceImportService
      * @param bool                              $dryRun       When true, compute counts without
      *                                                        writing changes.
      *
-     * @return array<string, int|string|null> Result counts: `fetched`, `processed`, `inserted`,
-     *                                        `updated`, `skipped`, `errors`, and
-     *                                        `last_checkpoint` (highest `_checkpoint` value seen,
-     *                                        or null).
+        * @return array<string, int|string|null|array<int, int>> Result counts: `fetched`, `processed`,
+        *        `inserted`, `updated`, `skipped`, `errors`, `last_checkpoint` (highest `_checkpoint`
+        *        value seen, or null), and `changed_occurrence_ids` (IDs inserted or updated).
      */
     public function import(array $records, int $dataSourceId, string $sourceAbbr, bool $dryRun = false): array
     {
@@ -95,6 +94,7 @@ class OccurrenceImportService
             'skipped' => 0,
             'errors' => 0,
             'last_checkpoint' => null,
+            'changed_occurrence_ids' => [],
         ];
 
         if ($records === []) {
@@ -211,6 +211,7 @@ class OccurrenceImportService
 
                 if ($existing !== null) {
                     $counts['updated']++;
+                    $counts['changed_occurrence_ids'][] = (int) $existing['id'];
 
                     if (! $dryRun) {
                         $occurrenceModel->update((int) $existing['id'], $row);
@@ -226,6 +227,7 @@ class OccurrenceImportService
 
                 if (! $dryRun) {
                     $occurrenceModel->insert($row);
+                    $counts['changed_occurrence_ids'][] = (int) $occurrenceModel->getInsertID();
                 }
 
                 $counts['processed']++;

@@ -9,6 +9,7 @@ use App\Services\Import\Adapter\ImportPage;
 use App\Services\Import\Adapter\OccurrenceSourceAdapterFactory;
 use App\Services\Import\Adapter\OccurrenceSourceAdapterInterface;
 use App\Services\Import\ImportOrchestrator;
+use App\Services\Import\Persistence\GeographicRegionsOccurrenceImportService;
 use App\Services\Import\Persistence\OccurrenceImportService;
 use CodeIgniter\Test\CIUnitTestCase;
 use Config\Import as ImportConfig;
@@ -111,6 +112,78 @@ final class ImportOrchestratorRunTest extends CIUnitTestCase
         $this->assertSame('failed', $result['status']);
         $this->assertSame('error-cp', $result['checkpoint']);
         $this->assertSame(1, $result['errors']);
+    }
+
+    public function testRunReassignsGeographicRegionsAfterEachPersistedPage(): void
+    {
+        $adapter = $this->createMock(OccurrenceSourceAdapterInterface::class);
+        $adapter->expects($this->exactly(2))
+            ->method('fetchPage')
+            ->willReturnOnConsecutiveCalls(
+                new ImportPage([['remote_id' => 'one']], 'page-one', true),
+                new ImportPage([['remote_id' => 'two']], 'page-two', false),
+            );
+
+        $occurrenceImportService = $this->createMock(OccurrenceImportService::class);
+        $occurrenceImportService->expects($this->exactly(2))
+            ->method('import')
+            ->willReturnOnConsecutiveCalls(
+                [
+                    'fetched' => 1,
+                    'processed' => 1,
+                    'inserted' => 1,
+                    'updated' => 0,
+                    'skipped' => 0,
+                    'errors' => 0,
+                    'last_checkpoint' => 'page-one',
+                    'changed_occurrence_ids' => [101],
+                ],
+                [
+                    'fetched' => 1,
+                    'processed' => 1,
+                    'inserted' => 0,
+                    'updated' => 1,
+                    'skipped' => 0,
+                    'errors' => 0,
+                    'last_checkpoint' => 'page-two',
+                    'changed_occurrence_ids' => [102],
+                ],
+            );
+
+        $geographicRegionsOccurrenceImportService = $this->createMock(GeographicRegionsOccurrenceImportService::class);
+        $assignmentCalls = [];
+        $geographicRegionsOccurrenceImportService->expects($this->exactly(2))
+            ->method('run')
+            ->willReturnCallback(function (bool $dryRun, ?array $occurrenceIds) use (&$assignmentCalls): array {
+                $assignmentCalls[] = [$dryRun, $occurrenceIds];
+
+                return ['status' => 'success', 'errors' => 0];
+            });
+
+        $importRunModel = $this->mockImportRunModel();
+        $importOffsetModel = $this->mockImportOffsetModel(true);
+        $importOffsetModel->expects($this->once())
+            ->method('setCheckpoint')
+            ->with('nbn-occurrences:occurrences', 'page-two');
+        $importOffsetModel->expects($this->once())
+            ->method('setCompletion')
+            ->with('nbn-occurrences:occurrences', true);
+
+        $orchestrator = new ImportOrchestrator(
+            new ImportConfig(),
+            $this->mockAdapterFactory($adapter),
+            $occurrenceImportService,
+            $importRunModel,
+            $this->mockDataSourceModel(),
+            $importOffsetModel,
+            $geographicRegionsOccurrenceImportService,
+        );
+
+        $result = $orchestrator->run('nbn', 10, 1, false, 'start-cp');
+
+        $this->assertSame('success', $result['status']);
+        $this->assertSame('page-two', $result['checkpoint']);
+        $this->assertSame([[false, [101]], [false, [102]]], $assignmentCalls);
     }
 
     public function testRunWrapsAdapterExceptionsAndMarksOffsetIncomplete(): void

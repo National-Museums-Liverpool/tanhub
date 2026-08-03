@@ -127,4 +127,43 @@ final class GeographicRegionsOccurrenceImportServiceTest extends CIUnitTestCase
 
         $this->assertCount(2, $rowsAfterSecondRun);
     }
+
+    public function testRunWithOccurrenceIdsOnlyRebuildsSelectedOccurrences(): void
+    {
+        $this->db->table('geographic_regions')->insert([
+            'id' => 1,
+            'higher_geography_identifier' => 101,
+            'higher_geography' => 'Region A',
+            'location_type' => 'Vice County',
+            'footprint_geometry' => 'POLYGON((0 0,2 0,2 2,0 2,0 0))',
+            'data_source_id' => 1,
+            'deleted_at' => null,
+        ]);
+
+        $this->db->table('occurrences')->insertBatch([
+            ['id' => 11, 'latitude' => 1.0, 'longitude' => 1.0, 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 12, 'latitude' => 1.0, 'longitude' => 1.0, 'blocked' => 0, 'deleted_at' => null],
+        ]);
+        $this->db->table('geographic_regions_occurrences')->insertBatch([
+            ['geographic_region_id' => 1, 'occurrence_id' => 11],
+            ['geographic_region_id' => 1, 'occurrence_id' => 12],
+        ]);
+
+        $this->db->table('occurrences')->where('id', 11)->update([
+            'latitude' => 4.0,
+            'longitude' => 4.0,
+        ]);
+
+        $result = (new GeographicRegionsOccurrenceImportService())->run(false, [11]);
+
+        $this->assertSame('success', $result['status']);
+        $this->assertSame(0, $result['inserted']);
+        $this->assertSame(0, $result['errors']);
+        $this->assertSame([
+            ['geographic_region_id' => '1', 'occurrence_id' => '12'],
+        ], array_map(static fn (array $row): array => [
+            'geographic_region_id' => (string) $row['geographic_region_id'],
+            'occurrence_id' => (string) $row['occurrence_id'],
+        ], $this->db->table('geographic_regions_occurrences')->get()->getResultArray()));
+    }
 }

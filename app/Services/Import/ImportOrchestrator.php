@@ -6,6 +6,7 @@ use App\Models\DataSourceModel;
 use App\Models\ImportOffsetModel;
 use App\Models\ImportRunModel;
 use App\Services\Import\Adapter\OccurrenceSourceAdapterFactory;
+use App\Services\Import\Persistence\GeographicRegionsOccurrenceImportService;
 use App\Services\Import\Persistence\OccurrenceImportService;
 use Config\Import as ImportConfig;
 use InvalidArgumentException;
@@ -18,7 +19,7 @@ use RuntimeException;
  * pages through {@see \App\Services\Import\Adapter\OccurrenceSourceAdapterInterface}
  * (created by {@see \App\Services\Import\Adapter\OccurrenceSourceAdapterFactory}),
  * persists each page via {@see \App\Services\Import\Persistence\OccurrenceImportService},
- * then re-assigns geographic regions via
+ * re-assigns geographic regions for each persisted page via
  * {@see \App\Services\Import\Persistence\GeographicRegionsOccurrenceImportService}
  * and advances the source's checkpoint/completion state in
  * {@see \App\Models\ImportOffsetModel}. This is the occurrence-import
@@ -36,6 +37,7 @@ class ImportOrchestrator
      * @param ImportRunModel|null                 $importRunModel Import run tracker model.
      * @param DataSourceModel|null                $dataSourceModel Data source model.
      * @param ImportOffsetModel|null              $importOffsetModel Import offset/checkpoint model.
+    * @param GeographicRegionsOccurrenceImportService|null $geographicRegionsOccurrenceImportService Geographic assignment service.
      */
     public function __construct(
         private readonly ?ImportConfig $config = null,
@@ -44,6 +46,7 @@ class ImportOrchestrator
         private readonly ?ImportRunModel $importRunModel = null,
         private readonly ?DataSourceModel $dataSourceModel = null,
         private readonly ?ImportOffsetModel $importOffsetModel = null,
+        private readonly ?GeographicRegionsOccurrenceImportService $geographicRegionsOccurrenceImportService = null,
     ) {
     }
 
@@ -55,7 +58,8 @@ class ImportOrchestrator
      * repeatedly fetches and persists pages of up to `$pageSize` records
      * until either `$limit` records have been processed, the adapter reports
      * no more pages, a page returns zero records, or a row error occurs.
-     * After each page, the checkpoint advances to the persistence service's
+    * After each page, geographic memberships for that page's changed occurrences
+    * are rebuilt immediately. The checkpoint advances to the persistence service's
      * reported `last_checkpoint` (falling back to the adapter's
      * `nextCheckpoint`), so a failed run can resume from the last
      * successfully-persisted record rather than re-fetching everything.
@@ -103,6 +107,13 @@ class ImportOrchestrator
         $dataSourceModel = $this->dataSourceModel ?? model(DataSourceModel::class);
         $importOffsetModel = $this->importOffsetModel ?? model(ImportOffsetModel::class);
 
+        $geographicRegionsOccurrenceImportService = null;
+
+        if (! $dryRun) {
+            $geographicRegionsOccurrenceImportService = $this->geographicRegionsOccurrenceImportService
+                ?? service(GeographicRegionsOccurrenceImportService::class);
+        }
+
         $source = strtolower($sourceKey);
         $sourceEntityKey = $this->occurrenceSourceKey($source);
 
@@ -140,6 +151,7 @@ class ImportOrchestrator
 
         $processed = 0;
         $hasMore = true;
+        $geographicRegionAssignmentFailed = false;
 
         try {
             while ($hasMore && $processed < $limit) {
@@ -159,6 +171,18 @@ class ImportOrchestrator
                 $total['skipped'] += $counts['skipped'];
                 $total['errors'] += $counts['errors'];
 
+                if ($counts['errors'] === 0 && ! $dryRun) {
+                    $assignmentResult = $geographicRegionsOccurrenceImportService->run(
+                        false,
+                        (array) ($counts['changed_occurrence_ids'] ?? []),
+                    );
+
+                    if (((int) ($assignmentResult['errors'] ?? 0)) > 0) {
+                        $total['errors'] += (int) ($assignmentResult['errors'] ?? 0);
+                        $geographicRegionAssignmentFailed = true;
+                    }
+                }
+
                 $processed += (int) ($counts['processed'] ?? 0);
                 $checkpoint = $counts['errors'] > 0
                     ? ($counts['last_checkpoint'] ?? $checkpoint)
@@ -170,25 +194,18 @@ class ImportOrchestrator
                     break;
                 }
 
-                if ($counts['errors'] > 0) {
+                if ($counts['errors'] > 0 || $geographicRegionAssignmentFailed) {
                     break;
-                }
-            }
-
-            if ($total['errors'] === 0 && ! $dryRun) {
-                /** @var \App\Services\Import\Persistence\GeographicRegionsOccurrenceImportService $geographicRegionsOccurrenceImportService */
-                $geographicRegionsOccurrenceImportService = service('geographicRegionsOccurrenceImportService');
-                $assignmentResult = $geographicRegionsOccurrenceImportService->run(false);
-
-                if (((int) ($assignmentResult['errors'] ?? 0)) > 0) {
-                    $total['errors'] += (int) ($assignmentResult['errors'] ?? 0);
                 }
             }
 
             $status = $total['errors'] > 0 ? 'failed' : 'success';
 
             if (! $dryRun) {
-                $importOffsetModel->setCheckpoint($sourceEntityKey, $checkpoint);
+                if (! $geographicRegionAssignmentFailed) {
+                    $importOffsetModel->setCheckpoint($sourceEntityKey, $checkpoint);
+                }
+
                 $importOffsetModel->setCompletion($sourceEntityKey, $status === 'success' && $hasMore === false);
             }
 

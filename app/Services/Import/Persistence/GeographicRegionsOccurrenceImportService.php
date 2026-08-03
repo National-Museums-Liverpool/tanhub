@@ -7,10 +7,8 @@ use RuntimeException;
 /**
  * Rebuilds geographic region memberships for imported occurrences.
  *
- * Unlike the other persistence services, this is not an incremental upsert:
- * each non-dry-run invocation empties `geographic_regions_occurrences`
- * entirely and reinserts every current active-occurrence-to-region
- * assignment, so it must be re-run after any occurrence data changes.
+ * Rebuilds links only for occurrence IDs supplied to {@see self::run()}.
+ * Passing null preserves the full-rebuild behaviour for maintenance callers.
  */
 class GeographicRegionsOccurrenceImportService
 {
@@ -18,20 +16,21 @@ class GeographicRegionsOccurrenceImportService
      * Recompute all geographic region to occurrence links.
      *
      * Determines membership for every occurrence with coordinates that is
-     * not soft-deleted or blocked, using database-native spatial predicates
-     * where available (see {@see self::buildAssignmentsWithSpatialSql()}) or
-     * a PHP point-in-polygon fallback for drivers without spatial support
-     * (see {@see self::buildAssignmentsInPhp()}). On a non-dry-run, the
-     * target table is truncated and repopulated in batches of 1000.
+    * not soft-deleted or blocked, using database-native spatial predicates
+    * where available (see {@see self::buildAssignmentsWithSpatialSql()}) or
+    * a PHP point-in-polygon fallback for drivers without spatial support
+    * (see {@see self::buildAssignmentsInPhp()}). On a non-dry-run, the
+    * target links for the selected occurrences are deleted and repopulated
+    * in batches of 1000.
      *
-     * @param bool $dryRun When true, compute the assignment count without
-     *                     truncating or writing to `geographic_regions_occurrences`.
+    * @param bool                  $dryRun         Whether to avoid database changes.
+    * @param array<int, int>|null  $occurrenceIds Occurrence IDs to rebuild; null rebuilds all.
      *
      * @return array<string, int|string> Result summary: `status` (`success`|`failed`),
      *                                   `fetched`, `processed`, `inserted`, `updated`,
      *                                   `skipped`, `errors`.
      */
-    public function run(bool $dryRun = false): array
+    public function run(bool $dryRun = false, ?array $occurrenceIds = null): array
     {
         $counts = [
             'status' => 'success',
@@ -43,9 +42,12 @@ class GeographicRegionsOccurrenceImportService
             'errors' => 0,
         ];
 
+        $db = null;
+
         try {
             $db = db_connect();
-            $assignments = $this->buildAssignments($db);
+            $occurrenceIds = $this->normaliseOccurrenceIds($occurrenceIds);
+            $assignments = $this->buildAssignments($db, $occurrenceIds);
 
             $counts['fetched'] = count($assignments);
             $counts['processed'] = $counts['fetched'];
@@ -54,7 +56,13 @@ class GeographicRegionsOccurrenceImportService
                 return $counts;
             }
 
-            $db->table('geographic_regions_occurrences')->emptyTable();
+            $linkTable = $db->table('geographic_regions_occurrences');
+
+            if ($occurrenceIds === null) {
+                $linkTable->emptyTable();
+            } elseif ($occurrenceIds !== []) {
+                $linkTable->whereIn('occurrence_id', $occurrenceIds)->delete();
+            }
 
             if ($assignments !== []) {
                 foreach (array_chunk($assignments, 1000) as $batch) {
@@ -65,6 +73,12 @@ class GeographicRegionsOccurrenceImportService
             $counts['inserted'] = count($assignments);
         } catch (\Throwable $exception) {
             log_message('error', $exception->getMessage());
+
+            if (is_object($db)) {
+                $db->close();
+                $db->initialize();
+            }
+
             $counts['status'] = 'failed';
             $counts['errors']++;
         }
@@ -78,25 +92,26 @@ class GeographicRegionsOccurrenceImportService
      * @param object $db
      * @return array<int, array{geographic_region_id: int, occurrence_id: int}>
      */
-    private function buildAssignments(object $db): array
+    private function buildAssignments(object $db, ?array $occurrenceIds): array
     {
         $driver = strtoupper((string) ($db->DBDriver ?? ''));
 
         if ($driver === 'SQLITE3') {
-            return $this->buildAssignmentsInPhp($db);
+            return $this->buildAssignmentsInPhp($db, $occurrenceIds);
         }
 
-        return $this->buildAssignmentsWithSpatialSql($db, $driver);
+        return $this->buildAssignmentsWithSpatialSql($db, $driver, $occurrenceIds);
     }
 
     /**
      * Build assignments using database-native spatial predicates.
      *
-     * @param object $db
-     * @param string $driver
+        * @param object                 $db
+        * @param string                 $driver
+        * @param array<int, int>|null   $occurrenceIds
      * @return array<int, array{geographic_region_id: int, occurrence_id: int}>
      */
-    private function buildAssignmentsWithSpatialSql(object $db, string $driver): array
+    private function buildAssignmentsWithSpatialSql(object $db, string $driver, ?array $occurrenceIds): array
     {
         $prefix = $db->getPrefix();
 
@@ -117,6 +132,14 @@ class GeographicRegionsOccurrenceImportService
                 AND o.latitude IS NOT NULL
                 AND o.longitude IS NOT NULL
                 AND ST_Intersects(gr.footprint_geometry, ' . $pointExpression . ')';
+
+        if ($occurrenceIds !== null) {
+            if ($occurrenceIds === []) {
+                return [];
+            }
+
+            $sql .= ' AND o.id IN (' . implode(',', $occurrenceIds) . ')';
+        }
 
         $rows = $db->query($sql)->getResultArray();
         $assignments = [];
@@ -141,10 +164,11 @@ class GeographicRegionsOccurrenceImportService
     /**
      * Build assignments in PHP for SQLite tests and other non-spatial drivers.
      *
-     * @param object $db
+        * @param object                 $db
+        * @param array<int, int>|null   $occurrenceIds
      * @return array<int, array{geographic_region_id: int, occurrence_id: int}>
      */
-    private function buildAssignmentsInPhp(object $db): array
+    private function buildAssignmentsInPhp(object $db, ?array $occurrenceIds): array
     {
         $regions = $db->table('geographic_regions')
             ->select('id, footprint_geometry')
@@ -153,13 +177,22 @@ class GeographicRegionsOccurrenceImportService
             ->get()
             ->getResultArray();
 
-        $occurrences = $db->table('occurrences')
+        $occurrenceBuilder = $db->table('occurrences')
             ->select('id, latitude, longitude')
             ->where('deleted_at', null)
             ->where('blocked', 0)
             ->where('latitude IS NOT NULL', null, false)
-            ->where('longitude IS NOT NULL', null, false)
-            ->get()
+            ->where('longitude IS NOT NULL', null, false);
+
+        if ($occurrenceIds !== null) {
+            if ($occurrenceIds === []) {
+                return [];
+            }
+
+            $occurrenceBuilder->whereIn('id', $occurrenceIds);
+        }
+
+        $occurrences = $occurrenceBuilder->get()
             ->getResultArray();
 
         $assignments = [];
@@ -195,6 +228,24 @@ class GeographicRegionsOccurrenceImportService
         }
 
         return $assignments;
+    }
+
+    /**
+     * Normalise optional occurrence IDs and remove invalid or duplicate values.
+     *
+     * @param array<int, int>|null $occurrenceIds IDs to normalise, or null for a full rebuild.
+     *
+     * @return array<int, int>|null Positive unique IDs, or null when no filter was supplied.
+     */
+    private function normaliseOccurrenceIds(?array $occurrenceIds): ?array
+    {
+        if ($occurrenceIds === null) {
+            return null;
+        }
+
+        $ids = array_filter(array_map('intval', $occurrenceIds), static fn (int $id): bool => $id > 0);
+
+        return array_values(array_unique($ids));
     }
 
     /**

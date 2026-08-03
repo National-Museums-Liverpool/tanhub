@@ -250,7 +250,8 @@ class ImportOffsetModel extends Model
                 throw $exception;
             }
 
-            $this->db->reconnect();
+            $this->db->close();
+            $this->db->initialize();
             $operation();
         }
     }

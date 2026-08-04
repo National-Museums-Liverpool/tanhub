@@ -74,11 +74,14 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
 
         $hasMore = count($records) >= $pageSize;
 
-        if ($totalRecords !== null) {
+        if ($totalRecords !== null && ! $this->isCursorCheckpoint($checkpoint)) {
             $hasMore = $nextOffset < $totalRecords;
         }
 
-        $nextCheckpoint = (string) $nextOffset;
+        $lastOccurrenceId = $this->lastOccurrenceId($records);
+        $nextCheckpoint = $lastOccurrenceId === null
+            ? (string) $nextOffset
+            : 'occurrenceID:' . $lastOccurrenceId;
 
         return new ImportPage($normalized, $nextCheckpoint, $hasMore);
     }
@@ -92,7 +95,17 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         $query['q'] = trim((string) ($query['q'] ?? '*:*'));
         $query['pageSize'] = max(1, $limit);
         $query['sort'] = 'occurrenceID';
-        $query['start'] = $this->normaliseStartCheckpoint($checkpoint);
+        $cursor = $this->cursorFromCheckpoint($checkpoint);
+        $legacyStart = $this->normaliseStartCheckpoint($checkpoint);
+
+        // NBN Atlas limits offset pagination to its max result window (currently
+        // 5000). Re-read the final safe page for legacy checkpoints at that
+        // boundary, then continue using the occurrenceID cursor.
+        if ($cursor === null && $legacyStart >= 5000) {
+            $legacyStart = max(0, $legacyStart - max(1, $limit));
+        }
+
+        $query['startIndex'] = $cursor === null ? $legacyStart : 0;
 
         $filters = [];
         $regionFilter = $this->buildOrFilter('cl254', $this->normalisedListValues($this->config['geographic_regions'] ?? []));
@@ -109,10 +122,69 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             $filters[] = $configuredClause;
         }
 
+        if ($cursor !== null) {
+            $filters[] = 'occurrenceID:{' . $this->escapeFilterValue($cursor) . ' TO *]';
+        }
+
         $filters[] = '-(user_assertions:"50005" OR user_assertions:"50006" OR user_assertions:"50001")';
         $query['fq'] = implode('&fq=', $filters);
 
         return $query;
+    }
+
+    /**
+     * Determine whether a checkpoint contains an occurrence cursor.
+     *
+     * @param string|null $checkpoint Stored checkpoint value.
+     *
+     * @return bool True when the checkpoint is an occurrenceID cursor.
+     */
+    private function isCursorCheckpoint(?string $checkpoint): bool
+    {
+        return $this->cursorFromCheckpoint($checkpoint) !== null;
+    }
+
+    /**
+     * Extract an occurrence ID cursor from a checkpoint.
+     *
+     * @param string|null $checkpoint Stored checkpoint value.
+     *
+     * @return string|null Cursor value, or null for a legacy numeric offset.
+     */
+    private function cursorFromCheckpoint(?string $checkpoint): ?string
+    {
+        if ($checkpoint === null || ! str_starts_with($checkpoint, 'occurrenceID:')) {
+            return null;
+        }
+
+        $cursor = trim(substr($checkpoint, strlen('occurrenceID:')));
+
+        return $cursor === '' ? null : $cursor;
+    }
+
+    /**
+     * Read the final occurrence ID from a raw API page.
+     *
+     * @param array<int, array<string, mixed>> $records Raw API records.
+     *
+     * @return string|null Last occurrence ID when present.
+     */
+    private function lastOccurrenceId(array $records): ?string
+    {
+        if ($records === []) {
+            return null;
+        }
+
+        $last = $records[array_key_last($records)];
+        $value = $last['occurrenceID'] ?? null;
+
+        if (! is_scalar($value)) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
     }
 
     /**

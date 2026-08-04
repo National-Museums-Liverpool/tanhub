@@ -67,7 +67,7 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
                     $fq = array_map('urldecode', $matches[1] ?? []);
 
                     return $query['pageSize'] === '25'
-                        && $query['start'] === '25'
+                        && $query['startIndex'] === '25'
                         && $query['q'] === '*:*'
                         && in_array('cl254:("Cheshire" OR "South Lancashire")', $fq, true)
                         && in_array('taxonRankID:[6000 TO *]', $fq, true)
@@ -94,7 +94,7 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
 
         $this->assertCount(1, $page->records);
         $this->assertTrue($page->hasMore);
-        $this->assertSame('26', $page->nextCheckpoint);
+        $this->assertSame('occurrenceID:occ-1', $page->nextCheckpoint);
 
         $record = $page->records[0];
         $this->assertSame('nbn-uuid-1', $record['remote_id']);
@@ -189,6 +189,76 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         $this->assertSame('SU99A', $page->records[0]['grid_ref_2km']);
         $this->assertFalse($page->hasMore);
         $this->assertSame('1', $page->nextCheckpoint);
+    }
+
+    public function testFetchPageUsesOccurrenceIdCursorAfterLegacyOffsetWindow(): void
+    {
+        $response = $this->createMock(ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn(200);
+        $response->method('getBody')->willReturn((string) json_encode([
+            'totalRecords' => 1000000,
+            'startIndex' => 4800,
+            'pageSize' => 50,
+            'occurrences' => [
+                ['uuid' => 'uuid-5000', 'occurrenceID' => '5000', 'taxonConceptID' => 'NHMSYS0001'],
+            ],
+        ], JSON_THROW_ON_ERROR));
+
+        $client = $this->createMock(CURLRequest::class);
+        $client->expects($this->once())
+            ->method('get')
+            ->with($this->callback(static function (string $url): bool {
+                parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+                return $query['startIndex'] === '4800';
+            }))
+            ->willReturn($response);
+
+        $adapter = new NbnAtlasOccurrencesAdapter(
+            $client,
+            ['endpoint' => 'https://example.test/nbn'],
+            10,
+        );
+
+        $page = $adapter->fetchPage('5000', 200);
+
+        $this->assertSame('occurrenceID:5000', $page->nextCheckpoint);
+    }
+
+    public function testFetchPageAddsExclusiveOccurrenceIdCursorFilter(): void
+    {
+        $response = $this->createMock(ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn(200);
+        $response->method('getBody')->willReturn((string) json_encode([
+            'totalRecords' => 1000000,
+            'startIndex' => 0,
+            'pageSize' => 1,
+            'occurrences' => [
+                ['uuid' => 'uuid-5001', 'occurrenceID' => '5001', 'taxonConceptID' => 'NHMSYS0001'],
+            ],
+        ], JSON_THROW_ON_ERROR));
+
+        $client = $this->createMock(CURLRequest::class);
+        $client->expects($this->once())
+            ->method('get')
+            ->with($this->callback(static function (string $url): bool {
+                $queryString = (string) parse_url($url, PHP_URL_QUERY);
+                parse_str($queryString, $query);
+
+                return $query['startIndex'] === '0'
+                    && str_contains(urldecode($queryString), 'fq=occurrenceID:{5000 TO *]');
+            }))
+            ->willReturn($response);
+
+        $adapter = new NbnAtlasOccurrencesAdapter(
+            $client,
+            ['endpoint' => 'https://example.test/nbn'],
+            10,
+        );
+
+        $page = $adapter->fetchPage('occurrenceID:5000', 200);
+
+        $this->assertTrue($page->hasMore);
     }
 
     public function testFetchPageSupportsSingleRawConfiguredFilterClause(): void

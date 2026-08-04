@@ -111,7 +111,7 @@ class ImportOrchestrator
 
         if (! $dryRun) {
             $geographicRegionsOccurrenceImportService = $this->geographicRegionsOccurrenceImportService
-                ?? service(GeographicRegionsOccurrenceImportService::class);
+                ?? service('geographicRegionsOccurrenceImportService');
         }
 
         $source = strtolower($sourceKey);

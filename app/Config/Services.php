@@ -219,6 +219,7 @@ class Services extends BaseService
             model(\App\Models\ImportRunModel::class),
             model(\App\Models\DataSourceModel::class),
             model(\App\Models\ImportOffsetModel::class),
+            static::geographicRegionsOccurrenceImportService(false),
         );
     }
 

@@ -140,6 +140,34 @@ class GridSquareStatsCountsService
                 'rarity_score' => 0,
             ]);
 
+            $lookupSquares = [];
+            $lookupRegionIds = [];
+
+            foreach ($aggregates as $aggregate) {
+                $square = strtoupper(trim((string) ($aggregate['square'] ?? '')));
+                $geographicRegionId = (int) ($aggregate['geographic_region_id'] ?? 0);
+
+                if ($square !== '' && $geographicRegionId > 0) {
+                    $lookupSquares[$square] = true;
+                    $lookupRegionIds[$geographicRegionId] = true;
+                }
+            }
+
+            $existingRows = [];
+
+            if ($lookupSquares !== [] && $lookupRegionIds !== []) {
+                foreach ($db->table('grid_square_stats')
+                    ->select(['id', 'square', 'geographic_region_id'])
+                    ->whereIn('square', array_keys($lookupSquares))
+                    ->whereIn('geographic_region_id', array_keys($lookupRegionIds))
+                    ->get()
+                    ->getResultArray() as $existingRow) {
+                    $existingRows[strtoupper((string) $existingRow['square']) . '|' . (int) $existingRow['geographic_region_id']] = $existingRow;
+                }
+            }
+
+            $updates = [];
+
             foreach ($aggregates as $aggregate) {
                 $square = strtoupper(trim((string) ($aggregate['square'] ?? '')));
                 $geographicRegionId = (int) ($aggregate['geographic_region_id'] ?? 0);
@@ -156,12 +184,7 @@ class GridSquareStatsCountsService
                     'rarity_score' => $this->formatRarityScore($aggregate['rarity_score'] ?? null),
                 ];
 
-                $existing = $db->table('grid_square_stats')
-                    ->select('id')
-                    ->where('square', $square)
-                    ->where('geographic_region_id', $geographicRegionId)
-                    ->get()
-                    ->getRowArray();
+                $existing = $existingRows[$square . '|' . $geographicRegionId] ?? null;
 
                 if ($existing === null) {
                     log_message('warning', 'Grid square stats counts skipped for missing grid square row: square=' . $square . ', geographic_region_id=' . $geographicRegionId);
@@ -170,12 +193,14 @@ class GridSquareStatsCountsService
                     continue;
                 }
 
-                $db->table('grid_square_stats')
-                    ->where('id', (int) $existing['id'])
-                    ->update($update);
+                $updates[] = ['id' => (int) $existing['id']] + $update;
 
                 $counts['updated']++;
                 $counts['processed']++;
+            }
+
+            if ($updates !== []) {
+                $db->table('grid_square_stats')->updateBatch($updates, 'id');
             }
         } catch (\Throwable $exception) {
             log_message('error', $exception->getMessage());

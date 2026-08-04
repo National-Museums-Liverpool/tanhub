@@ -41,6 +41,22 @@ class RecordingSchemesImportService implements EntityImportServiceInterface
         }
 
         $db = db_connect();
+        $externalKeys = [];
+
+        foreach ($rows as $row) {
+            $externalKey = trim((string) ($row['external_key'] ?? ''));
+
+            if ($externalKey !== '') {
+                $externalKeys[$externalKey] = true;
+            }
+        }
+
+        $existingRows = [];
+        if ($externalKeys !== []) {
+            foreach ($db->table('recording_schemes')->whereIn('external_key', array_keys($externalKeys))->get()->getResultArray() as $existingRow) {
+                $existingRows[(string) $existingRow['external_key']] = $existingRow;
+            }
+        }
 
         foreach ($rows as $row) {
             try {
@@ -61,14 +77,17 @@ class RecordingSchemesImportService implements EntityImportServiceInterface
                     'deleted_at' => null,
                 ];
 
-                $existing = $db->table('recording_schemes')->where('external_key', $externalKey)->get()->getRowArray();
+                $existing = $existingRows[$externalKey] ?? null;
 
                 if ($existing === null) {
                     $counts['inserted']++;
 
                     if (! $dryRun) {
                         $db->table('recording_schemes')->insert($payload);
+                        $payload['id'] = $db->insertID();
                     }
+
+                    $existingRows[$externalKey] = $payload;
 
                     $counts['processed']++;
                     continue;

@@ -43,6 +43,22 @@ class TaxonRanksImportService implements EntityImportServiceInterface
         }
 
         $db = db_connect();
+        $ranks = [];
+
+        foreach ($rows as $row) {
+            $rank = trim((string) ($row['rank'] ?? ''));
+
+            if ($rank !== '') {
+                $ranks[$rank] = true;
+            }
+        }
+
+        $existingRows = [];
+        if ($ranks !== []) {
+            foreach ($db->table('taxon_ranks')->whereIn('rank', array_keys($ranks))->get()->getResultArray() as $existingRow) {
+                $existingRows[(string) $existingRow['rank']] = $existingRow;
+            }
+        }
 
         foreach ($rows as $row) {
             try {
@@ -63,14 +79,17 @@ class TaxonRanksImportService implements EntityImportServiceInterface
                     'sort_order' => $sortOrder,
                 ];
 
-                $existing = $db->table('taxon_ranks')->where('rank', $rank)->get()->getRowArray();
+                $existing = $existingRows[$rank] ?? null;
 
                 if ($existing === null) {
                     $counts['inserted']++;
 
                     if (! $dryRun) {
                         $db->table('taxon_ranks')->insert($payload);
+                        $payload['id'] = $db->insertID();
                     }
+
+                    $existingRows[$rank] = $payload;
 
                     $counts['processed']++;
                     continue;

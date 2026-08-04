@@ -107,12 +107,46 @@ class OccurrenceImportService
         $taxonNameModel = model(TaxonNameModel::class);
         /** @var OccurrenceModel $occurrenceModel */
         $occurrenceModel = model(OccurrenceModel::class);
+        $db = db_connect();
         $osgbGridReferenceBuilder = $this->osgbGridReferenceBuilder ?? new OsgbGridReferenceBuilder();
 
 
         $ranks = config('Import')->taxonRanks;
         $rankColumns = array_map(fn ($rank) => strtolower($rank) . '_id', $ranks);
-        log_message('debug', 'Rank columns: ' . var_export($rankColumns, true));
+        $taxonIdentifiers = [];
+        $givenNameIdentifiers = [];
+        $uniqueKeys = [];
+
+        foreach ($records as $record) {
+            $taxonIdentifier = trim((string) ($record['scientific_name_identifier'] ?? ''));
+            $givenNameIdentifier = trim((string) ($record['given_name_identifier'] ?? ''));
+            $remoteId = trim((string) ($record['remote_id'] ?? ''));
+
+            if ($taxonIdentifier !== '') {
+                $taxonIdentifiers[$taxonIdentifier] = true;
+            }
+
+            if ($givenNameIdentifier !== '') {
+                $givenNameIdentifiers[$givenNameIdentifier] = true;
+            }
+
+            if ($remoteId !== '') {
+                $uniqueKeys[$this->resolveUniqueKey($record, $sourceAbbr, $remoteId)] = true;
+            }
+        }
+
+        $taxaByIdentifier = $this->loadRowsByColumn($db, 'taxa', 'scientific_name_identifier', array_keys($taxonIdentifiers));
+        $taxonNamesByIdentifier = $this->loadRowsByColumn($db, 'taxon_names', 'given_name_identifier', array_keys($givenNameIdentifiers));
+        $fallbackIdentifiers = array_diff(array_keys($taxonIdentifiers), array_keys($taxonNamesByIdentifier));
+
+        if ($fallbackIdentifiers !== []) {
+            $taxonNamesByIdentifier += $this->loadRowsByColumn($db, 'taxon_names', 'given_name_identifier', $fallbackIdentifiers);
+        }
+
+        $occurrencesByUniqueKey = $this->loadRowsByColumn($db, 'occurrences', 'unique_key', array_keys($uniqueKeys));
+        $irecDataSourceId = strtoupper($sourceAbbr) === 'NBN'
+            ? $this->resolveDataSourceIdByAbbr('IREC')
+            : null;
 
         foreach ($records as $record) {
             try {
@@ -128,11 +162,11 @@ class OccurrenceImportService
                     continue;
                 }
 
-                $linkedTaxon = $TaxonModel->where('scientific_name_identifier', $tvk)->first();
-                $linkedTaxonName = $taxonNameModel->where('given_name_identifier', $givenNameTvk)->first();
+                $linkedTaxon = $taxaByIdentifier[$tvk] ?? null;
+                $linkedTaxonName = $taxonNamesByIdentifier[$givenNameTvk] ?? null;
                 // If using a redundant given name, can map to the accepted name as a compromise.
                 if ($linkedTaxon !== null && $linkedTaxonName === null) {
-                    $linkedTaxonName = $taxonNameModel->where('given_name_identifier', $tvk)->first();
+                    $linkedTaxonName = $taxonNamesByIdentifier[$tvk] ?? null;
                 }
 
                 if ($linkedTaxon === null || $linkedTaxonName === null) {
@@ -199,9 +233,9 @@ class OccurrenceImportService
                     $row[$rankColumn] = $linkedTaxon[$rankColumn] ?? null;
                 }
 
-                $existing = $occurrenceModel->where('unique_key', $uniqueKey)->first();
+                $existing = $occurrencesByUniqueKey[$uniqueKey] ?? null;
 
-                if ($this->shouldSkipIrecordOwnedNbnUpdate($sourceAbbr, $record, $existing)) {
+                if ($this->shouldSkipIrecordOwnedNbnUpdate($sourceAbbr, $record, $existing, $irecDataSourceId)) {
                     log_message('debug', 'Skipping occurrence record due to being NBN copy of iRecord data: ' . var_export($record, true));
                     $counts['skipped']++;
                     $counts['processed']++;
@@ -227,7 +261,9 @@ class OccurrenceImportService
 
                 if (! $dryRun) {
                     $occurrenceModel->insert($row);
-                    $counts['changed_occurrence_ids'][] = (int) $occurrenceModel->getInsertID();
+                    $newId = (int) $occurrenceModel->getInsertID();
+                    $counts['changed_occurrence_ids'][] = $newId;
+                    $occurrencesByUniqueKey[$uniqueKey] = $row + ['id' => $newId];
                 }
 
                 $counts['processed']++;
@@ -371,7 +407,7 @@ class OccurrenceImportService
      *
      * @return bool True when this NBN record must be skipped rather than applied.
      */
-    private function shouldSkipIrecordOwnedNbnUpdate(string $sourceAbbr, array $record, ?array $existing): bool
+    private function shouldSkipIrecordOwnedNbnUpdate(string $sourceAbbr, array $record, ?array $existing, ?int $irecDataSourceId = null): bool
     {
         if (strtoupper($sourceAbbr) !== 'NBN' || $existing === null) {
             return false;
@@ -381,13 +417,46 @@ class OccurrenceImportService
             return false;
         }
 
-        $irecDataSourceId = $this->resolveDataSourceIdByAbbr('IREC');
+        $irecDataSourceId ??= $this->resolveDataSourceIdByAbbr('IREC');
 
         if ($irecDataSourceId === null) {
             return false;
         }
 
         return (int) ($existing['data_source_id'] ?? 0) === $irecDataSourceId;
+    }
+
+    /**
+     * Load rows keyed by a unique identifier column for one import page.
+     *
+     * @param object              $db Database connection.
+     * @param string              $table Table to query.
+     * @param string              $column Identifier column.
+     * @param array<int, string>  $values Values to fetch.
+     *
+     * @return array<string, array<string, mixed>> Rows keyed by identifier.
+     */
+    private function loadRowsByColumn(object $db, string $table, string $column, array $values): array
+    {
+        if ($values === []) {
+            return [];
+        }
+
+        $rows = $db->table($table)
+            ->whereIn($column, $values)
+            ->get()
+            ->getResultArray();
+        $result = [];
+
+        foreach ($rows as $row) {
+            $value = trim((string) ($row[$column] ?? ''));
+
+            if ($value !== '') {
+                $result[$value] = $row;
+            }
+        }
+
+        return $result;
     }
 
     /**

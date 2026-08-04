@@ -50,7 +50,34 @@ class TaxonNamesImportService implements EntityImportServiceInterface
         $db = db_connect();
 
         try {
-            $taxonIdByIdentifier = $this->prepareTaxonLookup();
+            $taxonIdentifiers = [];
+            $givenNameIdentifiers = [];
+
+            foreach ($rows as $row) {
+                $taxonIdentifier = trim((string) ($row['taxon_identifier'] ?? ''));
+                $givenNameIdentifier = trim((string) ($row['given_name_identifier'] ?? ''));
+
+                if ($taxonIdentifier !== '') {
+                    $taxonIdentifiers[$taxonIdentifier] = true;
+                }
+
+                if ($givenNameIdentifier !== '') {
+                    $givenNameIdentifiers[$givenNameIdentifier] = true;
+                }
+            }
+
+            $taxonIdByIdentifier = $this->prepareTaxonLookup($db, array_keys($taxonIdentifiers));
+            $existingRows = [];
+
+            if ($taxonIdByIdentifier !== [] && $givenNameIdentifiers !== []) {
+                foreach ($db->table('taxon_names')
+                    ->whereIn('taxon_id', array_values($taxonIdByIdentifier))
+                    ->whereIn('given_name_identifier', array_keys($givenNameIdentifiers))
+                    ->get()
+                    ->getResultArray() as $existingRow) {
+                    $existingRows[(int) $existingRow['taxon_id'] . '|' . (string) $existingRow['given_name_identifier']] = $existingRow;
+                }
+            }
         } catch (\Throwable $exception) {
             log_message('error', $exception->getMessage());
             $counts['errors']++;
@@ -90,18 +117,18 @@ class TaxonNamesImportService implements EntityImportServiceInterface
                     'deleted_at' => null,
                 ];
 
-                $existing = $db->table('taxon_names')
-                    ->where('taxon_id', $taxonId)
-                    ->where('given_name_identifier', $givenNameIdentifier)
-                    ->get()
-                    ->getRowArray();
+                $lookupKey = $taxonId . '|' . $givenNameIdentifier;
+                $existing = $existingRows[$lookupKey] ?? null;
 
                 if ($existing === null) {
                     $counts['inserted']++;
 
                     if (! $dryRun) {
                         $db->table('taxon_names')->insert($payload);
+                        $payload['id'] = $db->insertID();
                     }
+
+                    $existingRows[$lookupKey] = $payload;
                 } else {
                     $counts['updated']++;
 
@@ -131,10 +158,15 @@ class TaxonNamesImportService implements EntityImportServiceInterface
      *
      * @return array<string, int> Map of `taxon_identifier` to `taxa.id`.
      */
-    private function prepareTaxonLookup(): array
+    private function prepareTaxonLookup(object $db, array $identifiers): array
     {
-        $rows = db_connect()->table('taxa')
+        if ($identifiers === []) {
+            return [];
+        }
+
+        $rows = $db->table('taxa')
             ->select(['id', 'taxon_identifier'])
+            ->whereIn('taxon_identifier', $identifiers)
             ->where('deleted_at', null)
             ->where('taxon_identifier IS NOT NULL', null, false)
             ->get()

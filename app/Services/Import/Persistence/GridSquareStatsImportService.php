@@ -52,7 +52,33 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
         }
 
         $db = db_connect();
-        $cachedGeographicRegionIds = [];
+        $identifiers = [];
+
+        foreach ($rows as $row) {
+            $identifier = trim((string) ($row['higher_geography_identifier'] ?? ''));
+
+            if ($identifier !== '') {
+                $identifiers[$identifier] = true;
+            }
+        }
+
+        $cachedGeographicRegionIds = $this->loadGeographicRegionIds($db, array_keys($identifiers));
+        $squares = [];
+
+        foreach ($rows as $row) {
+            $square = substr(strtoupper(trim((string) ($row['square'] ?? ''))), 0, 12);
+            $identifier = trim((string) ($row['higher_geography_identifier'] ?? ''));
+
+            if ($square !== '' && $identifier !== '') {
+                $regionId = $cachedGeographicRegionIds[$identifier] ?? 0;
+
+                if ($regionId > 0) {
+                    $squares[$square . '|' . $regionId] = true;
+                }
+            }
+        }
+
+        $existingRows = $this->loadExistingRows($db, array_keys($squares));
 
         foreach ($rows as $row) {
             try {
@@ -82,18 +108,7 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
 
                 $cacheKey = (string) $higherGeographyIdentifier;
 
-                if (! array_key_exists($cacheKey, $cachedGeographicRegionIds)) {
-                    $geographicRegion = $db->table('geographic_regions')
-                        ->select('id')
-                        ->where('higher_geography_identifier', $higherGeographyIdentifier)
-                        ->where('deleted_at', null)
-                        ->get()
-                        ->getRowArray();
-
-                    $cachedGeographicRegionIds[$cacheKey] = $geographicRegion === null ? 0 : (int) $geographicRegion['id'];
-                }
-
-                $geographicRegionId = (int) $cachedGeographicRegionIds[$cacheKey];
+                $geographicRegionId = (int) ($cachedGeographicRegionIds[$cacheKey] ?? 0);
 
                 if ($geographicRegionId <= 0) {
                     log_message('warning', 'Grid square stats row skipped due to missing geographic region: ' . json_encode($row));
@@ -113,18 +128,18 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
                     'partial' => $partial,
                 ];
 
-                $existing = $db->table('grid_square_stats')
-                    ->where('square', $payload['square'])
-                    ->where('geographic_region_id', $geographicRegionId)
-                    ->get()
-                    ->getRowArray();
+                $lookupKey = $payload['square'] . '|' . $geographicRegionId;
+                $existing = $existingRows[$lookupKey] ?? null;
 
                 if ($existing === null) {
                     $counts['inserted']++;
 
                     if (! $dryRun) {
                         $db->table('grid_square_stats')->insert($payload);
+                        $payload['id'] = $db->insertID();
                     }
+
+                    $existingRows[$lookupKey] = $payload;
 
                     $counts['processed']++;
                     continue;
@@ -136,6 +151,8 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
                     $db->table('grid_square_stats')->where('id', $existing['id'])->update($payload);
                 }
 
+                $existingRows[$lookupKey] = $existing + $payload;
+
                 $counts['processed']++;
             } catch (\Throwable $exception) {
                 log_message('error', $exception->getMessage());
@@ -145,6 +162,72 @@ class GridSquareStatsImportService implements EntityImportServiceInterface
         }
 
         return $counts;
+    }
+
+    /**
+     * Load active geographic region IDs keyed by their external identifier.
+     *
+     * @param object             $db Database connection.
+     * @param array<int, string> $identifiers Region identifiers to fetch.
+     *
+     * @return array<string, int> Region IDs keyed by external identifier.
+     */
+    private function loadGeographicRegionIds(object $db, array $identifiers): array
+    {
+        if ($identifiers === []) {
+            return [];
+        }
+
+        $rows = $db->table('geographic_regions')
+            ->select(['id', 'higher_geography_identifier'])
+            ->whereIn('higher_geography_identifier', $identifiers)
+            ->where('deleted_at', null)
+            ->get()
+            ->getResultArray();
+        $result = [];
+
+        foreach ($rows as $row) {
+            $result[(string) $row['higher_geography_identifier']] = (int) $row['id'];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Load existing grid-square rows needed by one import page.
+     *
+     * @param object             $db Database connection.
+     * @param array<int, string> $keys Composite square/region keys.
+     *
+     * @return array<string, array<string, mixed>> Existing rows keyed by square/region.
+     */
+    private function loadExistingRows(object $db, array $keys): array
+    {
+        if ($keys === []) {
+            return [];
+        }
+
+        $squares = [];
+        $regionIds = [];
+
+        foreach ($keys as $key) {
+            [$square, $regionId] = explode('|', $key, 2);
+            $squares[$square] = true;
+            $regionIds[(int) $regionId] = true;
+        }
+
+        $rows = $db->table('grid_square_stats')
+            ->whereIn('square', array_keys($squares))
+            ->whereIn('geographic_region_id', array_keys($regionIds))
+            ->get()
+            ->getResultArray();
+        $result = [];
+
+        foreach ($rows as $row) {
+            $result[(string) $row['square'] . '|' . (int) $row['geographic_region_id']] = $row;
+        }
+
+        return $result;
     }
 
     /**

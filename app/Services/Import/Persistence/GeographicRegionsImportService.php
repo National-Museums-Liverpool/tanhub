@@ -53,6 +53,22 @@ class GeographicRegionsImportService implements EntityImportServiceInterface
         $db = db_connect();
         $dataSourcesTable = $db->table('data_sources');
         $cachedDataSourceIds = [];
+        $identifiers = [];
+
+        foreach ($rows as $row) {
+            $identifier = trim((string) ($row['higher_geography_identifier'] ?? ''));
+
+            if ($identifier !== '') {
+                $identifiers[$identifier] = true;
+            }
+        }
+
+        $existingRows = [];
+        if ($identifiers !== []) {
+            foreach ($db->table('geographic_regions')->whereIn('higher_geography_identifier', array_keys($identifiers))->get()->getResultArray() as $existingRow) {
+                $existingRows[(string) $existingRow['higher_geography_identifier']] = $existingRow;
+            }
+        }
 
         foreach ($rows as $row) {
             try {
@@ -91,17 +107,17 @@ class GeographicRegionsImportService implements EntityImportServiceInterface
                     'deleted_at' => null,
                 ];
 
-                $existing = $db->table('geographic_regions')
-                    ->where('higher_geography_identifier', $higherGeographyIdentifier)
-                    ->get()
-                    ->getRowArray();
+                $existing = $existingRows[$higherGeographyIdentifier] ?? null;
 
                 if ($existing === null) {
                     $counts['inserted']++;
 
                     if (! $dryRun) {
                         $db->table('geographic_regions')->insert($payload);
+                        $payload['id'] = $db->insertID();
                     }
+
+                    $existingRows[$higherGeographyIdentifier] = $payload;
 
                     $counts['processed']++;
                     continue;

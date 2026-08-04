@@ -77,6 +77,30 @@ class TaxaImportService implements EntityImportServiceInterface
             $schemeTitleMap = $this->prepareStringLookup('recording_schemes', 'external_key', 'title');
             $taxonRankMap = $this->prepareLookup('taxon_ranks', 'rank', 'id');
             $taxonRanks = config('Import')->taxonRanks;
+
+            $taxonIdentifiers = [];
+            $parentIdentifiers = [];
+
+            foreach ($rows as $row) {
+                $identifier = trim((string) ($row['taxon_identifier'] ?? ''));
+
+                if ($identifier !== '') {
+                    $taxonIdentifiers[$identifier] = true;
+                }
+
+                foreach ((array) ($row['higher_taxa'] ?? []) as $parent) {
+                    $parentIdentifier = is_object($parent)
+                        ? trim((string) ($parent->organism_key ?? ''))
+                        : trim((string) ($parent['organism_key'] ?? ''));
+
+                    if ($parentIdentifier !== '') {
+                        $parentIdentifiers[$parentIdentifier] = true;
+                    }
+                }
+            }
+
+            $allIdentifiers = array_keys($taxonIdentifiers + $parentIdentifiers);
+            $knownTaxa = $this->loadTaxaByIdentifier($db, $allIdentifiers);
         } catch (\Throwable $exception) {
             log_message('error', $exception->getMessage());
             $counts['errors']++;
@@ -140,14 +164,20 @@ class TaxaImportService implements EntityImportServiceInterface
                     }
                     $rankColumn = strtolower($parentTaxonRank) . '_id';
                     if (!empty($higherTaxaInRow[$parentTaxonRank])) {
-                        $taxaPayload[$rankColumn] = $this->lookupParentTaxon($higherTaxaInRow[$parentTaxonRank]->organism_key) ?? null;
+                        $parentIdentifier = (string) $higherTaxaInRow[$parentTaxonRank]->organism_key;
+
+                        if (! isset($knownTaxa[$parentIdentifier])) {
+                            throw new \RuntimeException('Failed to find unique parent for taxon identifier ' . $parentIdentifier);
+                        }
+
+                        $taxaPayload[$rankColumn] = (int) $knownTaxa[$parentIdentifier]['id'];
                     }
                     else {
                         $taxaPayload[$rankColumn] = null;
                     }
                 }
 
-                $existingTaxa = $db->table('taxa')->where('taxon_identifier', $taxonIdentifier)->get()->getRowArray();
+                $existingTaxa = $knownTaxa[$taxonIdentifier] ?? null;
 
                 if ($existingTaxa === null) {
                     $counts['inserted']++;
@@ -157,6 +187,7 @@ class TaxaImportService implements EntityImportServiceInterface
                     if (! $dryRun) {
                         $db->table('taxa')->insert($insertPayload);
                         $taxaId = $db->insertId();
+                        $knownTaxa[$taxonIdentifier] = $insertPayload + ['id' => $taxaId];
                     }
                 } else {
                     $counts['updated']++;
@@ -209,6 +240,34 @@ class TaxaImportService implements EntityImportServiceInterface
             throw new \RuntimeException('Failed to find unique parent for taxon identifier ' . $key);
         }
         return (int) $rows[0]['id'];
+    }
+
+    /**
+     * Load only the taxa referenced by one import page.
+     *
+     * @param object             $db Database connection.
+     * @param array<int, string> $identifiers Taxon identifiers to fetch.
+     *
+     * @return array<string, array<string, mixed>> Taxa keyed by identifier.
+     */
+    private function loadTaxaByIdentifier(object $db, array $identifiers): array
+    {
+        if ($identifiers === []) {
+            return [];
+        }
+
+        $rows = $db->table('taxa')
+            ->whereIn('taxon_identifier', $identifiers)
+            ->where('deleted_at', null)
+            ->get()
+            ->getResultArray();
+        $result = [];
+
+        foreach ($rows as $row) {
+            $result[(string) $row['taxon_identifier']] = $row;
+        }
+
+        return $result;
     }
 
     /**

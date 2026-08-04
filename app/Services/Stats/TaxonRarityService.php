@@ -63,6 +63,7 @@ class TaxonRarityService
             }
 
             $groupedRows = $this->groupRowsByRarityGroup($rows);
+            $updates = [];
 
             foreach ($groupedRows as $groupRows) {
                 $computedRows = $this->computeGroupCategories($groupRows, $config);
@@ -77,13 +78,18 @@ class TaxonRarityService
                     }
 
                     if (! $dryRun) {
-                        $db->table('taxa')
-                            ->where('id', (int) $row['id'])
-                            ->update(['rarity_category' => $newCategory]);
+                        $updates[] = [
+                            'id' => (int) $row['id'],
+                            'rarity_category' => $newCategory,
+                        ];
                     }
 
                     $counts['updated']++;
                 }
+            }
+
+            if ($updates !== []) {
+                $db->table('taxa')->updateBatch($updates, 'id');
             }
         } catch (\Throwable $exception) {
             log_message('error', $exception->getMessage());

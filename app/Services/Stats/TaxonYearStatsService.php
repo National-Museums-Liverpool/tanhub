@@ -61,129 +61,89 @@ class TaxonYearStatsService
     {
         $db = db_connect();
         $prefix = $db->getPrefix();
-
-        $activeOccurrences = $db->query(
-            'SELECT
-                o.id AS occurrence_id,
-                o.taxon_id,
-                COALESCE(o.from_date, o.to_date) AS record_date,
-                CASE
-                    WHEN o.grid_ref_2km IS NULL OR TRIM(o.grid_ref_2km) = "" THEN NULL
-                    ELSE UPPER(TRIM(o.grid_ref_2km))
-                END AS grid_ref_2km
-            FROM ' . $prefix . 'occurrences o
-            INNER JOIN ' . $prefix . 'taxa t
-                ON t.id = o.taxon_id
-                AND t.deleted_at IS NULL
-                AND t.blocked = 0
-            WHERE o.deleted_at IS NULL
-                AND o.blocked = 0
-                AND COALESCE(o.from_date, o.to_date) IS NOT NULL'
-        )->getResultArray();
-
-        if ($activeOccurrences === []) {
-            return [];
-        }
-
-        $regions = $db->table('geographic_regions_occurrences')
-            ->select(['occurrence_id', 'geographic_region_id'])
-            ->get()
-            ->getResultArray();
-
-        $regionsByOccurrence = [];
-
-        foreach ($regions as $row) {
-            $occurrenceId = (int) ($row['occurrence_id'] ?? 0);
-            $regionId = (int) ($row['geographic_region_id'] ?? 0);
-
-            if ($occurrenceId <= 0 || $regionId <= 0) {
-                continue;
-            }
-
-            $regionsByOccurrence[$occurrenceId][] = $regionId;
-        }
-
         $currentYear = (int) date('Y');
         $minimumYear = $currentYear - 9;
-        $aggregates = [];
+        $minimumDate = $minimumYear . '-01-01';
+        $nextYearDate = ($currentYear + 1) . '-01-01';
+        $driver = strtoupper((string) ($db->DBDriver ?? ''));
 
-        foreach ($activeOccurrences as $row) {
-            $occurrenceId = (int) ($row['occurrence_id'] ?? 0);
+        $yearExpression = match ($driver) {
+            'SQLITE3' => "CAST(strftime('%Y', record_date) AS INTEGER)",
+            'POSTGRE' => 'EXTRACT(YEAR FROM record_date)',
+            default => 'YEAR(record_date)',
+        };
+
+        $rows = $db->query(
+            'WITH active_occurrences AS (
+                SELECT
+                    o.id AS occurrence_id,
+                    o.taxon_id,
+                    COALESCE(o.from_date, o.to_date) AS record_date,
+                    NULLIF(UPPER(TRIM(o.grid_ref_2km)), "") AS grid_ref_2km
+                FROM ' . $prefix . 'occurrences o
+                INNER JOIN ' . $prefix . 'taxa t
+                    ON t.id = o.taxon_id
+                    AND t.deleted_at IS NULL
+                    AND t.blocked = 0
+                WHERE o.deleted_at IS NULL
+                    AND o.blocked = 0
+                    AND COALESCE(o.from_date, o.to_date) >= ?
+                    AND COALESCE(o.from_date, o.to_date) < ?
+            ),
+            scoped_occurrences AS (
+                SELECT
+                    ao.taxon_id,
+                    gro.geographic_region_id,
+                    ' . $yearExpression . ' AS year,
+                    ao.grid_ref_2km
+                FROM active_occurrences ao
+                INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
+                    ON gro.occurrence_id = ao.occurrence_id
+
+                UNION ALL
+
+                SELECT
+                    ao.taxon_id,
+                    NULL AS geographic_region_id,
+                    ' . $yearExpression . ' AS year,
+                    ao.grid_ref_2km
+                FROM active_occurrences ao
+            )
+            SELECT
+                taxon_id,
+                geographic_region_id,
+                year,
+                COUNT(*) AS occurrences_count,
+                COUNT(DISTINCT grid_ref_2km) AS grid_square_count
+            FROM scoped_occurrences
+            GROUP BY taxon_id, geographic_region_id, year
+            ORDER BY taxon_id, geographic_region_id, year',
+            [$minimumDate, $nextYearDate],
+        )->getResultArray();
+
+        $result = [];
+
+        foreach ($rows as $row) {
             $taxonId = (int) ($row['taxon_id'] ?? 0);
-            $year = $this->extractYear((string) ($row['record_date'] ?? ''));
-            $square = (string) ($row['grid_ref_2km'] ?? '');
+            $regionId = $this->nullableInt($row['geographic_region_id'] ?? null);
+            $year = (int) ($row['year'] ?? 0);
 
-            if ($occurrenceId <= 0 || $taxonId <= 0 || $year === null) {
+            if ($taxonId <= 0 || $year <= 0) {
                 continue;
             }
 
-            if ($year < $minimumYear || $year > $currentYear) {
-                continue;
-            }
-
-            $scopeRegionIds = $regionsByOccurrence[$occurrenceId] ?? [];
-
-            // Add a global scope row for every occurrence.
-            $scopeRegionIds[] = null;
-
-            foreach ($scopeRegionIds as $regionId) {
-                $key = $taxonId . '|' . ($regionId === null ? 'global' : (string) $regionId) . '|' . $year;
-
-                if (! isset($aggregates[$key])) {
-                    $aggregates[$key] = [
-                        'taxon_id' => $taxonId,
-                        'geographic_region_id' => $regionId,
-                        'year' => $year,
-                        'occurrences_count' => 0,
-                        'grid_squares' => [],
-                    ];
-                }
-
-                $aggregates[$key]['occurrences_count']++;
-
-                if ($square !== '') {
-                    $aggregates[$key]['grid_squares'][$square] = true;
-                }
-            }
-        }
-
-        $rows = [];
-
-        foreach ($aggregates as $aggregate) {
-            $taxonId = (int) $aggregate['taxon_id'];
-            $regionId = $this->nullableInt($aggregate['geographic_region_id']);
-            $year = (int) $aggregate['year'];
             $seedRegion = $regionId === null ? 'global' : (string) $regionId;
-
-            $rows[] = [
+            $result[] = [
                 'uuid' => $this->stableUuid($taxonId . '|' . $seedRegion . '|' . $year),
                 'taxon_id' => $taxonId,
                 'geographic_region_id' => $regionId,
                 'year' => $year,
-                'occurrences_count' => max(0, (int) $aggregate['occurrences_count']),
-                'grid_square_count' => count($aggregate['grid_squares']),
+                'occurrences_count' => max(0, (int) ($row['occurrences_count'] ?? 0)),
+                'grid_square_count' => max(0, (int) ($row['grid_square_count'] ?? 0)),
             ];
         }
 
-        usort($rows, static function (array $left, array $right): int {
-            $taxonCompare = ((int) $left['taxon_id']) <=> ((int) $right['taxon_id']);
-
-            if ($taxonCompare !== 0) {
-                return $taxonCompare;
-            }
-
-            $regionLeft = $left['geographic_region_id'] === null ? -1 : (int) $left['geographic_region_id'];
-            $regionRight = $right['geographic_region_id'] === null ? -1 : (int) $right['geographic_region_id'];
-            $regionCompare = $regionLeft <=> $regionRight;
-
-            if ($regionCompare !== 0) {
-                return $regionCompare;
-            }
-
-            return ((int) $left['year']) <=> ((int) $right['year']);
-        });
-
-        return $rows;
+        return $result;
     }
 
     /**
@@ -201,30 +161,6 @@ class TaxonYearStatsService
         foreach ($chunks as $chunk) {
             $db->table('taxon_year_stats')->insertBatch($chunk);
         }
-    }
-
-    /**
-     * Extract year component from a date string.
-     *
-     * @param string $value Date value.
-     *
-     * @return int|null
-     */
-    private function extractYear(string $value): ?int
-    {
-        $value = trim($value);
-
-        if ($value === '' || strlen($value) < 4) {
-            return null;
-        }
-
-        $year = substr($value, 0, 4);
-
-        if (! ctype_digit($year)) {
-            return null;
-        }
-
-        return (int) $year;
     }
 
     /**

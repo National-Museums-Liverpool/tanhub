@@ -123,7 +123,7 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         }
 
         if ($cursor !== null) {
-            $filters[] = 'occurrenceID:{' . $this->escapeFilterValue($cursor) . ' TO *]';
+            $filters[] = 'occurrenceID:[' . $this->escapeFilterValue($cursor) . ' TO *]';
         }
 
         $filters[] = '-(user_assertions:"50005" OR user_assertions:"50006" OR user_assertions:"50001")';

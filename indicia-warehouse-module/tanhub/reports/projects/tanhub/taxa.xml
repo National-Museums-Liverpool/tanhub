@@ -1,6 +1,6 @@
 <report
-    title="UKSI taxa for TanHub"
-    description="A list of UKSI taxa for TanHub."
+    title="UKSI taxa for tanhub"
+    description="A list of UKSI taxa for tanhub."
 >
   <query website_filter_field="">
     -- Return all preferred, data-entry-enabled taxa in the configured groups and their accepted hierarchy.

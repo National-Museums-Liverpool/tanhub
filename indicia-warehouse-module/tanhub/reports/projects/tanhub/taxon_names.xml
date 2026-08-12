@@ -1,6 +1,6 @@
 <report
-    title="UKSI taxon names for TanHub"
-    description="A list of UKSI taxon names for TanHub."
+    title="UKSI taxon names for tanhub"
+    description="A list of UKSI taxon names for tanhub."
 >
   <query website_filter_field="">
     -- Return names for all accepted taxa in the configured groups and their hierarchy.

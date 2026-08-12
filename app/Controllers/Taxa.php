@@ -102,6 +102,7 @@ class Taxa extends BaseController
             ->getResultArray();
 
         $referenceLabels = $this->referenceLabels($taxon);
+        $hierarchy = $this->hierarchyDetails($taxon);
         $taxonMedia = service('taxonMediaReadService')->getByTaxonId($id);
         $user = auth()->user();
         $canEditDetails = $user !== null && $user->inGroup('admin', 'manager');
@@ -115,6 +116,7 @@ class Taxa extends BaseController
             'taxonNames' => $taxonNames,
             'taxonMedia' => $taxonMedia,
             'referenceLabels' => $referenceLabels,
+            'hierarchy' => $hierarchy,
             'canEditDetails' => $canEditDetails,
             'canModerate' => $canModerate,
             'classificationColumns' => $this->classificationColumns($taxon),
@@ -469,6 +471,42 @@ class Taxa extends BaseController
         }
 
         return $labels;
+    }
+
+    /**
+     * Resolve the immediate accepted parent and current rank reporting status.
+     *
+     * @param array<string, mixed> $taxon Taxon row, keyed by column name.
+     * @return array<string, mixed> Hierarchy values for the details view.
+     */
+    private function hierarchyDetails(array $taxon): array
+    {
+        $db = db_connect();
+        $rank = $db->table('taxon_ranks')
+            ->select('rank, abbr, is_reporting')
+            ->where('id', (int) ($taxon['taxon_rank_id'] ?? 0))
+            ->where('deleted_at', null)
+            ->get()
+            ->getRowArray() ?? [];
+
+        $parent = null;
+        $parentId = (int) ($taxon['parent_taxon_id'] ?? 0);
+
+        if ($parentId > 0) {
+            $parent = $db->table('taxa t')
+                ->select('t.taxon_identifier, t.scientific_name, t.vernacular_name, tr.rank, tr.abbr')
+                ->join('taxon_ranks tr', 'tr.id = t.taxon_rank_id', 'left')
+                ->where('t.id', $parentId)
+                ->where('t.deleted_at', null)
+                ->where('t.blocked', 0)
+                ->get()
+                ->getRowArray();
+        }
+
+        return [
+            'rank' => $rank,
+            'parent' => $parent,
+        ];
     }
 
     /**

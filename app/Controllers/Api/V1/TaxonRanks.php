@@ -28,6 +28,7 @@ class TaxonRanks extends ApiResourceController
             'abbr' => 'abbr',
             'rank' => 'rank',
             'sort_order' => 'sort_order',
+            'is_reporting' => 'is_reporting',
         ];
     }
 

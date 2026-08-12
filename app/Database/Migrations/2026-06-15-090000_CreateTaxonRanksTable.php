@@ -36,6 +36,11 @@ class CreateTaxonRanksTable extends Migration
                 'unsigned'   => true,
                 'default'    => 0,
             ],
+            'is_reporting' => [
+                'type'       => 'TINYINT',
+                'constraint' => 1,
+                'default'    => 0,
+            ],
             'created_at' => [
                 'type'    => 'DATETIME',
                 'null'    => false,
@@ -55,6 +60,7 @@ class CreateTaxonRanksTable extends Migration
         $this->forge->addUniqueKey('rank');
         $this->forge->addUniqueKey('abbr');
         $this->forge->addKey('sort_order');
+        $this->forge->addKey('is_reporting');
         $this->forge->createTable('taxon_ranks', true);
     }
 

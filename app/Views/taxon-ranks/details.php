@@ -19,6 +19,7 @@
                         'rank' => 'Rank',
                         'abbr' => 'Abbreviation',
                         'sort_order' => 'Sort order',
+                        'is_reporting' => 'Reporting rank',
                     ];
                     ?>
 
@@ -28,7 +29,10 @@
                                 <?= esc($label) ?>
                                 <span class="badge bg-secondary ms-2">Read-only</span>
                             </label>
-                            <input class="form-control" id="<?= esc($field) ?>" type="text" value="<?= esc((string) ($page['taxonRank'][$field] ?? '')) ?>" disabled>
+                            <?php $value = $field === 'is_reporting'
+                                ? ((int) ($page['taxonRank'][$field] ?? 0) === 1 ? 'Yes' : 'No')
+                                : (string) ($page['taxonRank'][$field] ?? ''); ?>
+                            <input class="form-control" id="<?= esc($field) ?>" type="text" value="<?= esc($value) ?>" disabled>
                         </div>
                     <?php endforeach; ?>
                 </div>

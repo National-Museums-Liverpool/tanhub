@@ -100,6 +100,16 @@ or `geographic_regions`).
 Filters and sort keys for include-only fields use the same prefixed form (for example
 `taxon__scientific_name[contains]=bombus` or `sort=taxon__scientific_name`).
 
+Taxon-bearing resources (`taxa`, `taxon-names`, `taxon-stats`, and `taxon-year-stats`) default
+to reporting taxa only which belong to one of the configured taxon ranks. Use
+`reporting_only=false` (or `0`) to return all exact taxon ranks; `true` and `1` explicitly
+enable the default. Occurrences are always exact and are not filtered by this option.
+
+The `parent-taxon` include returns the immediate accepted parent through `parent_taxon_id`, with
+`parent_taxon__taxon_identifier`, `parent_taxon__scientific_name`,
+`parent_taxon__vernacular_name`, `parent_taxon__rank`, and `parent_taxon__rank_abbr`. It is
+distinct from `parent-taxa`, which returns configured reporting-rank projections.
+
 ### 4.1 Resources and unique identifiers
 
 The following list shows the available resources and the field used as a unique identifier when
@@ -502,6 +512,13 @@ Examples:
 			- `taxon_rank__rank`
 			- `taxon_rank__abbr`
 			- `taxon_rank__sort_order`
+			- `taxon_rank__is_reporting`
+		- `parent-taxon`:
+			- `parent_taxon__taxon_identifier`
+			- `parent_taxon__scientific_name`
+			- `parent_taxon__vernacular_name`
+			- `parent_taxon__rank`
+			- `parent_taxon__rank_abbr`
 		- `taxon-group`:
 			-	`taxon_group__title`
 			-	`taxon_group__friendly`

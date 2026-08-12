@@ -125,6 +125,7 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
         $result->assertSee('Rank');
         $result->assertSee('Abbreviation');
         $result->assertSee('Sort order');
+        $result->assertSee('Reporting');
         $result->assertSee('Details');
 
         $body = (string) $result->response()->getBody();
@@ -207,6 +208,7 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
         $result->assertSee('Read-only');
         $result->assertSee('Rank');
         $result->assertSee('Abbreviation');
+        $result->assertSee('Reporting rank');
         $this->assertStringContainsString('value="Family"', (string) $result->response()->getBody());
         $this->assertStringContainsString('value="fam"', (string) $result->response()->getBody());
         $result->assertSee('Back to list');

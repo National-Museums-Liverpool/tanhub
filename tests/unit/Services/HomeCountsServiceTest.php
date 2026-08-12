@@ -21,6 +21,7 @@ final class HomeCountsServiceTest extends CIUnitTestCase
 
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'occurrences');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxa');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_ranks');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'geographic_regions');
 
         $this->db->query('CREATE TABLE ' . $prefix . 'occurrences (
@@ -31,8 +32,14 @@ final class HomeCountsServiceTest extends CIUnitTestCase
 
         $this->db->query('CREATE TABLE ' . $prefix . 'taxa (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            taxon_rank_id INTEGER NULL,
             blocked INTEGER NOT NULL DEFAULT 0,
             deleted_at DATETIME NULL
+        )');
+
+        $this->db->query('CREATE TABLE ' . $prefix . 'taxon_ranks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            is_reporting INTEGER NOT NULL DEFAULT 0
         )');
 
         $this->db->query('CREATE TABLE ' . $prefix . 'geographic_regions (
@@ -60,10 +67,11 @@ final class HomeCountsServiceTest extends CIUnitTestCase
         ]);
 
         $this->db->table('taxa')->insertBatch([
-            ['id' => 1, 'blocked' => 0, 'deleted_at' => null],
-            ['id' => 2, 'blocked' => 1, 'deleted_at' => null],
-            ['id' => 3, 'blocked' => 0, 'deleted_at' => '2026-07-01 00:00:00'],
+            ['id' => 1, 'taxon_rank_id' => 1, 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 2, 'taxon_rank_id' => 1, 'blocked' => 1, 'deleted_at' => null],
+            ['id' => 3, 'taxon_rank_id' => 1, 'blocked' => 0, 'deleted_at' => '2026-07-01 00:00:00'],
         ]);
+        $this->db->table('taxon_ranks')->insert(['id' => 1, 'is_reporting' => 1]);
 
         $this->db->table('geographic_regions')->insertBatch([
             ['id' => 1, 'deleted_at' => null],

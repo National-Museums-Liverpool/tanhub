@@ -246,7 +246,7 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
                 parse_str($queryString, $query);
 
                 return $query['startIndex'] === '0'
-                    && str_contains(urldecode($queryString), 'fq=occurrenceID:{5000 TO *]');
+                    && str_contains(urldecode($queryString), 'fq=occurrenceID:[5000 TO *]');
             }))
             ->willReturn($response);
 

@@ -29,10 +29,12 @@ class TaxonModel extends Model
      * - `taxon_remarks`     Free-text notes about the taxon.
      * - `blocked`           Moderation flag; 1 hides this taxon from public counts/lists.
      * - `blocked_reason`    Free-text reason shown alongside `blocked`.
+     * - `parent_taxon_id`   Immediate accepted parent taxon, when one exists.
      *
      * @var array<int, string>
      */
     private const BASE_ALLOWED_FIELDS = [
+        'parent_taxon_id',
         'rarity_group_name',
         'rarity_category',
         'taxon_remarks',

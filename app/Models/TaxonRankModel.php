@@ -41,6 +41,7 @@ class TaxonRankModel extends Model
      * - `rank`       Rank name, matched against `Config\Import::$taxonRanks` entries.
      * - `abbr`       Short display abbreviation for the rank.
      * - `sort_order` Position of this rank in the taxonomic hierarchy (lower sorts first).
+     * - `is_reporting` Whether this rank is configured as a reporting rank.
      *
      * @var array<int, string>
      */
@@ -48,6 +49,7 @@ class TaxonRankModel extends Model
         'rank',
         'abbr',
         'sort_order',
+        'is_reporting',
     ];
 
     /**

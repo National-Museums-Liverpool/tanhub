@@ -158,13 +158,16 @@ Access:
 
 List page:
 
-- Columns: id, rank, abbr, sort_order, actions.
+- Columns: id, rank, abbr, sort_order, reporting, actions.
 - Generic search: `q` across rank, abbr, and sort_order.
+- Sortable columns: id, rank, abbr, sort_order, reporting.
 - Default sort: sort_order asc.
+- Reporting shows whether the rank is configured as a reporting projection. This value is
+  imported from the taxonomy configuration and is read-only in the admin UI.
 
 Detail page (read-only):
 
-- Shows id, rank, abbr, and sort_order.
+- Shows id, rank, abbr, sort_order, and reporting status.
 
 ### Geographic regions
 
@@ -227,6 +230,8 @@ for rarity calculations, so they are only compared to similarly recorded taxa.
 
 - Read-only: taxon_identifier, scientific_name_identifier, scientific_name, vernacular_name,
   classification FKs, rarity category.
+- Read-only hierarchy context: current rank reporting status and the immediate accepted parent
+  taxon, including its taxon identifier, scientific name, vernacular name, and rank.
 - Classification FKs are dynamic self-references on taxa (for example order_id, family_id,
   species_id) rather than separate order, family, or superfamily tables.
 - Read-only table: associated taxon names (name, given_name_identifier, accepted, scientific).

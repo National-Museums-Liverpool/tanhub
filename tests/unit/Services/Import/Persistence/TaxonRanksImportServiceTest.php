@@ -31,7 +31,8 @@ final class TaxonRanksImportServiceTest extends CIUnitTestCase
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             rank VARCHAR(50) NOT NULL,
             abbr VARCHAR(50) NOT NULL,
-            sort_order INTEGER NOT NULL DEFAULT 0
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            is_reporting INTEGER NOT NULL DEFAULT 0
         )');
     }
 

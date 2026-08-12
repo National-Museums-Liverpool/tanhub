@@ -9,8 +9,8 @@ use CodeIgniter\Exceptions\PageNotFoundException;
  * Admin management for taxon ranks.
  *
  * Taxon ranks are imported from Indicia (see {@see \App\Services\Import})
- * and this controller currently exposes only a read-only listing and
- * details view, delegating persistence lookups to {@see TaxonRankModel}.
+ * and this controller exposes a read-only listing and details view, including
+ * the reporting-rank status used by public reporting endpoints.
  */
 class TaxonRanks extends BaseController
 {
@@ -25,7 +25,7 @@ class TaxonRanks extends BaseController
         $direction = strtolower((string) $this->request->getGet('direction'));
         $q = trim((string) $this->request->getGet('q'));
 
-        $allowedSortColumns = ['id', 'rank', 'abbr', 'sort_order'];
+        $allowedSortColumns = ['id', 'rank', 'abbr', 'sort_order', 'is_reporting'];
 
         if (! in_array($sort, $allowedSortColumns, true)) {
             $sort = 'sort_order';

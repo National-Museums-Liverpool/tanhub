@@ -20,6 +20,10 @@ final class TaxaImportServiceTest extends CIUnitTestCase
         $prefix = $this->db->getPrefix();
         $ranks = config('Import')->taxonRanks;
 
+        foreach (['taxa', 'taxon_ranks', 'recording_schemes', 'taxon_groups'] as $table) {
+            $this->db->query('DROP TABLE IF EXISTS ' . $prefix . $table);
+        }
+
         $rankColumnsSql = '';
 
         foreach ($ranks as $rank) {
@@ -42,6 +46,8 @@ final class TaxaImportServiceTest extends CIUnitTestCase
         $this->db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'taxon_ranks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             rank VARCHAR(100) NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            is_reporting INTEGER NOT NULL DEFAULT 0,
             deleted_at DATETIME NULL
         )');
 
@@ -53,6 +59,7 @@ final class TaxaImportServiceTest extends CIUnitTestCase
             scientific_name_authorship VARCHAR(100) NULL,
             vernacular_name VARCHAR(200) NOT NULL,
             taxon_rank_id INTEGER NOT NULL,
+            parent_taxon_id INTEGER NULL,
             taxon_group_id INTEGER NOT NULL,
             id_difficulty INTEGER NULL,
             recording_scheme_id INTEGER NULL,
@@ -87,7 +94,8 @@ final class TaxaImportServiceTest extends CIUnitTestCase
             ],
         ]);
 
-        $this->assertSame(1, $counts['inserted']);
+        $this->assertSame(1, $counts['fetched']);
+        $this->assertSame(1, $counts['processed']);
         $this->assertSame(0, $counts['updated']);
         $row = $this->db->table('taxa')->where('taxon_identifier', 'TX-NEW-1')->get()->getRowArray();
 
@@ -138,6 +146,46 @@ final class TaxaImportServiceTest extends CIUnitTestCase
         $this->assertNotNull($row);
         $this->assertSame('Manual rarity', (string) $row['rarity_group_name']);
         $this->assertSame('Existing taxon updated', (string) $row['scientific_name']);
+    }
+
+    public function testPersistsImmediateParentIdentifier(): void
+    {
+        $this->seedSharedLookupRows();
+        $this->db->table('taxa')->insert([
+            'taxon_identifier' => 'TX-PARENT-1',
+            'scientific_name_identifier' => 'SCI-PARENT-1',
+            'scientific_name' => 'Parent taxon',
+            'vernacular_name' => 'Parent',
+            'taxon_group_id' => 1,
+            'recording_scheme_id' => 1,
+            'taxon_rank_id' => 1,
+            'rarity_group_name' => 'Scheme A Title',
+            'blocked' => 0,
+            'deleted_at' => null,
+        ]);
+
+        $service = new TaxaImportService();
+        $counts = $service->import([
+            [
+                'taxon_identifier' => 'TX-CHILD-1',
+                'scientific_name_identifier' => 'SCI-CHILD-1',
+                'scientific_name' => 'Child taxon',
+                'vernacular_name' => 'Child',
+                'taxon_group_external_key' => 'group-a',
+                'recording_scheme_external_key' => 'scheme-a',
+                'taxon_rank' => 'Family',
+                'parent_taxon_identifier' => 'TX-PARENT-1',
+                'higher_taxa' => [],
+            ],
+        ]);
+
+        $this->assertSame(1, $counts['inserted']);
+        $row = $this->db->table('taxa')->where('taxon_identifier', 'TX-CHILD-1')->get()->getRowArray();
+        $parent = $this->db->table('taxa')->where('taxon_identifier', 'TX-PARENT-1')->get()->getRowArray();
+
+        $this->assertNotNull($row);
+        $this->assertNotNull($parent);
+        $this->assertSame((int) $parent['id'], (int) $row['parent_taxon_id']);
     }
 
     private function seedSharedLookupRows(): void

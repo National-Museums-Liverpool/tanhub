@@ -62,19 +62,22 @@ class TaxonStatsService
     {
         $db = db_connect();
         $prefix = $db->getPrefix();
-
+        $reportingColumns = $this->reportingColumns();
+        $projectionColumns = $reportingColumns === [] ? '' : ",\n                    " . implode(",\n                    ", array_map(static fn (string $column): string => 'o.' . $column, $reportingColumns));
+        $scopedOccurrences = $this->scopedOccurrenceSql($prefix, $reportingColumns);
         return $db->query(
             'WITH active_occurrences AS (
                 SELECT
                     o.id AS occurrence_id,
                     o.taxon_id,
+                    t.is_reporting,
                     COALESCE(o.from_date, o.to_date) AS record_date,
                     CASE
                         WHEN o.grid_ref_2km IS NULL OR TRIM(o.grid_ref_2km) = "" THEN NULL
                         ELSE UPPER(TRIM(o.grid_ref_2km))
                     END AS grid_ref_2km,
                     COALESCE(TRIM(o.recorded_by), "") AS recorded_by,
-                    COALESCE(o.identification_verification_status, "") AS identification_verification_status
+                    COALESCE(o.identification_verification_status, "") AS identification_verification_status' . $projectionColumns . '
                 FROM ' . $prefix . 'occurrences o
                 INNER JOIN ' . $prefix . 'taxa t
                     ON t.id = o.taxon_id
@@ -84,31 +87,7 @@ class TaxonStatsService
                     AND o.blocked = 0
                     AND COALESCE(o.from_date, o.to_date) IS NOT NULL
             ),
-            scoped_occurrences AS (
-                SELECT
-                    ao.occurrence_id,
-                    ao.taxon_id,
-                    gro.geographic_region_id,
-                    ao.record_date,
-                    ao.grid_ref_2km,
-                    ao.recorded_by,
-                    ao.identification_verification_status
-                FROM active_occurrences ao
-                INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
-                    ON gro.occurrence_id = ao.occurrence_id
-
-                UNION ALL
-
-                SELECT
-                    ao.occurrence_id,
-                    ao.taxon_id,
-                    NULL AS geographic_region_id,
-                    ao.record_date,
-                    ao.grid_ref_2km,
-                    ao.recorded_by,
-                    ao.identification_verification_status
-                FROM active_occurrences ao
-            ),
+            scoped_occurrences AS (' . $scopedOccurrences . '),
             aggregates AS (
                 SELECT
                     so.taxon_id,
@@ -227,6 +206,70 @@ class TaxonStatsService
                     OR (lvr.geographic_region_id IS NULL AND a.geographic_region_id IS NULL)
                 )'
         )->getResultArray();
+    }
+
+    /**
+     * Return physical occurrence projection columns for configured reporting ranks.
+     *
+     * @return array<int, string> Normalised projection column names.
+     */
+    private function reportingColumns(): array
+    {
+        $ranks = config('Import')->taxonRanks ?? [];
+        $ranks = is_array($ranks) ? $ranks : explode(',', (string) $ranks);
+
+        return array_values(array_filter(array_map(static function ($rank): string {
+            if (! is_scalar($rank)) {
+                return '';
+            }
+
+            $column = preg_replace('/[^a-z0-9]+/i', '_', strtolower(trim((string) $rank)));
+
+            return trim((string) $column, '_') . '_id';
+        }, $ranks)));
+    }
+
+    /**
+     * Build the exact and reporting-projection occurrence scope.
+     *
+     * @param string             $prefix Database table prefix.
+     * @param array<int, string> $columns Reporting projection columns.
+     * @return string SQL for the scoped occurrence CTE body.
+     */
+    private function scopedOccurrenceSql(string $prefix, array $columns): string
+    {
+        $exactCondition = 'ao.is_reporting = 0';
+        $selects = [
+            'SELECT ao.occurrence_id, ao.taxon_id, gro.geographic_region_id,
+                ao.record_date, ao.grid_ref_2km, ao.recorded_by,
+                ao.identification_verification_status
+             FROM active_occurrences ao
+             INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
+                ON gro.occurrence_id = ao.occurrence_id
+             WHERE ' . $exactCondition,
+            'SELECT ao.occurrence_id, ao.taxon_id, NULL AS geographic_region_id,
+                ao.record_date, ao.grid_ref_2km, ao.recorded_by,
+                ao.identification_verification_status
+             FROM active_occurrences ao
+             WHERE ' . $exactCondition,
+        ];
+
+        foreach ($columns as $column) {
+            $selects[] = 'SELECT ao.occurrence_id, ao.' . $column . ' AS taxon_id,
+                gro.geographic_region_id, ao.record_date, ao.grid_ref_2km,
+                ao.recorded_by, ao.identification_verification_status
+             FROM active_occurrences ao
+             INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
+                ON gro.occurrence_id = ao.occurrence_id
+             WHERE ao.' . $column . ' IS NOT NULL';
+            $selects[] = 'SELECT ao.occurrence_id, ao.' . $column . ' AS taxon_id,
+                NULL AS geographic_region_id, ao.record_date, ao.grid_ref_2km,
+                ao.recorded_by, ao.identification_verification_status
+             FROM active_occurrences ao
+             WHERE ao.' . $column . ' IS NOT NULL';
+        }
+
+        return implode("\n                UNION\n                ", $selects);
     }
 
     /**

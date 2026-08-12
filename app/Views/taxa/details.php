@@ -67,6 +67,18 @@
                             <input class="form-control" id="taxon_rank_id" type="text" value="<?= esc((string) ($page['referenceLabels']['taxon_rank_id'] ?? '')) ?>" disabled>
                         </div>
                         <div class="col-md-6">
+                            <label class="form-label" for="is_reporting">Reporting rank <span class="badge bg-secondary ms-2">Read-only</span></label>
+                            <input class="form-control" id="is_reporting" type="text" value="<?= (int) ($page['hierarchy']['rank']['is_reporting'] ?? 0) === 1 ? 'Yes' : 'No' ?>" disabled>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="parent_taxon">Immediate accepted parent <span class="badge bg-secondary ms-2">Read-only</span></label>
+                            <?php $parent = $page['hierarchy']['parent']; ?>
+                            <input class="form-control" id="parent_taxon" type="text" value="<?= esc($parent === null ? 'None' : (string) $parent['scientific_name'] . ' (' . (string) $parent['rank'] . ')') ?>" disabled>
+                            <?php if ($parent !== null): ?>
+                                <div class="form-text"><?= esc((string) $parent['taxon_identifier']) ?><?= ($parent['vernacular_name'] ?? '') !== '' ? ' - ' . esc((string) $parent['vernacular_name']) : '' ?></div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="col-md-6">
                             <label class="form-label" for="taxon_group_id">
                                 Taxon group
                                 <span class="badge bg-secondary ms-2">Read-only</span>

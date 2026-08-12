@@ -98,6 +98,19 @@ class Import extends BaseConfig
     ];
 
     /**
+     * Override automatic nearest-ancestor reporting rank mappings.
+     *
+     * Unlisted non-reporting ranks map to the nearest configured ancestor
+     * according to taxon rank sort order. Add exceptions here when a rank
+     * must map to a different reporting level, including a lower level.
+     *
+     * @var array<string, string>
+     */
+    public array $taxonRankMappings = [
+        'Species aggregate' => 'Species',
+    ];
+
+    /**
      * Taxonomic groups we allow reporting at.
      *
      * @var array|string
@@ -173,6 +186,20 @@ class Import extends BaseConfig
             $this->taxonRanks = array_map('trim', explode(',', $configuredRanks));
             log_message('info', 'Configured taxon ranks overriden: ' . $configuredRanks);
         }
+        $this->assertSpeciesRankConfigured();
+        $configuredRankMappings = env('import.taxonRankMappings');
+        if (is_string($configuredRankMappings) && trim($configuredRankMappings) !== '') {
+            $decodedRankMappings = json_decode($configuredRankMappings, true);
+
+            if (! is_array($decodedRankMappings)) {
+                throw new RuntimeException('Config Import: import.taxonRankMappings must be a JSON object.');
+            }
+
+            $this->taxonRankMappings = $this->normaliseTaxonRankMappings($decodedRankMappings);
+            log_message('info', 'Configured taxon rank mappings overridden.');
+        } else {
+            $this->taxonRankMappings = $this->normaliseTaxonRankMappings($this->taxonRankMappings);
+        }
         $configuredTaxonGroups = env('import.taxonGroups');
         if (is_string($configuredTaxonGroups) && $configuredTaxonGroups !== '') {
             $this->taxonGroups = array_map('trim', str_getcsv($configuredTaxonGroups));
@@ -211,8 +238,6 @@ class Import extends BaseConfig
         if ($configuredUiTaskStaleAfter !== null && $configuredUiTaskStaleAfter > 0) {
             $this->uiTaskStaleAfter = $configuredUiTaskStaleAfter;
         }
-
-        $this->assertSpeciesRankConfigured();
     }
 
     private function validateInt($value): ?int
@@ -245,6 +270,51 @@ class Import extends BaseConfig
         }
 
         throw new RuntimeException('Config Import: import.taxonRanks must include Species.');
+    }
+
+    /**
+     * Normalise and validate exceptional taxon rank mappings.
+     *
+     * @param array<mixed> $mappings Raw source-to-reporting rank mappings.
+     * @return array<string, string> Validated mappings keyed by source rank.
+     */
+    private function normaliseTaxonRankMappings(array $mappings): array
+    {
+        $reportingRanks = $this->taxonRanks;
+        $reportingRanks = is_array($reportingRanks) ? $reportingRanks : explode(',', (string) $reportingRanks);
+        $reportingRankNames = [];
+
+        foreach ($reportingRanks as $rank) {
+            if (is_scalar($rank) && trim((string) $rank) !== '') {
+                $reportingRankNames[strtolower(trim((string) $rank))] = trim((string) $rank);
+            }
+        }
+
+        $normalised = [];
+
+        foreach ($mappings as $sourceRank => $reportingRank) {
+            if (! is_string($sourceRank) || ! is_scalar($reportingRank)) {
+                throw new RuntimeException('Config Import: taxon rank mappings must contain string keys and values.');
+            }
+
+            $sourceRank = trim($sourceRank);
+            $reportingRank = trim((string) $reportingRank);
+
+            if ($sourceRank === '' || $reportingRank === '') {
+                throw new RuntimeException('Config Import: taxon rank mappings cannot contain blank ranks.');
+            }
+
+            $reportingRankKey = strtolower($reportingRank);
+            if (! isset($reportingRankNames[$reportingRankKey])) {
+                throw new RuntimeException(
+                    'Config Import: taxon rank mapping target must be a configured reporting rank: ' . $reportingRank
+                );
+            }
+
+            $normalised[$sourceRank] = $reportingRankNames[$reportingRankKey];
+        }
+
+        return $normalised;
     }
 
 }

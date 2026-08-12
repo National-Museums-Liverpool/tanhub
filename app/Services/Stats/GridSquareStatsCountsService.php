@@ -52,7 +52,9 @@ class GridSquareStatsCountsService
             $activeOccurrenceWhere = 'o.deleted_at IS NULL
                     AND o.blocked = 0
                     AND o.grid_ref_2km IS NOT NULL
-                    AND TRIM(o.grid_ref_2km) <> ""';
+                    AND TRIM(o.grid_ref_2km) <> ""
+                    AND t.deleted_at IS NULL
+                    AND t.blocked = 0';
 
             $aggregates = $db->query(
                 // Outer query: for every (square, geographic_region_id) pair, combine the

@@ -85,6 +85,8 @@ final class TaxaPagesTest extends CIUnitTestCase
         $result->assertSee('TVK-001');
         $result->assertSee('Buff-tailed Bumblebee');
         $result->assertSee('Species');
+        $result->assertSee('Reporting rank');
+        $result->assertSee('Immediate accepted parent');
         $result->assertSee('Bees');
         $result->assertSee('Alpha scheme');
     }

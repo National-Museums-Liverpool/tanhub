@@ -17,6 +17,7 @@ class TaxonRanksImportService implements EntityImportServiceInterface
      * When `abbr` is not supplied, it is derived from `rank` by
      * lower-casing and replacing runs of non-alphanumeric characters with
      * underscores (e.g. `Sub Species` -> `sub_species`).
+    * `is_reporting` is derived from the configured reporting ranks.
      *
      * @param array<int, array<string, mixed>> $rows   Normalized taxon rank rows.
      *                                                  Expected keys: `rank`, `abbr`,
@@ -72,11 +73,13 @@ class TaxonRanksImportService implements EntityImportServiceInterface
 
                 $abbr = trim((string) ($row['abbr'] ?? ''));
                 $sortOrder = max(0, (int) ($row['sort_order'] ?? 0));
+                $isReporting = $this->isConfiguredReportingRank($rank);
 
                 $payload = [
                     'rank' => substr($rank, 0, 50),
                     'abbr' => substr($abbr !== '' ? $abbr : strtolower(preg_replace('/[^a-z0-9]+/i', '_', $rank) ?? ''), 0, 50),
                     'sort_order' => $sortOrder,
+                    'is_reporting' => $isReporting ? 1 : 0,
                 ];
 
                 $existing = $existingRows[$rank] ?? null;
@@ -110,5 +113,25 @@ class TaxonRanksImportService implements EntityImportServiceInterface
         }
 
         return $counts;
+    }
+
+    /**
+     * Check whether a rank is configured as a reporting rank.
+     *
+     * @param string $rank Rank name to check.
+     * @return bool True when the rank is configured for reporting.
+     */
+    private function isConfiguredReportingRank(string $rank): bool
+    {
+        $configuredRanks = config('Import')->taxonRanks ?? [];
+        $configuredRanks = is_array($configuredRanks) ? $configuredRanks : explode(',', (string) $configuredRanks);
+
+        foreach ($configuredRanks as $configuredRank) {
+            if (is_scalar($configuredRank) && strcasecmp(trim((string) $configuredRank), $rank) === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

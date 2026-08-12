@@ -27,6 +27,12 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $this->db->query('CREATE TABLE ' . $prefix . 'taxa (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             taxon_identifier VARCHAR(100) NOT NULL,
+            is_reporting INTEGER NOT NULL DEFAULT 1,
+            order_id INTEGER NULL,
+            superfamily_id INTEGER NULL,
+            family_id INTEGER NULL,
+            genus_id INTEGER NULL,
+            species_id INTEGER NULL,
             blocked INTEGER NOT NULL DEFAULT 0,
             deleted_at DATETIME NULL
         )');
@@ -34,6 +40,11 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $this->db->query('CREATE TABLE ' . $prefix . 'occurrences (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             taxon_id INTEGER NOT NULL,
+            order_id INTEGER NULL,
+            superfamily_id INTEGER NULL,
+            family_id INTEGER NULL,
+            genus_id INTEGER NULL,
+            species_id INTEGER NULL,
             from_date DATE NULL,
             to_date DATE NULL,
             grid_ref_2km VARCHAR(5) NULL,
@@ -56,11 +67,13 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             grid_square_count INTEGER NOT NULL DEFAULT 0
         )');
 
-        $this->db->table('taxa')->insertBatch([
-            ['id' => 1, 'taxon_identifier' => 'TX-1', 'blocked' => 0, 'deleted_at' => null],
-            ['id' => 2, 'taxon_identifier' => 'TX-2', 'blocked' => 0, 'deleted_at' => null],
+        foreach ([
+            ['id' => 1, 'taxon_identifier' => 'TX-1', 'is_reporting' => 0, 'order_id' => 1, 'superfamily_id' => 1, 'family_id' => 1, 'genus_id' => 1, 'species_id' => 1, 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 2, 'taxon_identifier' => 'TX-2', 'is_reporting' => 0, 'order_id' => 2, 'superfamily_id' => 2, 'family_id' => 2, 'genus_id' => 2, 'species_id' => 2, 'blocked' => 0, 'deleted_at' => null],
             ['id' => 3, 'taxon_identifier' => 'TX-3', 'blocked' => 1, 'deleted_at' => null],
-        ]);
+        ] as $taxon) {
+            $this->db->table('taxa')->insert($taxon);
+        }
     }
 
     public function testRunBuildsGlobalAndRegionalRowsWithinRollingTenYears(): void

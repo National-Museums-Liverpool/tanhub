@@ -31,6 +31,15 @@ use CodeIgniter\HTTP\ResponseInterface;
 abstract class ApiResourceController extends ApiController
 {
     /**
+     * Parsed reporting-only query option for the current request.
+     *
+     * A null value means that the resource does not support the option.
+     *
+     * @var bool|null
+     */
+    private ?bool $reportingOnly = null;
+
+    /**
      * Map of field identifiers exposed in API responses to their SQL column/expression.
      *
      * Used both to build the `SELECT` list (via {@see self::getFieldSql()}) and,
@@ -119,6 +128,40 @@ abstract class ApiResourceController extends ApiController
     }
 
     /**
+     * Indicate whether this resource supports the reporting-only query option.
+     *
+     * @return bool True when `reporting_only` should be parsed and applied.
+     */
+    protected function supportsReportingOnly(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Apply the reporting-only constraint to a resource query.
+     *
+     * Subclasses that support reporting filtering should add any required joins in
+     * {@see self::getBuilder()} and apply their rank predicate here.
+     *
+     * @param BaseBuilder $builder Query builder to apply conditions to.
+     * @param bool        $reportingOnly Whether only reporting taxa should remain.
+     */
+    protected function applyReportingOnly(BaseBuilder $builder, bool $reportingOnly): void
+    {
+        // Resources without reporting projections have no constraint to apply.
+    }
+
+    /**
+     * Return the parsed reporting-only option for the current request.
+     *
+     * @return bool|null True/false for supported resources, or null when unsupported.
+     */
+    protected function isReportingOnly(): ?bool
+    {
+        return $this->reportingOnly;
+    }
+
+    /**
      * Use the default field list as the filterable field list.
      *
      * Override this function if the filterable fields need to be different.
@@ -176,6 +219,14 @@ abstract class ApiResourceController extends ApiController
             return $pagination;
         }
 
+        $reportingOnly = $this->getReportingOnly();
+
+        if ($reportingOnly instanceof ResponseInterface) {
+            return $reportingOnly;
+        }
+
+        $this->reportingOnly = $reportingOnly;
+
         $sorts = $this->getSorts($this->allowedSorts($includes));
 
         if ($sorts instanceof ResponseInterface) {
@@ -192,6 +243,9 @@ abstract class ApiResourceController extends ApiController
         $builder = $this->getBuilder($db, $includes);
 
         $this->applyFilters($builder, $filters);
+        if ($reportingOnly !== null) {
+            $this->applyReportingOnly($builder, $reportingOnly);
+        }
         $this->applySorts($builder, $sorts);
 
         $total = (clone $builder)->countAllResults();
@@ -226,10 +280,23 @@ abstract class ApiResourceController extends ApiController
             return $includes;
         }
 
+        $reportingOnly = $this->getReportingOnly();
+
+        if ($reportingOnly instanceof ResponseInterface) {
+            return $reportingOnly;
+        }
+
+        $this->reportingOnly = $reportingOnly;
+
         $db = db_connect();
 
-        $item = $this->getBuilder($db, $includes)
-            ->where($this->getDefaultKeyColumn(), $key)
+        $builder = $this->getBuilder($db, $includes);
+
+        if ($reportingOnly !== null) {
+            $this->applyReportingOnly($builder, $reportingOnly);
+        }
+
+        $item = $builder->where($this->getDefaultKeyColumn(), $key)
             ->get()
             ->getRowArray();
 
@@ -541,7 +608,7 @@ abstract class ApiResourceController extends ApiController
         $allowedOperators = ['eq', 'in', 'contains', 'gte', 'lte'];
 
         foreach ($query as $field => $value) {
-            if (in_array($field, ['limit', 'offset', 'sort', 'include'], true)) {
+            if (in_array($field, ['limit', 'offset', 'sort', 'include', 'reporting_only'], true)) {
                 continue;
             }
 
@@ -573,6 +640,40 @@ abstract class ApiResourceController extends ApiController
         }
 
         return $filters;
+    }
+
+    /**
+     * Parse and validate the optional `reporting_only` query parameter.
+     *
+     * Supported resources default to true. Accepted values are true/false and 1/0,
+     * case-insensitively; ambiguous values are rejected rather than coerced.
+     *
+     * @return bool|null|ResponseInterface Parsed option, null when unsupported, or a 400
+     *                                     problem response for an invalid value.
+     */
+    protected function getReportingOnly(): bool|null|ResponseInterface
+    {
+        if (! $this->supportsReportingOnly()) {
+            return null;
+        }
+
+        $raw = $this->request->getGet('reporting_only');
+
+        if ($raw === null || $raw === '') {
+            return true;
+        }
+
+        $value = strtolower(trim((string) $raw));
+
+        return match ($value) {
+            'true', '1' => true,
+            'false', '0' => false,
+            default => $this->respondProblem(
+                400,
+                'Invalid reporting_only parameter',
+                'reporting_only must be true, false, 1, or 0.'
+            ),
+        };
     }
 
     /**

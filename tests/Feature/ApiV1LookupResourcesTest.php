@@ -118,7 +118,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
     public function testTaxaSupportsNullEqFilterOperator(): void
     {
-        $result = $this->get('api/v1/taxa?scientific_name_authorship[eq]=null&sort=scientific_name');
+        $result = $this->get('api/v1/taxa?reporting_only=false&scientific_name_authorship[eq]=null&sort=scientific_name');
 
         $result->assertStatus(200);
 
@@ -260,6 +260,44 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame('bees', $json['data'][0]['taxon_group__external_key']);
         $this->assertSame('SCHEME-0001', $json['data'][0]['recording_scheme__external_key']);
     }
+    public function testTaxaDefaultsToReportingRanksAndCanIncludeAllRanks(): void
+    {
+        $default = $this->get('api/v1/taxa');
+        $default->assertStatus(200);
+        $defaultJson = json_decode((string) $default->response()->getBody(), true);
+
+        $this->assertSame(1, $defaultJson['meta']['total']);
+        $this->assertSame('NHMSYS0021054498', $defaultJson['data'][0]['taxon_identifier']);
+
+        $allRanks = $this->get('api/v1/taxa?reporting_only=false&sort=taxon_identifier');
+        $allRanks->assertStatus(200);
+        $allRanksJson = json_decode((string) $allRanks->response()->getBody(), true);
+
+        $this->assertSame(2, $allRanksJson['meta']['total']);
+    }
+
+    public function testReportingOnlyRejectsAmbiguousBoolean(): void
+    {
+        $result = $this->get('api/v1/taxa?reporting_only=yes');
+
+        $result->assertStatus(400);
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame('Invalid reporting_only parameter', $json['title']);
+    }
+
+    public function testTaxaIncludeParentTaxonAddsImmediateParentFields(): void
+    {
+        $result = $this->get('api/v1/taxa?include=parent-taxon');
+
+        $result->assertStatus(200);
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $first = $json['data'][0];
+
+        $this->assertSame('NHMSYS0021000001', $first['parent_taxon__taxon_identifier']);
+        $this->assertSame('Apidae', $first['parent_taxon__scientific_name']);
+        $this->assertSame('Genus', $first['parent_taxon__rank']);
+    }
 
     public function testTaxaIncludeTaxonMediaAddsNestedMediaRows(): void
     {
@@ -276,6 +314,15 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame('99999999-9999-4999-8999-999999999999', $first['taxon_media'][0]['uuid']);
         $this->assertArrayHasKey('variants', $first['taxon_media'][0]);
         $this->assertArrayHasKey('thumbnail', $first['taxon_media'][0]['variants']);
+    }
+    public function testTaxonRanksExposeReportingStatus(): void
+    {
+        $result = $this->get('api/v1/taxon-ranks?abbr[eq]=sp');
+
+        $result->assertStatus(200);
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame(1, $json['data'][0]['is_reporting']);
     }
 
     public function testTaxonShowReturnsNotFoundForBlockedTaxon(): void
@@ -350,6 +397,28 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame(1, $json['meta']['count']);
         $this->assertSame('NBN:123456789', $json['data'][0]['unique_key']);
         $this->assertSame('NHMSYS0021054498', $json['data'][0]['taxon_identifier']);
+    }
+    public function testOccurrencesRemainExactWhenReportingOnlyIsRequested(): void
+    {
+        $result = $this->get('api/v1/occurrences?reporting_only=false');
+
+        $result->assertStatus(200);
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame(1, $json['meta']['total']);
+        $this->assertSame('NHMSYS0021054498', $json['data'][0]['taxon_identifier']);
+    }
+
+    public function testOccurrencesIncludeParentTaxonAddsImmediateParentFields(): void
+    {
+        $result = $this->get('api/v1/occurrences?include=taxon,parent-taxon');
+
+        $result->assertStatus(200);
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $first = $json['data'][0];
+
+        $this->assertSame('NHMSYS0021000001', $first['parent_taxon__taxon_identifier']);
+        $this->assertSame('Apidae', $first['parent_taxon__scientific_name']);
     }
 
     public function testOccurrencesListSupportsHigherGeographyIdentifierFilter(): void
@@ -823,6 +892,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'rank' => 'Genus',
                 'abbr' => 'gen',
                 'sort_order' => 1,
+                'is_reporting' => 0,
                 'created_at' => $now,
                 'updated_at' => $now,
                 'deleted_at' => null,
@@ -832,6 +902,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'rank' => 'Species',
                 'abbr' => 'sp',
                 'sort_order' => 2,
+                'is_reporting' => 1,
                 'created_at' => $now,
                 'updated_at' => $now,
                 'deleted_at' => null,
@@ -847,6 +918,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'scientific_name_authorship' => 'Linnaeus, 1758',
                 'vernacular_name' => 'Buff-tailed Bumblebee',
                 'family_id' => 3,
+                'parent_taxon_id' => 3,
                 'taxon_group_id' => 1,
                 'taxon_rank_id' => 2,
                 'id_difficulty' => 2,
@@ -869,6 +941,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'scientific_name_authorship' => null,
                 'vernacular_name' => 'Blocked Bee',
                 'family_id' => 3,
+                'parent_taxon_id' => 3,
                 'taxon_group_id' => 1,
                 'taxon_rank_id' => 2,
                 'id_difficulty' => 3,
@@ -891,6 +964,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'scientific_name_authorship' => null,
                 'vernacular_name' => 'Bees',
                 'family_id' => null,
+                'parent_taxon_id' => null,
                 'taxon_group_id' => 1,
                 'taxon_rank_id' => 1,
                 'id_difficulty' => 1,
@@ -1167,6 +1241,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             rank VARCHAR(100) NOT NULL,
             abbr VARCHAR(10) NULL,
             sort_order INTEGER NOT NULL,
+            is_reporting INTEGER NOT NULL DEFAULT 0,
             created_at DATETIME NOT NULL,
             updated_at DATETIME NULL,
             deleted_at DATETIME NULL
@@ -1200,6 +1275,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             scientific_name_authorship VARCHAR(100) NULL,
             vernacular_name VARCHAR(200) NOT NULL,
             family_id INTEGER NULL,
+            parent_taxon_id INTEGER NULL,
             taxon_rank_id INTEGER NOT NULL,
             taxon_group_id INTEGER NOT NULL,
             id_difficulty INTEGER NULL,

@@ -45,11 +45,12 @@ class TaxonRarityService
                     END) AS grid_square_count
                 FROM ' . $prefix . 'taxa t
                 LEFT JOIN ' . $prefix . 'occurrences o
-                    ON o.taxon_id = t.id
+                    ON o.species_id = t.id
                     AND o.deleted_at IS NULL
                     AND o.blocked = 0
                 WHERE t.deleted_at IS NULL
                     AND t.blocked = 0
+                    AND t.species_id = t.id
                     AND t.rarity_group_name IS NOT NULL
                     AND TRIM(t.rarity_group_name) <> ""
                 GROUP BY t.id, t.taxon_identifier, t.rarity_group_name, t.rarity_category'
@@ -59,6 +60,10 @@ class TaxonRarityService
             $counts['processed'] = count($rows);
 
             if ($rows === []) {
+                if (! $dryRun) {
+                    $db->table('taxa')->update(['rarity_category' => null]);
+                }
+
                 return $counts;
             }
 
@@ -90,6 +95,12 @@ class TaxonRarityService
 
             if ($updates !== []) {
                 $db->table('taxa')->updateBatch($updates, 'id');
+            }
+
+            if (! $dryRun) {
+                $db->table('taxa')
+                    ->where('species_id != id', null, false)
+                    ->update(['rarity_category' => null]);
             }
         } catch (\Throwable $exception) {
             log_message('error', $exception->getMessage());

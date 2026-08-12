@@ -42,6 +42,25 @@ This is the fastest regression check for the lookup endpoints, including taxon s
 vendor/bin/phpunit -c phpunit.dist.xml tests/Feature/ApiV1LookupResourcesTest.php
 ```
 
+## Run taxonomy redesign regression tests
+
+These tests cover configured rank mappings, complete hierarchy persistence, reporting statistics,
+the public API contract, and the read-only admin taxonomy screens:
+
+```bash
+vendor/bin/phpunit -c phpunit.dist.xml tests/unit/Config/ImportConfigTest.php
+vendor/bin/phpunit -c phpunit.dist.xml \
+    tests/unit/Services/Import/Persistence/TaxaImportServiceTest.php
+vendor/bin/phpunit -c phpunit.dist.xml \
+    tests/unit/Services/Import/Persistence/TaxonRanksImportServiceTest.php
+vendor/bin/phpunit -c phpunit.dist.xml \
+    tests/unit/Services/Stats/TaxonStatsServiceTest.php \
+    tests/unit/Services/Stats/TaxonYearStatsServiceTest.php
+vendor/bin/phpunit -c phpunit.dist.xml tests/Feature/ApiV1LookupResourcesTest.php
+vendor/bin/phpunit -c phpunit.dist.xml \
+    tests/Feature/AdminReferenceTablesTest.php tests/Feature/TaxaPagesTest.php
+```
+
 ## Run only taxon media focused tests
 
 Use these during media upload and include refactors:
@@ -131,6 +150,8 @@ composer test
 - Keep response envelope shape stable (`data`, `meta`, `links`) to avoid breaking existing API tests.
 - If you add new filterable or sortable fields, add matching feature tests in `tests/Feature/ApiV1LookupResourcesTest.php`.
 - If response fields change intentionally, update both tests and API documentation together.
+- Taxonomy changes must keep `docs/database.md`, `docs/import.md`, `docs/api.md`,
+  `docs/admin-ui.md`, and `docs/openapi.v1.yaml` consistent with the migration and feature tests.
 
 ## See also
 

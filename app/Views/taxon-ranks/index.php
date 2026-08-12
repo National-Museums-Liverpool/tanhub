@@ -61,13 +61,14 @@
                     <th scope="col"><a href="<?= esc($sortUrl('rank')) ?>">Rank<?= esc($sortIndicator('rank')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('abbr')) ?>">Abbreviation<?= esc($sortIndicator('abbr')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('sort_order')) ?>">Sort order<?= esc($sortIndicator('sort_order')) ?></a></th>
+                    <th scope="col"><a href="<?= esc($sortUrl('is_reporting')) ?>">Reporting<?= esc($sortIndicator('is_reporting')) ?></a></th>
                     <th scope="col">Links</th>
                 </tr>
                 </thead>
                 <tbody>
                 <?php if ($page['taxonRanks'] === []): ?>
                     <tr>
-                        <td colspan="5" class="text-muted">No taxon ranks found.</td>
+                        <td colspan="6" class="text-muted">No taxon ranks found.</td>
                     </tr>
                 <?php else: ?>
                     <?php foreach ($page['taxonRanks'] as $taxonRank): ?>
@@ -76,6 +77,13 @@
                             <td><?= esc($taxonRank['rank']) ?></td>
                             <td><?= esc($taxonRank['abbr']) ?></td>
                             <td><?= esc((string) $taxonRank['sort_order']) ?></td>
+                            <td>
+                                <?php if ((int) ($taxonRank['is_reporting'] ?? 0) === 1): ?>
+                                    <span class="badge bg-success">Yes</span>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary">No</span>
+                                <?php endif; ?>
+                            </td>
                             <td><a class="btn btn-sm btn-outline-brand" href="<?= esc(site_url('taxon-ranks/' . $taxonRank['id'])) ?>">Details</a></td>
                         </tr>
                     <?php endforeach; ?>

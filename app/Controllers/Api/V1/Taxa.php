@@ -3,6 +3,7 @@
 namespace App\Controllers\Api\V1;
 
 use CodeIgniter\Database\BaseBuilder;
+use CodeIgniter\Database\RawSql;
 
 /**
  * API endpoints for the `taxa` resource.
@@ -28,6 +29,7 @@ class Taxa extends ApiResourceController
     protected function getAllowedIncludes(array $requested): array
     {
         return [
+            'parent-taxon',
             'parent-taxa',
             'recording-scheme',
             'taxon-media',
@@ -94,6 +96,14 @@ class Taxa extends ApiResourceController
             }
         }
 
+        if ($this->hasInclude($includes, 'parent-taxon')) {
+            $fields['parent_taxon__taxon_identifier'] = 'pt.taxon_identifier';
+            $fields['parent_taxon__scientific_name'] = 'pt.scientific_name';
+            $fields['parent_taxon__vernacular_name'] = 'pt.vernacular_name';
+            $fields['parent_taxon__rank'] = 'ptr.rank';
+            $fields['parent_taxon__rank_abbr'] = 'ptr.abbr';
+        }
+
         if ($this->hasInclude($includes, 'recording-scheme')) {
             $fields['recording_scheme__external_key'] = 'rs.external_key';
             $fields['recording_scheme__title'] = 'rs.title';
@@ -109,6 +119,7 @@ class Taxa extends ApiResourceController
             $fields['taxon_rank__rank'] = 'tr.rank';
             $fields['taxon_rank__abbr'] = 'tr.abbr';
             $fields['taxon_rank__sort_order'] = 'tr.sort_order';
+            $fields['taxon_rank__is_reporting'] = 'tr.is_reporting';
         }
 
         return $fields;
@@ -131,6 +142,10 @@ class Taxa extends ApiResourceController
                 ->select($this->getFieldSql($includes), false)
             ->where('t.deleted_at', null, false)
             ->where('t.blocked', 0, false);
+        if ($this->hasInclude($includes, 'parent-taxon')) {
+            $builder->join('taxa pt', 'pt.id = t.parent_taxon_id AND pt.deleted_at IS NULL AND pt.blocked = 0', 'left');
+            $builder->join('taxon_ranks ptr', 'ptr.id = pt.taxon_rank_id', 'left');
+        }
         if ($this->hasInclude($includes, 'parent-taxa')) {
             foreach ($this->dynamicRankAliases() as $alias) {
                 $joinAlias = $this->parentTaxaJoinAlias($alias);
@@ -143,10 +158,33 @@ class Taxa extends ApiResourceController
         if ($this->hasInclude($includes, 'taxon-group')) {
             $builder->join('taxon_groups tg', 'tg.id = t.taxon_group_id', 'left');
         }
-        if ($this->hasInclude($includes, 'taxon-rank')) {
+        if ($this->hasInclude($includes, 'taxon-rank') || $this->isReportingOnly() !== null) {
             $builder->join('taxon_ranks tr', 'tr.id = t.taxon_rank_id', 'left');
         }
         return $builder;
+    }
+
+    /**
+     * Indicate that taxa can be restricted to configured reporting ranks.
+     *
+     * @return bool Always true for this resource.
+     */
+    protected function supportsReportingOnly(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Apply the reporting-rank predicate to the taxa query.
+     *
+     * @param BaseBuilder $builder Query builder to modify.
+     * @param bool        $reportingOnly Whether only reporting ranks should remain.
+     */
+    protected function applyReportingOnly(BaseBuilder $builder, bool $reportingOnly): void
+    {
+        if ($reportingOnly) {
+            $builder->where(new RawSql('tr.is_reporting = 1'));
+        }
     }
 
     /**

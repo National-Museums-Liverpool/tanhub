@@ -72,14 +72,18 @@ class TaxonYearStatsService
             'POSTGRE' => 'EXTRACT(YEAR FROM record_date)',
             default => 'YEAR(record_date)',
         };
+        $reportingColumns = $this->reportingColumns();
+        $projectionColumns = $reportingColumns === [] ? '' : ",\n                    " . implode(",\n                    ", array_map(static fn (string $column): string => 'o.' . $column, $reportingColumns));
+        $scopedOccurrences = $this->scopedOccurrenceSql($prefix, $reportingColumns, $yearExpression);
 
         $rows = $db->query(
             'WITH active_occurrences AS (
                 SELECT
                     o.id AS occurrence_id,
                     o.taxon_id,
+                    t.is_reporting,
                     COALESCE(o.from_date, o.to_date) AS record_date,
-                    NULLIF(UPPER(TRIM(o.grid_ref_2km)), "") AS grid_ref_2km
+                    NULLIF(UPPER(TRIM(o.grid_ref_2km)), "") AS grid_ref_2km' . $projectionColumns . '
                 FROM ' . $prefix . 'occurrences o
                 INNER JOIN ' . $prefix . 'taxa t
                     ON t.id = o.taxon_id
@@ -90,25 +94,7 @@ class TaxonYearStatsService
                     AND COALESCE(o.from_date, o.to_date) >= ?
                     AND COALESCE(o.from_date, o.to_date) < ?
             ),
-            scoped_occurrences AS (
-                SELECT
-                    ao.taxon_id,
-                    gro.geographic_region_id,
-                    ' . $yearExpression . ' AS year,
-                    ao.grid_ref_2km
-                FROM active_occurrences ao
-                INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
-                    ON gro.occurrence_id = ao.occurrence_id
-
-                UNION ALL
-
-                SELECT
-                    ao.taxon_id,
-                    NULL AS geographic_region_id,
-                    ' . $yearExpression . ' AS year,
-                    ao.grid_ref_2km
-                FROM active_occurrences ao
-            )
+            scoped_occurrences AS (' . $scopedOccurrences . ')
             SELECT
                 taxon_id,
                 geographic_region_id,
@@ -144,6 +130,63 @@ class TaxonYearStatsService
         }
 
         return $result;
+    }
+
+    /**
+     * Return configured reporting projection columns.
+     *
+     * @return array<int, string> Normalised occurrence column names.
+     */
+    private function reportingColumns(): array
+    {
+        $ranks = config('Import')->taxonRanks ?? [];
+        $ranks = is_array($ranks) ? $ranks : explode(',', (string) $ranks);
+
+        return array_values(array_filter(array_map(static function ($rank): string {
+            if (! is_scalar($rank)) {
+                return '';
+            }
+
+            return trim((string) preg_replace('/[^a-z0-9]+/i', '_', strtolower(trim((string) $rank))), '_') . '_id';
+        }, $ranks)));
+    }
+
+    /**
+     * Build exact and reporting scoped rows for yearly aggregation.
+     *
+     * @param string             $prefix Database table prefix.
+     * @param array<int, string> $columns Reporting projection columns.
+     * @param string             $yearExpression Database year expression.
+     * @return string SQL CTE body.
+     */
+    private function scopedOccurrenceSql(string $prefix, array $columns, string $yearExpression): string
+    {
+        $exactCondition = 'ao.is_reporting = 0';
+        $selects = [
+            'SELECT ao.occurrence_id, ao.taxon_id, gro.geographic_region_id, ' . $yearExpression . ' AS year, ao.grid_ref_2km
+             FROM active_occurrences ao
+             INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
+                ON gro.occurrence_id = ao.occurrence_id
+             WHERE ' . $exactCondition,
+            'SELECT ao.occurrence_id, ao.taxon_id, NULL AS geographic_region_id, ' . $yearExpression . ' AS year, ao.grid_ref_2km
+             FROM active_occurrences ao
+             WHERE ' . $exactCondition,
+        ];
+
+        foreach ($columns as $column) {
+            $selects[] = 'SELECT ao.occurrence_id, ao.' . $column . ' AS taxon_id, gro.geographic_region_id,
+                ' . $yearExpression . ' AS year, ao.grid_ref_2km
+             FROM active_occurrences ao
+             INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
+                ON gro.occurrence_id = ao.occurrence_id
+             WHERE ao.' . $column . ' IS NOT NULL';
+            $selects[] = 'SELECT ao.occurrence_id, ao.' . $column . ' AS taxon_id, NULL AS geographic_region_id,
+                ' . $yearExpression . ' AS year, ao.grid_ref_2km
+             FROM active_occurrences ao
+             WHERE ao.' . $column . ' IS NOT NULL';
+        }
+
+        return implode("\n                UNION\n                ", $selects);
     }
 
     /**

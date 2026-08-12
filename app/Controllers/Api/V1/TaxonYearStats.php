@@ -3,6 +3,7 @@
 namespace App\Controllers\Api\V1;
 
 use CodeIgniter\Database\BaseBuilder;
+use CodeIgniter\Database\RawSql;
 
 /**
  * API endpoints for the `taxon_year_stats` resource (per-taxon, per-region, per-year
@@ -37,6 +38,7 @@ class TaxonYearStats extends ApiResourceController
                 'taxon-rank',
                 'taxon-group',
                 'parent-taxa',
+                'parent-taxon',
             ]);
         }
         return $includes;
@@ -109,6 +111,14 @@ class TaxonYearStats extends ApiResourceController
                 }
             }
 
+            if ($this->hasInclude($includes, 'parent-taxon')) {
+                $fields['parent_taxon__taxon_identifier'] = 'pt.taxon_identifier';
+                $fields['parent_taxon__scientific_name'] = 'pt.scientific_name';
+                $fields['parent_taxon__vernacular_name'] = 'pt.vernacular_name';
+                $fields['parent_taxon__rank'] = 'ptr.rank';
+                $fields['parent_taxon__rank_abbr'] = 'ptr.abbr';
+            }
+
             if ($this->hasInclude($includes, 'taxon-group')) {
                 $fields['taxon_group__external_key'] = 'tg.external_key';
                 $fields['taxon_group__friendly'] = 'tg.friendly';
@@ -119,6 +129,7 @@ class TaxonYearStats extends ApiResourceController
                 $fields['taxon_rank__rank'] = 'tr.rank';
                 $fields['taxon_rank__abbr'] = 'tr.abbr';
                 $fields['taxon_rank__sort_order'] = 'tr.sort_order';
+                $fields['taxon_rank__is_reporting'] = 'tr.is_reporting';
             }
         }
 
@@ -143,6 +154,10 @@ class TaxonYearStats extends ApiResourceController
             ->join('taxa t', 't.id = ts.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0')
             ->join('geographic_regions gr', 'gr.id = ts.geographic_region_id AND gr.deleted_at IS NULL', 'left');
 
+        if ($this->hasInclude($includes, 'parent-taxon')) {
+            $builder->join('taxa pt', 'pt.id = t.parent_taxon_id AND pt.deleted_at IS NULL AND pt.blocked = 0', 'left');
+            $builder->join('taxon_ranks ptr', 'ptr.id = pt.taxon_rank_id', 'left');
+        }
         if ($this->hasInclude($includes, 'parent-taxa')) {
             foreach ($this->dynamicRankAliases() as $alias) {
                 $joinAlias = $this->parentTaxaJoinAlias($alias);
@@ -152,11 +167,34 @@ class TaxonYearStats extends ApiResourceController
         if ($this->hasInclude($includes, 'taxon-group')) {
             $builder->join('taxon_groups tg', 'tg.id = t.taxon_group_id', 'left');
         }
-        if ($this->hasInclude($includes, 'taxon-rank')) {
+        if ($this->hasInclude($includes, 'taxon-rank') || $this->isReportingOnly() !== null) {
             $builder->join('taxon_ranks tr', 'tr.id = t.taxon_rank_id', 'left');
         }
 
         return $builder;
+    }
+
+    /**
+     * Indicate that yearly statistics can be restricted to reporting taxa.
+     *
+     * @return bool Always true for this resource.
+     */
+    protected function supportsReportingOnly(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Apply the reporting-rank predicate to the owning taxon query.
+     *
+     * @param BaseBuilder $builder Query builder to modify.
+     * @param bool        $reportingOnly Whether only reporting ranks should remain.
+     */
+    protected function applyReportingOnly(BaseBuilder $builder, bool $reportingOnly): void
+    {
+        if ($reportingOnly) {
+            $builder->where(new RawSql('tr.is_reporting = 1'));
+        }
     }
 
     /**

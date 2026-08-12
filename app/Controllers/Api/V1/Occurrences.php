@@ -49,6 +49,7 @@ class Occurrences extends ApiResourceController
                 'taxon-media',
                 'taxon-rank',
                 'taxon-group',
+                'parent-taxon',
                 'parent-taxa',
             ]);
         }
@@ -119,6 +120,14 @@ class Occurrences extends ApiResourceController
         $fields['taxon__id_difficulty'] = 't.id_difficulty';
         $fields['taxon__conservation_status'] = 't.conservation_status';
         $fields['taxon__rarity_category'] = 't.rarity_category';
+
+        if ($this->hasInclude($includes, 'parent-taxon')) {
+            $fields['parent_taxon__taxon_identifier'] = 'pt.taxon_identifier';
+            $fields['parent_taxon__scientific_name'] = 'pt.scientific_name';
+            $fields['parent_taxon__vernacular_name'] = 'pt.vernacular_name';
+            $fields['parent_taxon__rank'] = 'ptr.rank';
+            $fields['parent_taxon__rank_abbr'] = 'ptr.abbr';
+        }
 
         if ($this->hasInclude($includes, 'taxon-rank')) {
             $fields['taxon_rank__rank'] = 'tr.rank';
@@ -257,6 +266,11 @@ class Occurrences extends ApiResourceController
 
         if ($this->hasInclude($includes, 'grid-square-stats')) {
             $builder->join('grid_square_stats gss', 'gss.square = o.grid_ref_2km', 'left');
+        }
+
+        if ($this->hasInclude($includes, 'parent-taxon')) {
+            $builder->join('taxa pt', 'pt.id = t.parent_taxon_id AND pt.deleted_at IS NULL AND pt.blocked = 0', 'left');
+            $builder->join('taxon_ranks ptr', 'ptr.id = pt.taxon_rank_id', 'left');
         }
 
         if ($this->hasInclude($includes, 'parent-taxa')) {

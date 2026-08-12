@@ -107,6 +107,19 @@ again after completion:
 * `taxa`
 * `taxon_names`
 
+Taxonomy import behaviour:
+
+- `taxon_ranks` marks configured reporting ranks with `is_reporting`.
+- `taxa` imports the complete accepted hierarchy rather than filtering out non-reporting ranks.
+- `taxa.parent_taxon_id` stores the immediate accepted parent.
+- Configured `<rank>_id` columns on `taxa` and `occurrences` store reporting projections. They are
+  derived from the nearest configured ancestor by rank sort order, with explicit exceptions from
+  `import.taxonRankMappings` taking precedence.
+- Occurrence `taxon_id` remains the exact accepted taxon and is authoritative for exact lookup.
+
+When changing `import.taxonRanks` or `import.taxonRankMappings`, refresh the taxonomy and
+occurrence imports and rerun derived statistics so the reporting projections are consistent.
+
 The `grid_square_stats` task populates the `grid_square_stats` with all the 2km grid squares that
 intersect your geographic regions. It does not do the actual counting of contained records.
 Therefore it can also be completed once and not run again.

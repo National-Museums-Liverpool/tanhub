@@ -105,8 +105,8 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
             'limit' => $limit,
             'offset' => $offset,
         ];
-        if (in_array($report, ['taxon_ranks', 'taxa', 'taxon_names'])) {
-            $query['taxon_ranks'] = $this->getConfigListAsReportParam('taxonRanks');
+        if ($report === 'taxa') {
+            $query['reporting_taxon_ranks'] = $this->getConfigListAsReportParam('taxonRanks');
         }
         if ($report === 'taxon_groups') {
             $query['taxon_groups'] = $this->getConfigListAsReportParam('taxonGroups');
@@ -292,6 +292,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
             'recording_scheme_external_key' => (string) ($row['recording_scheme_external_key'] ?? ''),
             'conservation_status' => $row['conservation_status'] ?? null,
             'taxon_rank' => (string) ($row['taxon_rank'] ?? ''),
+            'parent_taxon_identifier' => trim((string) ($row['parent_taxon_identifier'] ?? '')),
             'higher_taxa' => json_decode((string) ($row['higher_taxa'] ?? '[]')),
         ];
     }

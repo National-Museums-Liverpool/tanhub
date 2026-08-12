@@ -75,8 +75,8 @@ class TaxaImportService implements EntityImportServiceInterface
             $groupMap = $this->prepareLookup('taxon_groups', 'external_key', 'id');
             $schemeMap = $this->prepareLookup('recording_schemes', 'external_key', 'id');
             $schemeTitleMap = $this->prepareStringLookup('recording_schemes', 'external_key', 'title');
-            $taxonRankMap = $this->prepareLookup('taxon_ranks', 'rank', 'id');
-            $taxonRanks = config('Import')->taxonRanks;
+            $taxonRankMap = array_change_key_case($this->prepareLookup('taxon_ranks', 'rank', 'id'), CASE_LOWER);
+            $taxonRanks = $this->configuredTaxonRanks();
 
             $taxonIdentifiers = [];
             $parentIdentifiers = [];
@@ -89,13 +89,16 @@ class TaxaImportService implements EntityImportServiceInterface
                 }
 
                 foreach ((array) ($row['higher_taxa'] ?? []) as $parent) {
-                    $parentIdentifier = is_object($parent)
-                        ? trim((string) ($parent->organism_key ?? ''))
-                        : trim((string) ($parent['organism_key'] ?? ''));
+                    $parentIdentifier = $this->taxonSummaryValue($parent, 'organism_key');
 
                     if ($parentIdentifier !== '') {
                         $parentIdentifiers[$parentIdentifier] = true;
                     }
+                }
+
+                $parentIdentifier = trim((string) ($row['parent_taxon_identifier'] ?? ''));
+                if ($parentIdentifier !== '') {
+                    $parentIdentifiers[$parentIdentifier] = true;
                 }
             }
 
@@ -127,7 +130,7 @@ class TaxaImportService implements EntityImportServiceInterface
 
                 $groupId = $groupMap[$groupExternalKey] ?? null;
                 $schemeId = $schemeMap[$schemeExternalKey] ?? null;
-                $taxonRankId = $taxonRankMap[$taxonRank] ?? null;
+                $taxonRankId = $taxonRankMap[strtolower($taxonRank)] ?? null;
 
                 if ($groupId === null) {
                     log_message('info', 'Skipping taxa row due to missing taxon group: ' . var_export($row, TRUE));
@@ -146,25 +149,32 @@ class TaxaImportService implements EntityImportServiceInterface
                     'id_difficulty' => isset($row['id_difficulty']) ? (int) $row['id_difficulty'] : null,
                     'recording_scheme_id' => $schemeId,
                     'taxon_rank_id' => $taxonRankId,
+                    'parent_taxon_id' => null,
                     'conservation_status' => $this->nullableString($row['conservation_status'] ?? null, 10),
                     'blocked' => 0,
                     'blocked_reason' => null,
                     'deleted_at' => null,
                 ];
-                // Format $higherTaxaInRow to an associative array keyed by
-                // rank.
-                $higherTaxaInRow = array_combine(array_column($row['higher_taxa'], 'taxon_rank'), $row['higher_taxa']);
+                $higherTaxaInRow = $this->higherTaxaByRank((array) ($row['higher_taxa'] ?? []));
+                $parentIdentifier = trim((string) ($row['parent_taxon_identifier'] ?? ''));
+                if ($parentIdentifier !== '') {
+                    if (! isset($knownTaxa[$parentIdentifier])) {
+                        throw new \RuntimeException('Failed to find unique parent for taxon identifier ' . $parentIdentifier);
+                    }
+                    $taxaPayload['parent_taxon_id'] = (int) $knownTaxa[$parentIdentifier]['id'];
+                }
                 // Dynamically add the FKs for the taxon ranks we are
                 // supporting.
                 foreach ($taxonRanks as $parentTaxonRank) {
                     // Don't try to find the taxon we are about to insert, we
                     // will point this rank to self later.
-                    if ($parentTaxonRank === $taxonRank) {
+                    if (strcasecmp($parentTaxonRank, $taxonRank) === 0) {
                         continue;
                     }
-                    $rankColumn = strtolower($parentTaxonRank) . '_id';
-                    if (!empty($higherTaxaInRow[$parentTaxonRank])) {
-                        $parentIdentifier = (string) $higherTaxaInRow[$parentTaxonRank]->organism_key;
+                    $rankColumn = $this->rankColumn($parentTaxonRank);
+                    $parentRank = strtolower($parentTaxonRank);
+                    if (isset($higherTaxaInRow[$parentRank])) {
+                        $parentIdentifier = $this->taxonSummaryValue($higherTaxaInRow[$parentRank], 'organism_key');
 
                         if (! isset($knownTaxa[$parentIdentifier])) {
                             throw new \RuntimeException('Failed to find unique parent for taxon identifier ' . $parentIdentifier);
@@ -199,10 +209,18 @@ class TaxaImportService implements EntityImportServiceInterface
                 if (! $dryRun) {
                     // Need to set the current rank's FK as a self-reference,
                     // so this taxon is included in searches for itself.
-                    $taxonRankFkField = strtolower($taxonRank) . '_id';
-                    $db->table('taxa')->where('id', $taxaId)->update([$taxonRankFkField => $taxaId]);
-                }
-                if ($dryRun) {
+                    if (in_array(strtolower($taxonRank), array_map('strtolower', $taxonRanks), true)) {
+                        $db->table('taxa')->where('id', $taxaId)->update([$this->rankColumn($taxonRank) => $taxaId]);
+                    }
+
+                    foreach ((array) (config('Import')->taxonRankMappings ?? []) as $sourceRank => $reportingRank) {
+                        if (strcasecmp(trim((string) $sourceRank), $taxonRank) === 0
+                            && ! isset($higherTaxaInRow[strtolower((string) $reportingRank)])) {
+                            $db->table('taxa')->where('id', $taxaId)->update([
+                                $this->rankColumn((string) $reportingRank) => $taxaId,
+                            ]);
+                        }
+                    }
                 }
                 $counts['processed']++;
             } catch (\Throwable $exception) {
@@ -268,6 +286,75 @@ class TaxaImportService implements EntityImportServiceInterface
         }
 
         return $result;
+    }
+
+    /**
+     * Return configured reporting ranks as trimmed strings.
+     *
+     * @return array<int, string> Configured reporting rank names.
+     */
+    private function configuredTaxonRanks(): array
+    {
+        $configuredRanks = config('Import')->taxonRanks ?? [];
+        $configuredRanks = is_array($configuredRanks) ? $configuredRanks : explode(',', (string) $configuredRanks);
+
+        return array_values(array_filter(array_map(
+            static fn ($rank): string => is_scalar($rank) ? trim((string) $rank) : '',
+            $configuredRanks,
+        ), static fn (string $rank): bool => $rank !== ''));
+    }
+
+    /**
+     * Convert a reporting rank name into its FK column name.
+     *
+     * @param string $rank Rank name.
+     * @return string Normalised rank FK column name.
+     */
+    private function rankColumn(string $rank): string
+    {
+        $alias = preg_replace('/[^a-z0-9]+/i', '_', strtolower(trim($rank)));
+
+        return trim((string) $alias, '_') . '_id';
+    }
+
+    /**
+     * Reindex higher-taxon summaries by case-insensitive rank name.
+     *
+     * @param array<int, mixed> $summaries Higher-taxon summaries.
+     * @return array<string, mixed> Summaries keyed by lower-case rank.
+     */
+    private function higherTaxaByRank(array $summaries): array
+    {
+        $indexed = [];
+
+        foreach ($summaries as $summary) {
+            $rank = strtolower($this->taxonSummaryValue($summary, 'taxon_rank'));
+            if ($rank !== '') {
+                $indexed[$rank] = $summary;
+            }
+        }
+
+        return $indexed;
+    }
+
+    /**
+     * Read a field from an object or array taxon summary.
+     *
+     * @param mixed  $summary Taxon summary.
+     * @param string $field   Field name.
+     * @return string Trimmed field value.
+     */
+    private function taxonSummaryValue($summary, string $field): string
+    {
+        if (is_object($summary)) {
+            return trim((string) ($summary->{$field} ?? ''));
+        }
+
+        if (is_array($summary)) {
+            return trim((string) ($summary[$field] ?? ''));
+        }
+
+        return '';
     }
 
     /**

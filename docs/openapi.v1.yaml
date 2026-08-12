@@ -142,6 +142,7 @@ paths:
       summary: List taxa
       parameters:
         - $ref: '#/components/parameters/TaxaInclude'
+        - $ref: '#/components/parameters/ReportingOnly'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Sort'
@@ -199,6 +200,7 @@ paths:
       summary: List taxon names
       parameters:
         - $ref: '#/components/parameters/TaxonNamesInclude'
+        - $ref: '#/components/parameters/ReportingOnly'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Sort'
@@ -287,6 +289,7 @@ paths:
       summary: List taxon stats
       parameters:
         - $ref: '#/components/parameters/TaxonStatsInclude'
+        - $ref: '#/components/parameters/ReportingOnly'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Sort'
@@ -317,6 +320,7 @@ paths:
       summary: List taxon year stats
       parameters:
         - $ref: '#/components/parameters/TaxonYearStatsInclude'
+        - $ref: '#/components/parameters/ReportingOnly'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Sort'
@@ -423,6 +427,16 @@ components:
       description: Sort fields, e.g. sort=field,-other_field
       schema:
         type: string
+    ReportingOnly:
+      name: reporting_only
+      in: query
+      description: >-
+        Restrict taxa, names, and statistics to configured reporting ranks. Defaults to true;
+        use false (or 0) to expose all exact taxon ranks. This parameter does not alter
+        occurrence results, which always retain exact taxon identity.
+      schema:
+        type: boolean
+        default: true
     OccurrencesInclude:
       name: include
       in: query
@@ -439,7 +453,7 @@ components:
       in: query
       description: >-
         Comma-separated related fields to include. Supported values are
-        parent-taxa, recording-scheme, taxon-media, taxon-group, taxon-rank.
+        parent-taxon, parent-taxa, recording-scheme, taxon-media, taxon-group, taxon-rank.
       schema:
         type: string
         example: taxon-media,taxon-group
@@ -448,7 +462,7 @@ components:
       in: query
       description: >-
         Comma-separated related fields to include. Supported values are
-        parent-taxa, taxon, taxon-media, taxon-group, taxon-rank.
+        parent-taxon, parent-taxa, taxon, taxon-media, taxon-group, taxon-rank.
       schema:
         type: string
         example: taxon,taxon-media
@@ -465,7 +479,7 @@ components:
       description: >-
         Comma-separated related fields to include. Supported values are
         geographic-region, taxon, taxon-media, taxon-rank, taxon-group,
-        parent-taxa. taxon-media, taxon-rank, taxon-group and parent-taxa
+        parent-taxon, parent-taxa. taxon-media, taxon-rank, taxon-group and parent-taxa
         require taxon.
       schema:
         type: string
@@ -476,7 +490,7 @@ components:
       description: >-
         Comma-separated related fields to include. Supported values are
         geographic-region, taxon, taxon-media, taxon-rank, taxon-group,
-        parent-taxa. taxon-media, taxon-rank, taxon-group and parent-taxa
+        parent-taxon, parent-taxa. taxon-media, taxon-rank, taxon-group and parent-taxa
         require taxon.
       schema:
         type: string

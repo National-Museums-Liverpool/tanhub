@@ -95,9 +95,11 @@ class HomeCountsService
     private function countActiveTaxa(): int
     {
         return (int) db_connect()
-            ->table('taxa')
-            ->where('deleted_at', null)
-            ->where('blocked', 0)
+            ->table('taxa t')
+            ->join('taxon_ranks tr', 'tr.id = t.taxon_rank_id')
+            ->where('t.deleted_at', null)
+            ->where('t.blocked', 0)
+            ->where('tr.is_reporting', 1)
             ->countAllResults();
     }
 

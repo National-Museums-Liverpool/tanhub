@@ -85,8 +85,10 @@ Taxonomic hierarchy is stored using dynamic foreign-key columns on both the `tax
 the pattern `<rank>_id` (for example `kingdom_id`, `class_id`, `family_id`, `order_id`).
 
 Each of these columns is a foreign key to `taxa.id`, so rank relationships are modelled as
-self-references to the `taxa` table rather than separate`orders`, `superfamilies`, or `families`
-tables.
+self-references to the `taxa` table rather than separate `orders`, `superfamilies`, or `families`
+tables. The `taxa.parent_taxon_id` column stores the immediate accepted parent independently of
+the configured reporting projections. Occurrences retain their exact `taxon_id`; their copied
+rank columns are reporting projections and do not replace that exact identity.
 
 ## Unprocessed data table details
 
@@ -205,6 +207,9 @@ directly to a Darwin Core concept, this is indicated in the description.
 | updated_at                 | DATETIME     | YES  |     |                   | Update date                                                                         |
 | deleted_at                 | DATETIME     | YES  |     |                   | Deletion date                                                                       |
 
+`parent_taxon_id` is an FK to the immediate accepted parent. The dynamic `<rank>_id` columns are
+configured reporting projections and must not replace the exact hierarchy.
+
 Note that when tanhub is linked to UKSI as its source of taxonomic data, the following applies:
 - taxon_identifier will contain `ORGANISM_KEY`, the UKSI provided unique identifier of the organism
   and unique ID for the API.
@@ -300,6 +305,9 @@ defined in configuration.
 | created_at | DATETIME    | NO   |     | CURRENT_TIMESTAMP | Creation date                            |
 | updated_at | DATETIME    | YES  |     |                   | Update date                              |
 | deleted_at | DATETIME    | YES  |     |                   | Deletion date                            |
+
+`is_reporting` identifies ranks included in configured reporting projections. `sort_order` is used
+to select the nearest configured ancestor when an exact taxon has a non-reporting rank.
 
 ### taxon_names
 

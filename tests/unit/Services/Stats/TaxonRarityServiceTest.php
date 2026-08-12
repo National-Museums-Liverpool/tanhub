@@ -26,6 +26,7 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
         $this->db->query('CREATE TABLE ' . $prefix . 'taxa (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             taxon_identifier VARCHAR(100) NOT NULL,
+            species_id INTEGER NULL,
             rarity_group_name VARCHAR(100) NULL,
             rarity_category INTEGER NULL,
             blocked INTEGER NOT NULL DEFAULT 0,
@@ -35,6 +36,7 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
         $this->db->query('CREATE TABLE ' . $prefix . 'occurrences (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             taxon_id INTEGER NOT NULL,
+            species_id INTEGER NULL,
             grid_ref_2km VARCHAR(5) NULL,
             blocked INTEGER NOT NULL DEFAULT 0,
             deleted_at DATETIME NULL
@@ -202,6 +204,7 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
             $payload[] = [
                 'id' => $id,
                 'taxon_identifier' => $identifier,
+                'species_id' => $id,
                 'rarity_group_name' => $groupName,
                 'rarity_category' => $category,
                 'blocked' => 0,

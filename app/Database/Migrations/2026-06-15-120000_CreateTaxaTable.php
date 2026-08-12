@@ -51,6 +51,12 @@ class CreateTaxaTable extends Migration
                 'constraint' => 20,
                 'unsigned'   => true,
             ],
+            'parent_taxon_id' => [
+                'type'       => 'BIGINT',
+                'constraint' => 20,
+                'unsigned'   => true,
+                'null'       => true,
+            ],
         ]);
 
         // Dynamically add fields for each taxon rank based on the
@@ -128,12 +134,14 @@ class CreateTaxaTable extends Migration
         $this->forge->addUniqueKey('taxon_identifier');
         $this->forge->addKey('scientific_name_identifier');
         $this->forge->addKey('taxon_rank_id');
+        $this->forge->addKey('parent_taxon_id');
         $this->forge->addKey('taxon_group_id');
         $this->forge->addKey('recording_scheme_id');
         foreach ($rankColumns as $rankColumn) {
             $this->forge->addKey($rankColumn);
         }
         $this->forge->addForeignKey('taxon_rank_id', 'taxon_ranks', 'id', 'CASCADE', 'RESTRICT');
+        $this->forge->addForeignKey('parent_taxon_id', 'taxa', 'id', 'CASCADE', 'SET NULL');
         $this->forge->addForeignKey('taxon_group_id', 'taxon_groups', 'id', 'CASCADE', 'RESTRICT');
         $this->forge->addForeignKey('recording_scheme_id', 'recording_schemes', 'id', 'CASCADE', 'SET NULL');
         // Define self-referential rank FKs as part of CREATE TABLE (works with SQLite).

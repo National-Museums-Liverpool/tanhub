@@ -527,9 +527,9 @@ abstract class ApiResourceController extends ApiController
 
         foreach ($fields as $alias => $column) {
             if ($alias === $column) {
-                $selects[] = $column;
+                $selects[] = "`{$column}`";
             } else {
-                $selects[] = "{$column} AS {$alias}";
+                $selects[] = "`{$column}` AS `{$alias}`";
             }
         }
 

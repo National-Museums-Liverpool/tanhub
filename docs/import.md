@@ -113,7 +113,8 @@ Taxonomy import behaviour:
 - `taxa` imports the complete accepted hierarchy rather than filtering out non-reporting ranks.
 - `taxa.parent_taxon_id` stores the immediate accepted parent.
 - Configured `<rank>_id` columns on `taxa` and `occurrences` store reporting projections. They are
-  derived from the nearest configured ancestor by rank sort order, with explicit exceptions from
+  derived from the nearest configured ancestor using hierarchy logic built into the taxon reports
+  used for taxonomy population from Indicia, with explicit exceptions from
   `import.taxonRankMappings` taking precedence.
 - Occurrence `taxon_id` remains the exact accepted taxon and is authoritative for exact lookup.
 

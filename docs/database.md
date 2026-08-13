@@ -41,8 +41,14 @@ erDiagram
 
   taxa {
     BIGINT id PK
+    BIGINT taxon_rank_id FK
+    BIGINT parent_taxon_id FK
     BIGINT taxon_group_id FK
     BIGINT recording_scheme_id FK
+  }
+
+  taxon_ranks {
+    BIGINT id PK
   }
 
   taxon_media {
@@ -68,12 +74,12 @@ erDiagram
   taxa ||--|{ taxon_names: has
   taxa ||--o{ taxon_media: has
   taxon_media ||--o{ taxon_media_variants: has
-  taxa }o--o| taxa: "rank parent(s)"
+  taxa }o--o| taxa: "immediate parent"
+  taxa }o--|| taxon_ranks: "has rank"
   taxa }o--|| taxon_groups: "belongs to"
   occurrences }o--|| data_sources: "was provided by"
   occurrences }o--o{ geographic_regions: "Is within or intersects"
   occurrences }o--|| taxa: "is a record of"
-  occurrences }o--o| taxa: "rank parent(s)"
   occurrences }o--|| taxon_names: "was recorded as"
 
 ```
@@ -90,9 +96,9 @@ tables. The `taxa.parent_taxon_id` column stores the immediate accepted parent i
 the configured reporting projections. Occurrences retain their exact `taxon_id`; their copied
 rank columns are reporting projections and do not replace that exact identity.
 
-## Unprocessed data table details
+## Imported data table details
 
-The following data tables contain the unprocessed raw data imported into tanhub.
+The following data tables contain normalized data imported into tanhub.
 
 ### data_sources
 
@@ -114,10 +120,10 @@ Populated using the `.env` file's `import.geographicRegions` and
 | Column                      | Type         | Null | Key | Default           | Description                                                               |
 | --------------------------- | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------------------- |
 | id                          | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                               |
-| higher_geography_identifier | INT          | NO   | UQ  |                   | Identifier for the geographic region, e.g. a Watsonian Vice-County number |
+| higher_geography_identifier | VARCHAR(100) | NO   | UQ  |                   | Identifier for the geographic region, e.g. a Watsonian Vice-County number |
 | higher_geography            | VARCHAR(100) | NO   |     |                   | Geographic name of the region                                             |
 | location_type               | VARCHAR(100) | NO   |     |                   | Name of the type of location                                              |
-| footprint_geometry          | GEOMETRY     | NO   |     |                   | Footprint or boundary of the geometry in WGS8 (EPSG:4326)                 |
+| footprint_geometry          | GEOMETRY     | YES  |     |                   | Optional footprint or boundary in WGS84 (EPSG:4326)                       |
 | data_source_id              | BIGINT       | NO   | FK  |                   | ID of the source of the data (iRecord, NBN Atlas etc)                     |
 | created_at                  | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                             |
 | updated_at                  | DATETIME     | YES  |     |                   | Update date                                                               |
@@ -141,30 +147,32 @@ Occurrence data stored in the system, imported from a source such as iRecord or 
 reference to the original record is held in the unique_key field, constructed from the data_source
 abbreviation, then a colon, then the unique ID of the record as loaded from the remote system.
 
-| Column                             | Type         | Null | Key | Default           | Description                                                                           |
-| ---------------------------------- | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------------------------------- |
-| id                                 | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                                           |
-| unique_key                         | VARCHAR(100) | NO   | UQ  |                   | Unique key for the API                                                                |
-| taxon_id                           | BIGINT       | NO   | FK  |                   | ID of the taxon this is a record of                                                   |
-| <rank>_id                          | BIGINT       | YES  | FK  |                   | Dynamic taxon-rank FK (for each configured rank), references `taxa.id`                |
-| taxon_name_id                      | BIGINT       | NO   | FK  |                   | ID of the name given for this occurrence which may be accepted, synonym or vernacular |
-| from_date                          | DATE         | YES  |     |                   | Start of the date range that covers the record                                        |
-| to_date                            | DATE         | YES  |     |                   | End of the date range that covers the record                                          |
-| grid_ref                           | VARCHAR(20)  | NO   |     |                   | OSGB grid reference                                                                   |
-| grid_ref_2km                       | CHAR(5)      | YES  |     |                   | 2km (DINTY) grid ref that best fits the record, null for less precise records         |
-| locality                           | VARCHAR(255) | YES  |     |                   | Site name associated with the record                                                  |
-| recorded_by                        | VARCHAR(255) | NO   |     |                   | Name of the person or agent that recorded the occurrence                              |
-| identified_by                      | VARCHAR(255) | YES  |     |                   | Name of person or agent that made the identification                                  |
-| identification_verification_status | VARCHAR(2)   | NO   |     |                   | Verification status code, compatible with iRecord codes                               |
-| sex                                | VARCHAR(20)  | YES  |     |                   | Sex of the organism if known                                                          |
-| life_stage                         | VARCHAR(20)  | YES  |     |                   | Life stage of the organism if known                                                   |
-| organism_quantity                  | VARCHAR(20)  | YES  |     |                   | A number or enumeration value for the quantity of organisms                           |
-| data_source_id                     | BIGINT       | NO   | FK  |                   | ID of the source of the data (iRecord, NBN Atlas etc)                                 |
-| blocked                            | TINYINT(1)   | NO   |     |                   | 1 = occurrence is blocked from reports, 0 otherwise                                   |
-| blocked_reason                     | TEXT         | YES  |     |                   | Reason given for blocking the record                                                  |
-| created_at                         | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                         |
-| updated_at                         | DATETIME     | YES  |     |                   | Update date                                                                           |
-| deleted_at                         | DATETIME     | YES  |     |                   | Deletion date                                                                         |
+| Column                             | Type          | Null | Key | Default           | Description                                                                                            |
+| ---------------------------------- | ------------- | ---- | --- | ----------------- | ------------------------------------------------------------------------------------------------------ |
+| id                                 | BIGINT        | NO   | PK  | AUTO_INCREMENT    | Primary key                                                                                            |
+| unique_key                         | VARCHAR(100)  | NO   | UQ  |                   | Unique key for the API                                                                                 |
+| taxon_id                           | BIGINT        | NO   | FK  |                   | ID of the exact taxon this is a record of                                                              |
+| <rank>_id                          | BIGINT        | YES  | FK  |                   | Dynamic taxon-rank FK (for each configured rank), references `taxa.id` and points to a reporting taxon |
+| taxon_name_id                      | BIGINT        | NO   | FK  |                   | ID of the name given for this occurrence which may be accepted, synonym or vernacular                  |
+| from_date                          | DATE          | YES  |     |                   | Start of the date range that covers the record                                                         |
+| to_date                            | DATE          | YES  |     |                   | End of the date range that covers the record                                                           |
+| grid_ref                           | VARCHAR(20)   | NO   |     |                   | OSGB grid reference                                                                                    |
+| grid_ref_2km                       | CHAR(5)       | YES  |     |                   | 2km (DINTY) grid ref that best fits the record, null for less precise records                          |
+| locality                           | VARCHAR(255)  | YES  |     |                   | Site name associated with the record                                                                   |
+| recorded_by                        | VARCHAR(255)  | NO   |     |                   | Name of the person or agent that recorded the occurrence                                               |
+| identified_by                      | VARCHAR(255)  | YES  |     |                   | Name of person or agent that made the identification                                                   |
+| identification_verification_status | VARCHAR(2)    | NO   |     |                   | Verification status code, compatible with iRecord codes                                                |
+| sex                                | VARCHAR(20)   | YES  |     |                   | Sex of the organism if known                                                                           |
+| life_stage                         | VARCHAR(20)   | YES  |     |                   | Life stage of the organism if known                                                                    |
+| organism_quantity                  | VARCHAR(20)   | YES  |     |                   | A number or enumeration value for the quantity of organisms                                            |
+| data_source_id                     | BIGINT        | NO   | FK  |                   | ID of the source of the data (iRecord, NBN Atlas etc)                                                  |
+| latitude                           | DECIMAL(10,7) | YES  |     |                   | Latitude of the occurrence, when supplied                                                              |
+| longitude                          | DECIMAL(10,7) | YES  |     |                   | Longitude of the occurrence, when supplied                                                             |
+| blocked                            | TINYINT(1)    | NO   |     |                   | 1 = occurrence is blocked from reports, 0 otherwise                                                    |
+| blocked_reason                     | TEXT          | YES  |     |                   | Reason given for blocking the record                                                                   |
+| created_at                         | DATETIME      | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                                          |
+| updated_at                         | DATETIME      | YES  |     |                   | Update date                                                                                            |
+| deleted_at                         | DATETIME      | YES  |     |                   | Deletion date                                                                                          |
 
 ### recording_schemes
 
@@ -175,6 +183,7 @@ Recording schemes associated with taxa loaded in the system.
 | id           | BIGINT       | NO   | PK  | AUTO_INCREMENT    | Primary key                                                                                                   |
 | external_key | CHAR(16)     | NO   | UQ  |                   | Key for the scheme as assigned from the external database the data were imported from, unique key for the API |
 | title        | VARCHAR(100) | NO   |     |                   | Title of the scheme                                                                                           |
+| description  | TEXT         | YES  |     |                   | Optional description of the scheme                                                                            |
 | created_at   | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                                                 |
 | updated_at   | DATETIME     | YES  |     |                   | Update date                                                                                                   |
 | deleted_at   | DATETIME     | YES  |     |                   | Deletion date                                                                                                 |
@@ -193,6 +202,8 @@ directly to a Darwin Core concept, this is indicated in the description.
 | scientific_name            | VARCHAR(200) | NO   |     |                   | Accepted scientific taxon name, DwC scientificName                                  |
 | scientific_name_authorship | VARCHAR(100) | YES  |     |                   | Taxon name author, DwC scientificNameAuthorship                                     |
 | vernacular_name            | VARCHAR(200) | NO   |     |                   | Common taxon name, DwC vernacularName                                               |
+| taxon_rank_id              | BIGINT       | NO   | FK  |                   | ID of the taxon rank                                                                |
+| parent_taxon_id            | BIGINT       | YES  | FK  |                   | ID of the immediate accepted parent taxon                                           |
 | <rank>_id                  | BIGINT       | YES  | FK  |                   | Dynamic taxon-rank FK (for each configured rank), references `taxa.id`              |
 | taxon_group_id             | BIGINT       | NO   | FK  |                   | ID of the taxon reporting group                                                     |
 | id_difficulty              | TINYINT      | YES  |     |                   | Record Cleaner ID difficulty (1-5)                                                  |
@@ -254,17 +265,17 @@ Indexes and constraints:
 
 Derived image sizes for each row in `taxon_media` (for example `thumbnail` and `large`).
 
-| Column         | Type         | Null | Key    | Default        | Description                                      |
-| -------------- | ------------ | ---- | ------ | -------------- | ------------------------------------------------ |
-| id             | BIGINT       | NO   | PK     | AUTO_INCREMENT | Primary key                                      |
-| taxon_media_id | BIGINT       | NO   | FK, UQ*|                | FK to `taxon_media.id`                           |
-| variant_key    | VARCHAR(50)  | NO   | UQ*    |                | Variant name, e.g. `thumbnail`, `large`         |
-| storage_path   | VARCHAR(255) | NO   |        |                | Relative path to derived file                    |
-| mime_type      | VARCHAR(100) | NO   |        |                | MIME type of the derived file                    |
-| bytes          | INT          | NO   |        |                | File size in bytes                               |
-| width          | INT          | YES  |        |                | Pixel width of derived file                      |
-| height         | INT          | YES  |        |                | Pixel height of derived file                     |
-| created_at     | DATETIME     | NO   |        | CURRENT_TIMESTAMP | Creation date                                 |
+| Column         | Type         | Null | Key     | Default           | Description                             |
+| -------------- | ------------ | ---- | ------- | ----------------- | --------------------------------------- |
+| id             | BIGINT       | NO   | PK      | AUTO_INCREMENT    | Primary key                             |
+| taxon_media_id | BIGINT       | NO   | FK, UQ* |                   | FK to `taxon_media.id`                  |
+| variant_key    | VARCHAR(50)  | NO   | UQ*     |                   | Variant name, e.g. `thumbnail`, `large` |
+| storage_path   | VARCHAR(255) | NO   |         |                   | Relative path to derived file           |
+| mime_type      | VARCHAR(100) | NO   |         |                   | MIME type of the derived file           |
+| bytes          | INT          | NO   |         |                   | File size in bytes                      |
+| width          | INT          | YES  |         |                   | Pixel width of derived file             |
+| height         | INT          | YES  |         |                   | Pixel height of derived file            |
+| created_at     | DATETIME     | NO   |         | CURRENT_TIMESTAMP | Creation date                           |
 
 UQ* indicates a composite unique index across `taxon_media_id` and `variant_key`.
 
@@ -286,7 +297,7 @@ configuration.
 | friendly               | VARCHAR(200) | YES  |     |                   | Friendly version of the taxon group name                                                                     |
 | external_key           | VARCHAR(100) | YES  | UQ  |                   | Key for the group as assigned from the external database the data were imported from, unique key for the API |
 | indicia_taxon_group_id | BIGINT       | NO   | UQ  |                   | ID of the group from the Indicia database, used to make import from Indicia more efficient and robust        |
-| implied                | TINYINT(1)   | NO   |     | 0                 | Boolean flag supplied by import source to indicate the group is implied                                       |
+| implied                | TINYINT(1)   | NO   |     | 0                 | Boolean flag supplied by import source to indicate the group is implied                                      |
 | created_at             | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                                                |
 | updated_at             | DATETIME     | YES  |     |                   | Update date                                                                                                  |
 | deleted_at             | DATETIME     | YES  |     |                   | Deletion date                                                                                                |
@@ -296,15 +307,16 @@ configuration.
 Taxonomic ranks such as Species, Family, Order. Ranks covered by this installation of tanhub are
 defined in configuration.
 
-| Column     | Type        | Null | Key | Default           | Description                              |
-| ---------- | ----------- | ---- | --- | ----------------- | ---------------------------------------- |
-| id         | BIGINT      | NO   | PK  | AUTO_INCREMENT    | Primary key                              |
-| rank       | VARCHAR(50) | NO   | UQ  |                   | Taxon rank name                          |
-| abbr       | VARCHAR(10) | NO   | UQ  |                   | Abbreviation, e.g. sp, fam, ord.         |
-| sort_order | INT         | NO   |     |                   | Sort ranks by taxonomic hierarchy level. |
-| created_at | DATETIME    | NO   |     | CURRENT_TIMESTAMP | Creation date                            |
-| updated_at | DATETIME    | YES  |     |                   | Update date                              |
-| deleted_at | DATETIME    | YES  |     |                   | Deletion date                            |
+| Column       | Type        | Null | Key | Default           | Description                             |
+| ------------ | ----------- | ---- | --- | ----------------- | --------------------------------------- |
+| id           | BIGINT      | NO   | PK  | AUTO_INCREMENT    | Primary key                             |
+| rank         | VARCHAR(50) | NO   | UQ  |                   | Taxon rank name                         |
+| abbr         | VARCHAR(10) | NO   | UQ  |                   | Abbreviation, e.g. sp, fam, ord         |
+| sort_order   | INT         | NO   |     |                   | Sort ranks by taxonomic hierarchy level |
+| is_reporting | TINYINT     | NO   |     | 0                 | Is the rank a reporting rank            |
+| created_at   | DATETIME    | NO   |     | CURRENT_TIMESTAMP | Creation date                           |
+| updated_at   | DATETIME    | YES  |     |                   | Update date                             |
+| deleted_at   | DATETIME    | YES  |     |                   | Deletion date                           |
 
 `is_reporting` identifies ranks included in configured reporting projections. `sort_order` is used
 to select the nearest configured ancestor when an exact taxon has a non-reporting rank.
@@ -314,29 +326,29 @@ to select the nearest configured ancestor when an exact taxon has a non-reportin
 Provides a full list of species and other taxon names that are searchable when finding a concept
 for reporting. This includes accepted scientific names, common (vernacular) names and synonyms.
 Where a field maps directly to a Darwin Core concept, this is indicated in the description. Note
-that scientific_name_identifier is not necessarily unique in this instance as one name can be
+that given_name_identifier is not necessarily unique in this instance as one name can be
 attached to more than one taxonomic concept, in this data schema we duplicate the name records for
 simplicity as this avoids the need for an additional join table.
 
-| Column                     | Type         | Null | Key     | Default           | Description                                                                      |
-| -------------------------- | ------------ | ---- | ------- | ----------------- | -------------------------------------------------------------------------------- |
-| id                         | BIGINT       | NO   | PK      | AUTO_INCREMENT    | Primary key                                                                      |
-| uuid                       | CHAR(36)     | NO   | UQ      |                   | Unique key for the API                                                           |
-| taxon_id                   | BIGINT       | NO   | FK, UQ* |                   | Foreign key to the taxon this name is associated with                            |
-| name                       | VARCHAR(200) | NO   |         |                   | Taxon name, DwC scientificName                                                   |
-| scientific_name_identifier | VARCHAR(100) | NO   | UQ*     |                   | Unique identifier of the nomenclatural details of the name, DwC scientificNameID |
-| accepted                   | TINYINT(1)   | NO   |         |                   | Is name accepted                                                                 |
-| scientific                 | TINYINT(1)   | NO   |         |                   | 1=scientific, 0=vernacular                                                       |
-| created_at                 | DATETIME     | NO   |         | CURRENT_TIMESTAMP | Creation date                                                                    |
-| updated_at                 | DATETIME     | YES  |         |                   | Update date                                                                      |
-| deleted_at                 | DATETIME     | YES  |         |                   | Deletion date                                                                    |
+| Column                | Type         | Null | Key     | Default           | Description                                                                      |
+| --------------------- | ------------ | ---- | ------- | ----------------- | -------------------------------------------------------------------------------- |
+| id                    | BIGINT       | NO   | PK      | AUTO_INCREMENT    | Primary key                                                                      |
+| uuid                  | CHAR(36)     | NO   | UQ      |                   | Unique key for the API                                                           |
+| taxon_id              | BIGINT       | NO   | FK, UQ* |                   | Foreign key to the taxon this name is associated with                            |
+| name                  | VARCHAR(200) | NO   |         |                   | Taxon name, DwC scientificName                                                   |
+| given_name_identifier | VARCHAR(100) | NO   | UQ*     |                   | Unique identifier of the nomenclatural details of the name, DwC scientificNameID |
+| accepted              | TINYINT(1)   | NO   |         |                   | Is name accepted                                                                 |
+| scientific            | TINYINT(1)   | NO   |         |                   | 1=scientific, 0=vernacular                                                       |
+| created_at            | DATETIME     | NO   |         | CURRENT_TIMESTAMP | Creation date                                                                    |
+| updated_at            | DATETIME     | YES  |         |                   | Update date                                                                      |
+| deleted_at            | DATETIME     | YES  |         |                   | Deletion date                                                                    |
 
 
 * `UQ*` indicates a compound unique index across
-  `taxon_id, scientific_name_identifier`.
+  `taxon_id, given_name_identifier`.
 
 Note that when tanhub is linked to UKSI as its source of taxonomic data, the following applies:
-- scientific_name_identifier will contain the unique identifier of this taxon name, the
+- given_name_identifier will contain the unique identifier of this taxon name, the
   `TAXON_VERSION_KEY`.
 
 ## Processed data table details
@@ -354,18 +366,20 @@ squares should filter on partial=false. A query on a given geographic_region_id 
 geographic_region_id alone (this will include contained grid squares, plus those along the boundary
 where partial is true).
 
-| Column               | Type        | Null | Key     | Default        | Description                                                                                            |
-| -------------------- | ----------- | ---- | ------- | -------------- | ------------------------------------------------------------------------------------------------------ |
-| id                   | BIGINT      | NO   | PK      | AUTO_INCREMENT | Primary key                                                                                            |
-| uuid                 | CHAR(36)    | NO   | UQ      |                | Unique key for the API                                                                                 |
-| square               | VARCHAR(12) | NO   | UQ*     |                | Grid square in OSGB notation                                                                           |
-| geographic_region_id | BIGINT      | NO   | FK, UQ* |                | Geographic region this square belongs to                                                               |
-| easting              | INT         | NO   |         |                | Grid square centroid easting in metres (OSGB:1936)                                                     |
-| northing             | INT         | NO   |         |                | Grid square centroid northing in metres (OSGB:1936)                                                    |
-| partial              | BOOL        | NO   |         | false          | Flag set to true if the square is only partially within the region, so this is not the entire square   |
-| occurrences_count    | INT         | NO   |         |                | Number of occurrences which intersect the grid square                                                  |
-| species_count        | INT         | NO   |         |                | Number of species which intersect the grid square                                                      |
-| rarity_score         | DECIMAL(12,4) | YES |         |                | Weighted rarity score from species with `<= 100` active gridded records; null until derived stats run |
+| Column               | Type          | Null | Key     | Default        | Description                                                                                           |
+| -------------------- | ------------- | ---- | ------- | -------------- | ----------------------------------------------------------------------------------------------------- |
+| id                   | BIGINT        | NO   | PK      | AUTO_INCREMENT | Primary key                                                                                           |
+| uuid                 | CHAR(36)      | NO   | UQ      |                | Unique key for the API                                                                                |
+| square               | VARCHAR(12)   | NO   | UQ*     |                | Grid square in OSGB notation                                                                          |
+| geographic_region_id | BIGINT        | YES  | FK, UQ* |                | Geographic region this square belongs to, or null for the all-regions row                             |
+| easting              | INT           | NO   |         |                | Grid square centroid easting in metres (OSGB:1936)                                                    |
+| northing             | INT           | NO   |         |                | Grid square centroid northing in metres (OSGB:1936)                                                   |
+| lon                  | DECIMAL(10,7) | NO   |         |                | Grid square centroid longitude                                                                        |
+| lat                  | DECIMAL(10,7) | NO   |         |                | Grid square centroid latitude                                                                         |
+| partial              | BOOL          | NO   |         | false          | Flag set to true if the square is only partially within the region, so this is not the entire square  |
+| occurrences_count    | INT           | NO   |         |                | Number of occurrences which intersect the grid square                                                 |
+| species_count        | INT           | NO   |         |                | Number of species which intersect the grid square                                                     |
+| rarity_score         | DECIMAL(12,4) | YES  |         |                | Weighted rarity score from species with `<= 100` active gridded records; null until derived stats run |
 
 UQ* indicates a compound unique index on `square` and `geographic_region_id` so
 they cannot be duplicated.
@@ -382,8 +396,8 @@ access stats across the dataset or region filtered.
 | uuid                       | CHAR(36)     | NO   | UQ      |                | Unique key for the API                                                                 |
 | taxon_id                   | BIGINT       | NO   | FK, UQ* |                | Foreign key to the taxon                                                               |
 | geographic_region_id       | BIGINT       | YES  | FK, UQ* |                | Region, or null if applies to all regions                                              |
-| occurrences_count          | INT          | NO   |         |                | Number of occurrences for the taxon/year combination                                   |
-| grid_square_count          | INT          | NO   |         |                | Number of grid squares for the taxon/year combination                                  |
+| occurrences_count          | INT          | NO   |         |                | Number of occurrences for the taxon and region scope                                   |
+| grid_square_count          | INT          | NO   |         |                | Number of grid squares for the taxon and region scope                                  |
 | first_record_date          | DATE         | NO   |         |                | Date of the first record of this taxon (in the region or across all)                   |
 | last_record_date           | DATE         | NO   |         |                | Date of the last record of this taxon (in the region or across all)                    |
 | first_recorder             | VARCHAR(255) | NO   |         |                | Recorder name of the first record of this taxon (in the region or across all)          |
@@ -398,15 +412,15 @@ access stats across the dataset or region filtered.
 Containing data for each taxon covering the last 10 years, both across all data and broken down by
 region.
 
-| Column               | Type     | Null | Key     | Default        | Description                                           |
-| -------------------- | -------- | ---- | ------- | -------------- | ----------------------------------------------------- |
-| id                   | BIGINT   | NO   | PK      | AUTO_INCREMENT | Primary key                                           |
-| uuid                 | CHAR(36) | NO   | UQ      |                | Unique key for the API                                |
-| taxon_id             | BIGINT   | NO   | FK, UQ* |                | Foreign key to the taxon                              |
-| geographic_region_id | BIGINT   | YES  | FK, UQ* |                | Region, or null if applies to all regions             |
-| year                 | INT      | NO   | UQ*     |                | Year the statistics apply to                          |
-| occurrences_count    | INT      | NO   |         |                | Number of occurrences for the taxon/year combination  |
-| grid_square_count    | INT      | NO   |         |                | Number of grid squares for the taxon/year combination |
+| Column               | Type     | Null | Key     | Default        | Description                                                 |
+| -------------------- | -------- | ---- | ------- | -------------- | ----------------------------------------------------------- |
+| id                   | BIGINT   | NO   | PK      | AUTO_INCREMENT | Primary key                                                 |
+| uuid                 | CHAR(36) | NO   | UQ      |                | Unique key for the API                                      |
+| taxon_id             | BIGINT   | NO   | FK, UQ* |                | Foreign key to the taxon                                    |
+| geographic_region_id | BIGINT   | YES  | FK, UQ* |                | Region, or null if applies to all regions                   |
+| year                 | INT      | NO   | UQ*     |                | Year the statistics apply to                                |
+| occurrences_count    | INT      | NO   |         |                | Number of occurrences for the taxon, year and region scope  |
+| grid_square_count    | INT      | NO   |         |                | Number of grid squares for the taxon, year and region scope |
 
 UQ* indicates there is a compound unique key on `taxon_id`, `geographic_region_id` and `year`.
 

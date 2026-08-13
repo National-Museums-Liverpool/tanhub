@@ -46,12 +46,16 @@ These values control the data imported by `Config\Import`. Changing taxonomic
 rank, group, or region settings after an initial import requires careful data
 refresh planning.
 
-- `import.taxonRanks`: comma-separated reporting ranks. The default is `Order`,
-  `Superfamily`, `Family`, `Genus`, and `Species`. It must include `Species`. Rank order controls
-  automatic mapping of non-reporting ancestors to the nearest configured reporting ancestor.
+- `import.taxonRanks`: comma-separated reporting ranks. The default is `Order`, `Superfamily`,
+  `Family`, `Genus`, and `Species`. It must include `Species`. The reports used for import of
+  taxonomy from Indicia controls automatic mapping of non-reporting ancestors to the nearest
+  configured reporting ancestor.
 - `import.taxonRankMappings`: optional JSON object of explicit source-rank to reporting-rank
-  exceptions, for example `{"Species aggregate":"Species"}`. Mapping targets must be configured
-  reporting ranks; automatic nearest-ancestor mapping is used for ranks not listed here.
+  exceptions, for example `{"Species aggregate":"Species"}` which causes species aggregates to be
+  available for reporting in the same way that species are. Mapping targets must be configured
+  reporting ranks; automatic nearest-ancestor mapping is used for ranks not listed here when
+  calculating the [reporting taxon](glossary#reporting-taxon), but a link to the exact taxon as
+  recorded is also preserved.
 - `import.taxonGroups`: CSV list of taxon groups to import. Use CSV quoting for
   a group name that contains a comma.
 - `import.geographicRegions`: CSV list of Indicia location names to import.

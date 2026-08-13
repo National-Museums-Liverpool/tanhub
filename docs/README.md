@@ -39,6 +39,7 @@ Use this page to find the documentation relevant to your task.
 - [Configuration reference](configuration-reference.md)
 - [Database schema](database.md)
 - [Frontend styling](frontend-styling.md)
+- [Glossary](glossary.md)
 - [Import](import.md)
 - [Installation](installation.md)
 - [OpenAPI v1 specification](openapi.v1.yaml)

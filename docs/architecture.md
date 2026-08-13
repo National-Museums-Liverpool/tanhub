@@ -60,10 +60,12 @@ for the stored data model.
 ### Taxonomy identity and reporting projections
 
 Taxonomy imports retain the complete accepted hierarchy. Each taxon stores its immediate accepted
-parent in `parent_taxon_id`, while configured `<rank>_id` columns provide denormalised reporting
-projections. `taxon_ranks.is_reporting` identifies the ranks exposed by default in reporting
-endpoints. Occurrences retain the exact accepted `taxon_id` and copy the configured projections so
-exact lookup and reporting aggregation can coexist without losing identity.
+parent in `parent_taxon_id`, a link to the exact taxon as recorded in `taxon_id` while configured
+`<rank>_id` columns provide denormalised projections to
+[reporting taxa](glossary.md#reporting-taxon) for simplified reporting at preferred taxonomic
+levels. `taxon_ranks.is_reporting` identifies the ranks exposed by default in reporting endpoints.
+Occurrences retain the exact accepted `taxon_id` and copy the configured projections so exact
+lookup and reporting aggregation can coexist without losing identity.
 
 ## External systems
 

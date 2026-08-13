@@ -94,6 +94,16 @@ final class OccurrenceImportServiceTest extends CIUnitTestCase
             'deleted_at' => null,
         ]);
 
+        $rankValues = array_fill_keys($rankColumns, null);
+        $rankValues['family_id'] = 12;
+        $rankValues['species_id'] = 14;
+        $this->db->table('taxa')->insert(array_merge([
+            'id' => 4,
+            'scientific_name_identifier' => 'TVK-SUBSPECIES',
+            'taxon_identifier' => 'SUBSPECIES-KEY',
+            'deleted_at' => null,
+        ], $rankValues));
+
         $this->db->table('taxon_names')->insert([
             'id' => 1,
             'given_name_identifier' => 'GIVEN-1',
@@ -251,6 +261,40 @@ final class OccurrenceImportServiceTest extends CIUnitTestCase
         $this->assertNotNull($row);
         $this->assertSame('SU1234', (string) $row['grid_ref']);
         $this->assertSame('SU13L', (string) $row['grid_ref_2km']);
+    }
+
+    /**
+     * Ensure imported occurrences retain resolved reporting-rank projections.
+     */
+    public function testImportCopiesReportingRankProjectionsFromResolvedTaxon(): void
+    {
+        $this->db->table('taxon_names')->insert([
+            'id' => 3,
+            'given_name_identifier' => 'GIVEN-SUBSPECIES',
+            'deleted_at' => null,
+        ]);
+
+        $service = new OccurrenceImportService(new OsgbGridReferenceBuilder());
+        $counts = $service->import([
+            [
+                'remote_id' => 'PROJECTION-1',
+                'scientific_name_identifier' => 'TVK-SUBSPECIES',
+                'given_name_identifier' => 'GIVEN-SUBSPECIES',
+                'grid_ref' => 'SU1234',
+                'grid_ref_system' => 'OSGB',
+                'grid_ref_2km' => 'SU13L',
+                'latitude' => 53.4808,
+                'longitude' => -2.2426,
+            ],
+        ], 2, 'NBN');
+
+        $this->assertSame(1, $counts['inserted']);
+        $row = $this->db->table('occurrences')->getWhere(['unique_key' => 'NBN:PROJECTION-1'])->getRowArray();
+
+        $this->assertNotNull($row);
+        $this->assertSame(4, (int) $row['taxon_id']);
+        $this->assertSame(12, (int) $row['family_id']);
+        $this->assertSame(14, (int) $row['species_id']);
     }
 
     public function testImportNbnIrecordOriginCreatesIrecCanonicalKeyWithNbnOwnership(): void

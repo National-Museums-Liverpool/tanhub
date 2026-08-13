@@ -81,7 +81,7 @@ class TaxonYearStatsService
                 SELECT
                     o.id AS occurrence_id,
                     o.taxon_id,
-                    t.is_reporting,
+                    tr.is_reporting,
                     COALESCE(o.from_date, o.to_date) AS record_date,
                     NULLIF(UPPER(TRIM(o.grid_ref_2km)), "") AS grid_ref_2km' . $projectionColumns . '
                 FROM ' . $prefix . 'occurrences o
@@ -89,6 +89,8 @@ class TaxonYearStatsService
                     ON t.id = o.taxon_id
                     AND t.deleted_at IS NULL
                     AND t.blocked = 0
+                INNER JOIN ' . $prefix . 'taxon_ranks tr
+                    ON tr.id = t.taxon_rank_id
                 WHERE o.deleted_at IS NULL
                     AND o.blocked = 0
                     AND COALESCE(o.from_date, o.to_date) >= ?

@@ -23,11 +23,17 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'geographic_regions_occurrences');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'occurrences');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxa');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_ranks');
+
+        $this->db->query('CREATE TABLE ' . $prefix . 'taxon_ranks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            is_reporting INTEGER NOT NULL DEFAULT 0
+        )');
 
         $this->db->query('CREATE TABLE ' . $prefix . 'taxa (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             taxon_identifier VARCHAR(100) NOT NULL,
-            is_reporting INTEGER NOT NULL DEFAULT 1,
+            taxon_rank_id INTEGER NOT NULL,
             order_id INTEGER NULL,
             superfamily_id INTEGER NULL,
             family_id INTEGER NULL,
@@ -68,9 +74,16 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         )');
 
         foreach ([
-            ['id' => 1, 'taxon_identifier' => 'TX-1', 'is_reporting' => 0, 'order_id' => 1, 'superfamily_id' => 1, 'family_id' => 1, 'genus_id' => 1, 'species_id' => 1, 'blocked' => 0, 'deleted_at' => null],
-            ['id' => 2, 'taxon_identifier' => 'TX-2', 'is_reporting' => 0, 'order_id' => 2, 'superfamily_id' => 2, 'family_id' => 2, 'genus_id' => 2, 'species_id' => 2, 'blocked' => 0, 'deleted_at' => null],
-            ['id' => 3, 'taxon_identifier' => 'TX-3', 'blocked' => 1, 'deleted_at' => null],
+            ['id' => 1, 'is_reporting' => 0],
+            ['id' => 2, 'is_reporting' => 1],
+        ] as $rank) {
+            $this->db->table('taxon_ranks')->insert($rank);
+        }
+
+        foreach ([
+            ['id' => 1, 'taxon_identifier' => 'TX-1', 'taxon_rank_id' => 1, 'order_id' => 1, 'superfamily_id' => 1, 'family_id' => 1, 'genus_id' => 1, 'species_id' => 1, 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 2, 'taxon_identifier' => 'TX-2', 'taxon_rank_id' => 1, 'order_id' => 2, 'superfamily_id' => 2, 'family_id' => 2, 'genus_id' => 2, 'species_id' => 2, 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 3, 'taxon_identifier' => 'TX-3', 'taxon_rank_id' => 1, 'blocked' => 1, 'deleted_at' => null],
         ] as $taxon) {
             $this->db->table('taxa')->insert($taxon);
         }
@@ -165,6 +178,51 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $this->assertSame('success', $counts['status']);
         $this->assertGreaterThan(0, (int) $counts['fetched']);
         $this->assertSame(0, $this->db->table('taxon_year_stats')->countAllResults());
+    }
+
+    /**
+     * Ensure yearly statistics include each configured reporting projection.
+     */
+    public function testRunRollsUpNonReportingTaxonToConfiguredProjections(): void
+    {
+        $currentYear = (int) date('Y');
+        $this->db->table('taxa')->insert([
+            'id' => 4,
+            'taxon_identifier' => 'SUBSPECIES',
+            'taxon_rank_id' => 1,
+            'order_id' => 10,
+            'superfamily_id' => 11,
+            'family_id' => 12,
+            'genus_id' => 13,
+            'species_id' => 14,
+            'blocked' => 0,
+            'deleted_at' => null,
+        ]);
+        $this->db->table('occurrences')->insert([
+            'id' => 20,
+            'taxon_id' => 4,
+            'order_id' => 10,
+            'superfamily_id' => 11,
+            'family_id' => 12,
+            'genus_id' => 13,
+            'species_id' => 14,
+            'from_date' => $currentYear . '-06-01',
+            'grid_ref_2km' => 'SU20A',
+            'blocked' => 0,
+            'deleted_at' => null,
+        ]);
+        $this->db->table('geographic_regions_occurrences')->insert([
+            'geographic_region_id' => 11,
+            'occurrence_id' => 20,
+        ]);
+
+        $counts = (new TaxonYearStatsService())->run(false);
+
+        $this->assertSame('success', $counts['status']);
+        foreach ([4, 12, 14] as $taxonId) {
+            $this->assertSame(1, (int) $this->findTaxonYearStatRow($taxonId, null, $currentYear)['occurrences_count']);
+            $this->assertSame(1, (int) $this->findTaxonYearStatRow($taxonId, 11, $currentYear)['occurrences_count']);
+        }
     }
 
     /**

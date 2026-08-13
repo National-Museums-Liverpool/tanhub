@@ -3,6 +3,7 @@
 namespace App\Controllers\Api\V1;
 
 use CodeIgniter\Database\BaseBuilder;
+use CodeIgniter\Database\RawSql;
 
 /**
  * API endpoints for the `taxon_ranks` lookup resource.
@@ -40,9 +41,38 @@ class TaxonRanks extends ApiResourceController
      */
     protected function getBuilder(object $db, array $includes = []): BaseBuilder
     {
-        return $db->table('taxon_ranks')
+        $builder = $db->table('taxon_ranks')
             ->select($this->getFieldSql($includes), false)
             ->where('deleted_at', null);
+
+        if ($this->isReportingOnly() !== null) {
+            $this->applyReportingOnly($builder, $this->isReportingOnly());
+        }
+
+        return $builder;
+    }
+
+    /**
+     * Indicate that taxon ranks can be restricted to reporting ranks.
+     *
+     * @return bool Always true for this resource.
+     */
+    protected function supportsReportingOnly(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Apply the reporting-rank predicate to the taxon-ranks query.
+     *
+     * @param BaseBuilder $builder Query builder to modify.
+     * @param bool        $reportingOnly Whether only reporting ranks should remain.
+     */
+    protected function applyReportingOnly(BaseBuilder $builder, bool $reportingOnly): void
+    {
+        if ($reportingOnly) {
+            $builder->where(new RawSql('is_reporting = 1'));
+        }
     }
 
     /**

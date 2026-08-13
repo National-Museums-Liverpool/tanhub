@@ -183,6 +183,22 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame('Species', $json['data'][0]['rank']);
     }
 
+    public function testTaxonRanksDefaultToReportingRanksAndCanIncludeAllRanks(): void
+    {
+        $default = $this->get('api/v1/taxon-ranks?sort=sort_order');
+        $default->assertStatus(200);
+        $defaultJson = json_decode((string) $default->response()->getBody(), true);
+
+        $this->assertSame(1, $defaultJson['meta']['total']);
+        $this->assertSame('Species', $defaultJson['data'][0]['rank']);
+
+        $allRanks = $this->get('api/v1/taxon-ranks?reporting_only=false&sort=sort_order');
+        $allRanks->assertStatus(200);
+        $allRanksJson = json_decode((string) $allRanks->response()->getBody(), true);
+
+        $this->assertSame(2, $allRanksJson['meta']['total']);
+    }
+
     public function testTaxonRankShowReturnsSingleObject(): void
     {
         $result = $this->get('api/v1/taxon-ranks/sp');
@@ -193,6 +209,19 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
         $this->assertSame('sp', $json['abbr']);
         $this->assertSame('Species', $json['rank']);
+    }
+
+    public function testTaxonRankShowIgnoresReportingOnly(): void
+    {
+        $result = $this->get('api/v1/taxon-ranks/gen?reporting_only=true');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame('gen', $json['abbr']);
+        $this->assertSame('Genus', $json['rank']);
+        $this->assertSame(0, $json['is_reporting']);
     }
 
     public function testRecordingSchemesListSupportsFilterSortAndPagination(): void

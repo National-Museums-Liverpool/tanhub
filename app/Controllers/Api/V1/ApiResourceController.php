@@ -280,21 +280,9 @@ abstract class ApiResourceController extends ApiController
             return $includes;
         }
 
-        $reportingOnly = $this->getReportingOnly();
-
-        if ($reportingOnly instanceof ResponseInterface) {
-            return $reportingOnly;
-        }
-
-        $this->reportingOnly = $reportingOnly;
-
         $db = db_connect();
 
         $builder = $this->getBuilder($db, $includes);
-
-        if ($reportingOnly !== null) {
-            $this->applyReportingOnly($builder, $reportingOnly);
-        }
 
         $item = $builder->where($this->getDefaultKeyColumn(), $key)
             ->get()
@@ -526,10 +514,17 @@ abstract class ApiResourceController extends ApiController
         $selects = [];
 
         foreach ($fields as $alias => $column) {
+            $quotedColumn = str_starts_with($column, '(')
+                ? $column
+                : implode('.', array_map(
+                    static fn (string $part): string => "`{$part}`",
+                    explode('.', $column)
+                ));
+
             if ($alias === $column) {
-                $selects[] = "`{$column}`";
+                $selects[] = $quotedColumn;
             } else {
-                $selects[] = "`{$column}` AS `{$alias}`";
+                $selects[] = "{$quotedColumn} AS `{$alias}`";
             }
         }
 

@@ -100,10 +100,12 @@ or `geographic_regions`).
 Filters and sort keys for include-only fields use the same prefixed form (for example
 `taxon__scientific_name[contains]=bombus` or `sort=taxon__scientific_name`).
 
-Taxon-bearing resources (`taxa`, `taxon-names`, `taxon-stats`, and `taxon-year-stats`) default
-to reporting taxa only which belong to one of the configured taxon ranks. Use
+Taxonomy resources (`taxon-ranks`, `taxa`, `taxon-names`, `taxon-stats`, and `taxon-year-stats`)
+default to reporting taxa only which belong to one of the configured taxon ranks. Use
 `reporting_only=false` (or `0`) to return all exact taxon ranks; `true` and `1` explicitly
-enable the default. Occurrences are always exact and are not filtered by this option.
+enable the default. This option applies only to list endpoints. Single-resource lookups by their
+natural key return the requested record regardless of its reporting status. Occurrences are always
+exact and are not filtered by this option.
 
 The `parent-taxon` include returns the immediate accepted parent through `parent_taxon_id`, with
 `parent_taxon__taxon_identifier`, `parent_taxon__scientific_name`,

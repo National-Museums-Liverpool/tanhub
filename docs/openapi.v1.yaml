@@ -431,9 +431,10 @@ components:
       name: reporting_only
       in: query
       description: >-
-        Restrict taxa, names, and statistics to configured reporting ranks. Defaults to true;
-        use false (or 0) to expose all exact taxon ranks. This parameter does not alter
-        occurrence results, which always retain exact taxon identity.
+        Restrict taxon ranks, taxa, names, and statistics to configured reporting ranks. Defaults
+        to true; use false (or 0) to expose all ranks. This parameter applies to list endpoints;
+        single-resource lookups return the requested record regardless of reporting status. It
+        does not alter occurrence results, which always retain exact taxon identity.
       schema:
         type: boolean
         default: true

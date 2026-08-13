@@ -55,6 +55,11 @@ class TaxonRanksImportService implements EntityImportServiceInterface
         }
 
         $existingRows = [];
+        $usedAbbreviations = [];
+        foreach ($db->table('taxon_ranks')->select(['id', 'rank', 'abbr'])->get()->getResultArray() as $existingRow) {
+            $existingRows[(string) $existingRow['rank']] = $existingRow;
+            $usedAbbreviations[(string) $existingRow['abbr']] = (int) $existingRow['id'];
+        }
         if ($ranks !== []) {
             foreach ($db->table('taxon_ranks')->whereIn('rank', array_keys($ranks))->get()->getResultArray() as $existingRow) {
                 $existingRows[(string) $existingRow['rank']] = $existingRow;
@@ -71,7 +76,17 @@ class TaxonRanksImportService implements EntityImportServiceInterface
                     continue;
                 }
 
-                $abbr = trim((string) ($row['abbr'] ?? ''));
+                $existing = $existingRows[$rank] ?? null;
+                if ($existing !== null && isset($existing['abbr'])) {
+                    unset($usedAbbreviations[(string) $existing['abbr']]);
+                }
+
+                $abbr = $this->uniqueAbbreviation(
+                    trim((string) ($row['abbr'] ?? '')),
+                    $rank,
+                    $existing['id'] ?? null,
+                    $usedAbbreviations,
+                );
                 $sortOrder = max(0, (int) ($row['sort_order'] ?? 0));
                 $isReporting = $this->isConfiguredReportingRank($rank);
 
@@ -82,8 +97,6 @@ class TaxonRanksImportService implements EntityImportServiceInterface
                     'is_reporting' => $isReporting ? 1 : 0,
                 ];
 
-                $existing = $existingRows[$rank] ?? null;
-
                 if ($existing === null) {
                     $counts['inserted']++;
 
@@ -93,6 +106,7 @@ class TaxonRanksImportService implements EntityImportServiceInterface
                     }
 
                     $existingRows[$rank] = $payload;
+                    $usedAbbreviations[$payload['abbr']] = (int) ($payload['id'] ?? 0);
 
                     $counts['processed']++;
                     continue;
@@ -104,6 +118,7 @@ class TaxonRanksImportService implements EntityImportServiceInterface
                     $db->table('taxon_ranks')->where('id', $existing['id'])->update($payload);
                 }
 
+                $usedAbbreviations[$payload['abbr']] = (int) $existing['id'];
                 $counts['processed']++;
             } catch (\Throwable $exception) {
                 log_message('error', $exception->getMessage());
@@ -113,6 +128,37 @@ class TaxonRanksImportService implements EntityImportServiceInterface
         }
 
         return $counts;
+    }
+
+    /**
+     * Select an abbreviation that is unique within the imported rank table.
+     *
+     * @param string                   $abbr Existing or source abbreviation.
+     * @param string                   $rank Rank name used as the fallback slug.
+     * @param int|string|null           $currentId ID of the row being updated, if any.
+     * @param array<string, int>        $usedAbbreviations Abbreviations keyed to row IDs.
+     * @return string A unique, database-safe abbreviation.
+     */
+    private function uniqueAbbreviation(string $abbr, string $rank, int|string|null $currentId, array $usedAbbreviations): string
+    {
+        $fallback = strtolower((string) preg_replace('/[^a-z0-9]+/i', '_', $rank));
+        $candidate = trim($abbr) !== '' ? trim($abbr) : $fallback;
+        $candidate = substr($candidate, 0, 50);
+        $ownerId = $usedAbbreviations[$candidate] ?? null;
+
+        if ($ownerId === null || (string) $ownerId === (string) $currentId) {
+            return $candidate;
+        }
+
+        $candidate = substr($fallback, 0, 50);
+        $suffix = 2;
+        while (isset($usedAbbreviations[$candidate])
+            && (string) $usedAbbreviations[$candidate] !== (string) $currentId) {
+            $suffixText = '_' . $suffix++;
+            $candidate = substr($fallback, 0, 50 - strlen($suffixText)) . $suffixText;
+        }
+
+        return $candidate;
     }
 
     /**

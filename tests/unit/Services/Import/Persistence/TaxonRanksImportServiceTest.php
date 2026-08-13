@@ -101,6 +101,31 @@ final class TaxonRanksImportServiceTest extends CIUnitTestCase
         $this->assertSame('7', (string) $row['sort_order']);
     }
 
+    public function testImportResolvesDuplicateAbbreviations(): void
+    {
+        $this->db->table('taxon_ranks')->insert([
+            'rank' => 'Subspecies',
+            'abbr' => 'subspecies',
+            'sort_order' => 300,
+        ]);
+
+        $service = new TaxonRanksImportService();
+
+        $counts = $service->import([
+            [
+                'rank' => 'Subspecies hybrid',
+                'abbr' => 'subspecies',
+                'sort_order' => 320,
+            ],
+        ]);
+
+        $this->assertSame(1, $counts['inserted']);
+        $row = $this->db->table('taxon_ranks')->where('rank', 'Subspecies hybrid')->get()->getRowArray();
+
+        $this->assertNotNull($row);
+        $this->assertSame('subspecies_hybrid', (string) $row['abbr']);
+    }
+
     public function testImportSkipsRowsWithEmptyRank(): void
     {
         $service = new TaxonRanksImportService();

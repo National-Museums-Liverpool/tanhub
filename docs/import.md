@@ -191,10 +191,6 @@ $ php spark import:indicia --source indicia --entity taxa
 $ php spark import:indicia --source indicia --entity taxon_names
 $ php spark import:indicia --source indicia --entity occurrences
 $ php spark import:indicia --source nbn --entity occurrences
-$ php spark import:indicia --source indicia --entity taxon_year_stats
-$ php spark import:indicia --source indicia --entity taxon_stats
-$ php spark import:indicia --source indicia --entity grid_square_stats_counts
-$ php spark import:indicia --source indicia --entity taxon_rarity
 ```
 
 Repeat an individual command until it returns `Has more: no`.

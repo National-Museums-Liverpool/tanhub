@@ -147,7 +147,7 @@ class TaxonRarityService
     {
         $squareRanks = $this->denseRanks($rows, 'grid_square_count');
         $occurrenceRanks = $this->denseRanks($rows, 'occurrence_count');
-        $squareWeight = (float) $config->squareWeight;
+        $gridSquareWeight = (float) $config->gridSquareWeight;
         $occurrenceWeight = (float) $config->occurrenceWeight;
 
         foreach ($rows as $index => $row) {
@@ -157,7 +157,7 @@ class TaxonRarityService
 
             $rows[$index]['grid_square_rank'] = $gridSquareRank;
             $rows[$index]['occurrence_rank'] = $occurrenceRank;
-            $rows[$index]['final_score'] = ($gridSquareRank * $squareWeight) + ($occurrenceRank * $occurrenceWeight);
+            $rows[$index]['final_score'] = ($gridSquareRank * $gridSquareWeight) + ($occurrenceRank * $occurrenceWeight);
         }
 
         usort($rows, static function (array $left, array $right): int {

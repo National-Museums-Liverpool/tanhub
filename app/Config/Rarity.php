@@ -26,7 +26,7 @@ class Rarity extends BaseConfig
      *
      * @var float
      */
-    public float $squareWeight = 1.0;
+    public float $gridSquareWeight = 1.0;
 
     /**
      * Weighting given to the number of occurrences for a taxon when calculating rarity scores.
@@ -42,10 +42,10 @@ class Rarity extends BaseConfig
     {
         parent::__construct();
 
-        $configuredSquareWeight = env('rarity.squareWeight');
+        $configuredSquareWeight = env('rarity.gridSquareWeight');
 
         if ($configuredSquareWeight !== null && $configuredSquareWeight !== '') {
-            $this->squareWeight = (float) $configuredSquareWeight;
+            $this->gridSquareWeight = (float) $configuredSquareWeight;
         }
 
         $configuredOccurrenceWeight = env('rarity.occurrenceWeight');

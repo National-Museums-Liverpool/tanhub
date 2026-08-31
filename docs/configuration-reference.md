@@ -113,13 +113,23 @@ Defaults are `320x320`, `fit`, and `85` for `thumbnail`; and `1400x1400`,
 
 ## Derived rarity statistics
 
-- `rarity.squareWeight`: weight assigned to distinct active 2km squares;
+- `rarity.gridSquareWeight`: weight assigned to distinct active 2km squares;
   defaults to `1.0`.
 - `rarity.occurrenceWeight`: weight assigned to active occurrences; defaults
   to `1.0`.
 
 See [derived taxon rarity categories](import.md#derived-taxon-rarity-categories)
 for how these weights are applied.
+
+## Derived frequency trend statistics
+
+- `taxonFrequencyTrend.gridSquareWeight`: weight assigned to the occupied 2km square slope; defaults to
+  `1.0`.
+- `taxonFrequencyTrend.occurrenceWeight`: weight assigned to the occurrence-count slope; defaults to
+  `1.0`.
+
+At least one weight must be greater than zero. See the frequency trend section in
+[import.md](import.md#derived-taxon-frequency-trends) for how these weights are applied.
 
 ## API access
 

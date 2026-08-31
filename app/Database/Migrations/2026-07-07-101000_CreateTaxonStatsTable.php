@@ -48,6 +48,12 @@ class CreateTaxonStatsTable extends Migration
                 'unsigned'   => true,
                 'default'    => 0,
             ],
+            'frequency_trend' => [
+                'type'       => 'INT',
+                'constraint' => 3,
+                'null'       => true,
+                'default'    => null,
+            ],
             'first_record_date' => [
                 'type' => 'DATE',
             ],

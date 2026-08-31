@@ -86,6 +86,7 @@ class TaxonStats extends ApiResourceController
             'higher_geography_identifier' => 'gr.higher_geography_identifier',
             'occurrences_count' => 'ts.occurrences_count',
             'grid_square_count' => 'ts.grid_square_count',
+            'frequency_trend' => 'ts.frequency_trend',
             'first_record_date' => 'ts.first_record_date',
             'last_record_date' => 'ts.last_record_date',
             'first_recorder' => 'ts.first_recorder',

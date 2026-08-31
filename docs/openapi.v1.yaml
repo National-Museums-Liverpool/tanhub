@@ -287,6 +287,10 @@ paths:
     get:
       tags: [taxon-stats]
       summary: List taxon stats
+      description: >-
+        Returns global and regional taxon statistics. The frequency_trend field is nullable
+        for non-species rows and ranges from 0 for the most declining species in the scope
+        to 100 for the most increasing species; stable species receive 50.
       parameters:
         - $ref: '#/components/parameters/TaxonStatsInclude'
         - $ref: '#/components/parameters/ReportingOnly'
@@ -302,6 +306,9 @@ paths:
     get:
       tags: [taxon-stats]
       summary: Get one taxon stats row
+      description: >-
+        Includes frequency_trend when available. The value is nullable for non-species rows
+        and ranges from 0 to 100, with stable species represented by 50.
       parameters:
         - name: uuid
           in: path

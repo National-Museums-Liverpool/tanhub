@@ -1267,12 +1267,15 @@ Examples:
 - Unique identifier: `uuid`
 - Exposed fields:
 	- `uuid`, `taxon_identifier`, `higher_geography_identifier`,
-	  `occurrences_count`, `grid_square_count`, `frequency_trend`, `first_record_date`,
+	  `occurrences_count`, `grid_square_count`, `frequency_trend`, `frequency_trend_state`,
+	  `first_record_date`,
 	  `last_record_date`,
 		`first_recorder`, `last_recorder`, `first_verified_record_date`, `last_verified_record_date`,
 		`first_verified_recorder`, `last_verified_recorder`
 - Filterable fields:
 	- all exposed taxon-stats fields above
+	- `taxon_rank` (for example, `taxon_rank=species`); filter by rank when reviewing trends,
+	  rather than comparing scores across different taxonomic levels
 	- rows for blocked taxa are always excluded
 - Include:
 	- query parameter: `include`

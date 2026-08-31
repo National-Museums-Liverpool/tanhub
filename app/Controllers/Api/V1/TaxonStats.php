@@ -87,6 +87,7 @@ class TaxonStats extends ApiResourceController
             'occurrences_count' => 'ts.occurrences_count',
             'grid_square_count' => 'ts.grid_square_count',
             'frequency_trend' => 'ts.frequency_trend',
+            'frequency_trend_state' => 'ts.frequency_trend_state',
             'first_record_date' => 'ts.first_record_date',
             'last_record_date' => 'ts.last_record_date',
             'first_recorder' => 'ts.first_recorder',
@@ -144,6 +145,19 @@ class TaxonStats extends ApiResourceController
     }
 
     /**
+     * Add the un-nested taxon rank filter used by trend consumers.
+     *
+     * @param array<int, string> $includes Requested includes.
+     * @return array<string, string> Filterable API fields and SQL columns.
+     */
+    protected function allowedFilters(array $includes = []): array
+    {
+        return array_merge($this->getAllowedFields($includes), [
+            'taxon_rank' => 'LOWER(tr.rank)',
+        ]);
+    }
+
+    /**
      * Builds the base query used for the API.
      *
      * Inner-joins `taxa` (blocked/soft-deleted rows excluded) and left-joins
@@ -174,7 +188,7 @@ class TaxonStats extends ApiResourceController
         if ($this->hasInclude($includes, 'taxon-group')) {
             $builder->join('taxon_groups tg', 'tg.id = t.taxon_group_id', 'left');
         }
-        if ($this->hasInclude($includes, 'taxon-rank') || $this->isReportingOnly() !== null) {
+        if ($this->hasInclude($includes, 'taxon-rank') || $this->isReportingOnly() !== null || $this->request->getGet('taxon_rank') !== null) {
             $builder->join('taxon_ranks tr', 'tr.id = t.taxon_rank_id', 'left');
         }
 

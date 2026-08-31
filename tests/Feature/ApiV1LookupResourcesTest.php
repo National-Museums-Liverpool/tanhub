@@ -612,6 +612,19 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame(1, $json['meta']['count']);
         $this->assertSame('NHMSYS0021054498', $json['data'][0]['taxon_identifier']);
         $this->assertArrayHasKey('frequency_trend', $json['data'][0]);
+        $this->assertArrayHasKey('frequency_trend_state', $json['data'][0]);
+    }
+
+    public function testTaxonStatsListSupportsTaxonRankFilter(): void
+    {
+        $result = $this->get('api/v1/taxon-stats?taxon_rank=species');
+
+        $result->assertStatus(200);
+
+        $json = json_decode((string) $result->response()->getBody(), true);
+
+        $this->assertSame(1, $json['meta']['count']);
+        $this->assertSame('NHMSYS0021054498', $json['data'][0]['taxon_identifier']);
     }
 
     public function testTaxonStatsShowReturnsNotFoundForBlockedTaxonStats(): void
@@ -1386,6 +1399,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             occurrences_count INTEGER NOT NULL DEFAULT 0,
             grid_square_count INTEGER NOT NULL DEFAULT 0,
             frequency_trend INTEGER NULL DEFAULT NULL,
+            frequency_trend_state VARCHAR(32) NULL DEFAULT NULL,
             first_record_date DATE NOT NULL,
             last_record_date DATE NOT NULL,
             first_recorder VARCHAR(255) NOT NULL,

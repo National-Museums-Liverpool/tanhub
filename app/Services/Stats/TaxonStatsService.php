@@ -236,7 +236,7 @@ class TaxonStatsService
     /**
      * Calculate frequency trends for species in each global or regional scope.
      *
-     * @return array<string, int> Trend values keyed by taxon and region.
+    * @return array<string, array{score: int|null, state: string}> Trend results keyed by taxon and region.
      */
     private function frequencyTrends(): array
     {
@@ -246,6 +246,7 @@ class TaxonStatsService
             'SELECT
                 tys.taxon_id,
                 tys.geographic_region_id,
+                t.taxon_rank_id,
                 tys.year,
                 tys.occurrences_count,
                 tys.grid_square_count
@@ -254,7 +255,9 @@ class TaxonStatsService
                 ON t.id = tys.taxon_id
                 AND t.deleted_at IS NULL
                 AND t.blocked = 0
-                AND t.species_id = t.id
+            INNER JOIN ' . $prefix . 'taxon_ranks tr
+                ON tr.id = t.taxon_rank_id
+                AND tr.is_reporting = 1
             ORDER BY tys.taxon_id, tys.geographic_region_id, tys.year'
         )->getResultArray();
 
@@ -272,6 +275,7 @@ class TaxonStatsService
             $scopeKey = $this->scopeKey($taxonId, $regionId);
             $scopes[$scopeKey]['taxon_id'] = $taxonId;
             $scopes[$scopeKey]['geographic_region_id'] = $regionId;
+            $scopes[$scopeKey]['taxon_rank_id'] = (int) ($row['taxon_rank_id'] ?? 0);
             $scopes[$scopeKey]['years'][$year] = [
                 'grid_square_count' => max(0, (int) ($row['grid_square_count'] ?? 0)),
                 'occurrences_count' => max(0, (int) ($row['occurrences_count'] ?? 0)),
@@ -284,7 +288,7 @@ class TaxonStatsService
 
         foreach ($scopes as $scope) {
             $scopeKey = $this->scopeKey((int) $scope['taxon_id'], $scope['geographic_region_id']);
-            $groupKey = (string) ($scope['geographic_region_id'] ?? 'global');
+            $groupKey = ($scope['geographic_region_id'] ?? 'global') . '|' . $scope['taxon_rank_id'];
             $groupedScopes[$groupKey][$scopeKey] = $scope;
         }
 
@@ -300,71 +304,154 @@ class TaxonStatsService
                     $occurrenceSeries[(int) $year] = (int) $values['occurrences_count'];
                 }
 
+                $squareRegression = $this->regression($squareSeries, (float) $config->recentYearHalfLife);
+                $occurrenceRegression = $this->regression($occurrenceSeries, (float) $config->recentYearHalfLife);
+
                 $scoredRows[$scopeKey] = [
                     'taxon_id' => (int) $scope['taxon_id'],
                     'geographic_region_id' => $scope['geographic_region_id'],
-                    'square_slope' => $this->slope($squareSeries),
-                    'occurrence_slope' => $this->slope($occurrenceSeries),
+                    'taxon_rank_id' => $scope['taxon_rank_id'],
+                    'occupied_years' => count(array_filter(
+                        $scope['years'],
+                        static fn (array $values): bool => $values['grid_square_count'] > 0
+                            || $values['occurrences_count'] > 0,
+                    )),
+                    'square_slope' => $squareRegression['slope'],
+                    'square_r_squared' => $squareRegression['r_squared'],
+                    'occurrence_slope' => $occurrenceRegression['slope'],
+                    'occurrence_r_squared' => $occurrenceRegression['r_squared'],
                 ];
             }
 
-            $squareRanks = $this->denseFloatRanks($scoredRows, 'square_slope');
-            $occurrenceRanks = $this->denseFloatRanks($scoredRows, 'occurrence_slope');
             $gridSquareWeight = (float) $config->gridSquareWeight;
             $occurrenceWeight = (float) $config->occurrenceWeight;
             $totalWeight = $gridSquareWeight + $occurrenceWeight;
 
             foreach ($scoredRows as $scopeKey => &$scoredRow) {
-                $scoredRow['combined_rank'] = ($squareRanks[$scopeKey] * $gridSquareWeight)
-                    + ($occurrenceRanks[$scopeKey] * $occurrenceWeight);
                 $scoredRow['direction'] = (($scoredRow['square_slope'] * $gridSquareWeight)
                     + ($scoredRow['occurrence_slope'] * $occurrenceWeight)) / $totalWeight;
+                $scoredRow['r_squared'] = (($scoredRow['square_r_squared'] * $gridSquareWeight)
+                    + ($scoredRow['occurrence_r_squared'] * $occurrenceWeight)) / $totalWeight;
+                $scoredRow['state'] = $this->classifyTrend($scoredRow, $config);
+                $scoredRow['is_directional'] = in_array($scoredRow['state'], ['increasing', 'decreasing'], true);
+                $trends[$scopeKey] = [
+                    'score' => $scoredRow['state'] === 'stable' ? 50 : null,
+                    'state' => $scoredRow['state'],
+                ];
             }
             unset($scoredRow);
 
-            $positive = array_filter($scoredRows, static fn (array $row): bool => $row['direction'] > 0);
-            $negative = array_filter($scoredRows, static fn (array $row): bool => $row['direction'] < 0);
+            $directionalRows = array_filter(
+                $scoredRows,
+                static fn (array $row): bool => $row['is_directional'],
+            );
+            $squareRanks = $this->denseFloatRanks($directionalRows, 'square_slope');
+            $occurrenceRanks = $this->denseFloatRanks($directionalRows, 'occurrence_slope');
+
+            foreach ($directionalRows as $scopeKey => &$directionalRow) {
+                $directionalRow['combined_rank'] = ($squareRanks[$scopeKey] * $gridSquareWeight)
+                    + ($occurrenceRanks[$scopeKey] * $occurrenceWeight);
+            }
+            unset($directionalRow);
+
+            $positive = array_filter($directionalRows, static fn (array $row): bool => $row['direction'] > 0);
+            $negative = array_filter($directionalRows, static fn (array $row): bool => $row['direction'] < 0);
 
             $this->assignDirectionalTrends($trends, $positive, 50, 100);
             $this->assignDirectionalTrends($trends, $negative, 0, 50);
-
-            foreach ($scoredRows as $scopeKey => $scoredRow) {
-                if ($scoredRow['direction'] === 0.0) {
-                    $trends[$scopeKey] = 50;
-                }
-            }
         }
 
         return $trends;
     }
 
     /**
-     * Calculate the least-squares slope for a time series.
+    * Calculate least-squares slope and coefficient of determination for a time series.
      *
-     * @param array<int, int> $series Values keyed by year.
+    * @param array<int, int> $series   Values keyed by year.
+    * @param float            $halfLife Recent-year weighting half-life.
      *
-     * @return float Slope per year.
+     * @return array{slope: float, r_squared: float} Regression statistics.
      */
-    private function slope(array $series): float
+    private function regression(array $series, float $halfLife): array
     {
         $count = count($series);
 
         if ($count < 2) {
-            return 0.0;
+            return ['slope' => 0.0, 'r_squared' => 0.0];
         }
 
-        $meanX = array_sum(array_keys($series)) / $count;
-        $meanY = array_sum($series) / $count;
+        $latestYear = max(array_keys($series));
+        $weights = [];
+        foreach ($series as $year => $value) {
+            $weights[$year] = $halfLife > 0.0 ? 2 ** (-($latestYear - $year) / $halfLife) : 1.0;
+        }
+        $totalWeight = array_sum($weights);
+        $meanX = 0.0;
+        $meanY = 0.0;
+        foreach ($series as $year => $value) {
+            $meanX += $weights[$year] * $year;
+            $meanY += $weights[$year] * $value;
+        }
+        $meanX /= $totalWeight;
+        $meanY /= $totalWeight;
         $numerator = 0.0;
         $denominator = 0.0;
 
         foreach ($series as $year => $value) {
             $xDifference = $year - $meanX;
-            $numerator += $xDifference * ($value - $meanY);
-            $denominator += $xDifference * $xDifference;
+            $numerator += $weights[$year] * $xDifference * ($value - $meanY);
+            $denominator += $weights[$year] * $xDifference * $xDifference;
         }
 
-        return $denominator === 0.0 ? 0.0 : $numerator / $denominator;
+        if ($denominator === 0.0) {
+            return ['slope' => 0.0, 'r_squared' => 0.0];
+        }
+
+        $slope = $numerator / $denominator;
+        $intercept = $meanY - ($slope * $meanX);
+        $residualSumSquares = 0.0;
+        $totalSumSquares = 0.0;
+
+        foreach ($series as $year => $value) {
+            $residual = $value - ($intercept + ($slope * $year));
+            $residualSumSquares += $weights[$year] * $residual * $residual;
+            $differenceFromMean = $value - $meanY;
+            $totalSumSquares += $weights[$year] * $differenceFromMean * $differenceFromMean;
+        }
+
+        $rSquared = $totalSumSquares <= PHP_FLOAT_EPSILON
+            ? 1.0
+            : 1.0 - ($residualSumSquares / $totalSumSquares);
+
+        return [
+            'slope' => $slope,
+            'r_squared' => max(0.0, min(1.0, $rSquared)),
+        ];
+    }
+
+    /**
+     * Classify a trend using evidence thresholds and the weighted slope.
+     *
+     * @param array<string, mixed> $row    Scored trend metrics.
+     * @param TaxonFrequencyTrend  $config Trend configuration.
+     *
+     * @return string Trend state.
+     */
+    private function classifyTrend(array $row, TaxonFrequencyTrend $config): string
+    {
+        if ((int) $row['occupied_years'] < $config->minimumOccupiedYears) {
+            return 'insufficient_data';
+        }
+
+        if ((float) $row['r_squared'] < $config->minimumRSquared) {
+            return 'unclear';
+        }
+
+        if (abs((float) $row['direction']) <= $config->slopeTolerance) {
+            return 'stable';
+        }
+
+        return (float) $row['direction'] > 0 ? 'increasing' : 'decreasing';
     }
 
     /**
@@ -394,7 +481,7 @@ class TaxonStatsService
     /**
      * Map one directional group onto its half of the frequency trend scale.
      *
-     * @param array<string, int>                  $trends Destination trend values.
+    * @param array<string, array{score: int|null, state: string}> $trends Destination trend values.
      * @param array<string, array<string, mixed>> $rows   Directional scored rows.
      * @param int                                 $minimum Lower scale endpoint.
      * @param int                                 $maximum Upper scale endpoint.
@@ -420,7 +507,10 @@ class TaxonStatsService
                 $trend = (int) round($minimum + ($position * ($maximum - $minimum)));
             }
 
-            $trends[$scopeKey] = max(0, min(100, $trend));
+            $trends[$scopeKey] = [
+                'score' => max(0, min(100, $trend)),
+                'state' => $row['state'],
+            ];
         }
     }
 
@@ -505,7 +595,8 @@ class TaxonStatsService
                 'uuid' => $this->stableUuid($taxonId . '|' . ($geographicRegionId ?? 'global')),
                 'taxon_id' => $taxonId,
                 'geographic_region_id' => $geographicRegionId,
-                'frequency_trend' => $frequencyTrends[$this->scopeKey($taxonId, $geographicRegionId)] ?? null,
+                'frequency_trend' => $frequencyTrends[$this->scopeKey($taxonId, $geographicRegionId)]['score'] ?? null,
+                'frequency_trend_state' => $frequencyTrends[$this->scopeKey($taxonId, $geographicRegionId)]['state'] ?? null,
                 'occurrences_count' => max(0, (int) ($row['occurrences_count'] ?? 0)),
                 'grid_square_count' => max(0, (int) ($row['grid_square_count'] ?? 0)),
                 'first_record_date' => (string) ($row['first_record_date'] ?? ''),

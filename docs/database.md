@@ -399,6 +399,7 @@ access stats across the dataset or region filtered.
 | occurrences_count          | INT          | NO   |         |                | Number of occurrences for the taxon and region scope                                   |
 | grid_square_count          | INT          | NO   |         |                | Number of grid squares for the taxon and region scope                                  |
 | frequency_trend            | INT          | YES  |         | NULL           | Relative frequency trend from 0 (most declining) to 100 (most increasing)              |
+| frequency_trend_state      | VARCHAR(32)  | YES  |         | NULL           | Trend classification: increasing, decreasing, stable, insufficient_data, or unclear    |
 | first_record_date          | DATE         | NO   |         |                | Date of the first record of this taxon (in the region or across all)                   |
 | last_record_date           | DATE         | NO   |         |                | Date of the last record of this taxon (in the region or across all)                    |
 | first_recorder             | VARCHAR(255) | NO   |         |                | Recorder name of the first record of this taxon (in the region or across all)          |

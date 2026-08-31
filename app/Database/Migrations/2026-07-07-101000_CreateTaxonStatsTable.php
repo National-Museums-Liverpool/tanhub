@@ -54,6 +54,12 @@ class CreateTaxonStatsTable extends Migration
                 'null'       => true,
                 'default'    => null,
             ],
+            'frequency_trend_state' => [
+                'type'       => 'VARCHAR',
+                'constraint' => 32,
+                'null'       => true,
+                'default'    => null,
+            ],
             'first_record_date' => [
                 'type' => 'DATE',
             ],

@@ -123,10 +123,18 @@ for how these weights are applied.
 
 ## Derived frequency trend statistics
 
-- `taxonFrequencyTrend.gridSquareWeight`: weight assigned to the occupied 2km square slope; defaults to
-  `1.0`.
+- `taxonFrequencyTrend.gridSquareWeight`: weight assigned to the occupied 2km
+  square slope; defaults to `1.0`.
 - `taxonFrequencyTrend.occurrenceWeight`: weight assigned to the occurrence-count slope; defaults to
   `1.0`.
+- `taxonFrequencyTrend.minimumOccupiedYears`: minimum years containing records or occupied squares
+  required for a directional trend; defaults to `3`.
+- `taxonFrequencyTrend.minimumRSquared`: minimum weighted regression fit required for a directional
+  trend; defaults to `0.5`.
+- `taxonFrequencyTrend.slopeTolerance`: weighted slopes at or below this absolute value are treated
+  as stable; defaults to `0.000001`.
+- `taxonFrequencyTrend.recentYearHalfLife`: half-life in years for exponential recent-year
+  weighting; defaults to `3.0`. Set to `0` to disable recency weighting.
 
 At least one weight must be greater than zero. See the frequency trend section in
 [import.md](import.md#derived-taxon-frequency-trends) for how these weights are applied.

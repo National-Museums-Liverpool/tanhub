@@ -379,24 +379,35 @@ The task:
 
 ### Derived taxon frequency trends
 
-The taxon stats task also calculates `frequency_trend` for species rows. It uses the
-zero-filled annual statistics for the nine completed years before the current year.
-Subspecies and other lower-rank records contribute through the existing species projection.
+The taxon stats task also calculates `frequency_trend` for rows at every configured reporting
+taxonomic level. It uses the zero-filled annual statistics for the nine completed years before the
+current year. Non-reporting taxa contribute through the configured reporting projections.
 
-For each species, globally and independently within each geographic region, the task:
+For each reporting taxon, globally and independently within each geographic region, the task:
 
-- calculates the least-squares slope for annual occupied 2km squares
-- calculates the least-squares slope for annual occurrence records
+- calculates an exponentially recent-year-weighted least-squares slope for annual occupied 2km
+  squares
+- calculates an exponentially recent-year-weighted least-squares slope for annual occurrence
+  records
 - ranks each slope from lowest to highest using dense ranks, so equal slopes share a rank
-- combines the ranks using `taxonFrequencyTrend.gridSquareWeight` and `taxonFrequencyTrend.occurrenceWeight`
+- combines the ranks using `taxonFrequencyTrend.gridSquareWeight` and
+  `taxonFrequencyTrend.occurrenceWeight`
 - uses the weighted signed slopes to determine whether a species is increasing, decreasing,
   or stable
-- assigns stable species `50`, distributes decreasing species from `0` to `50`, and distributes
-  increasing species from `50` to `100`
+- requires data in at least `taxonFrequencyTrend.minimumOccupiedYears` years and a weighted
+  coefficient of determination of at least `taxonFrequencyTrend.minimumRSquared`
+- classifies sparse series below the occupied-year threshold as `insufficient_data`, noisy series
+  below the fit threshold as `unclear`, and slopes within `taxonFrequencyTrend.slopeTolerance` of
+  zero as `stable`
+- assigns stable species `50`, leaves insufficient or unclear species `NULL`, distributes decreasing
+  species from `0` to `50`, and distributes increasing species from `50` to `100`
 - preserves equal combined ranks as equal trend values
 
-The most declining species in a scope receives `0`, and the most increasing receives `100`.
-Non-species rows remain `NULL`. If all species in a scope are stable, they all receive `50`.
+The most declining taxon in a rank and scope receives `0`, and the most increasing receives `100`.
+Non-reporting rows remain `NULL`. If all taxa in a rank and scope are stable, they all receive `50`.
+The classification is also exposed as `frequency_trend_state`.
+For API consumers reviewing a particular level, filtering with `taxon_rank=species` (or another
+rank) is recommended rather than comparing scores across ranks.
 The task must run after `taxon_year_stats`, which must run after both occurrence imports.
 
 ### Verify derived counts

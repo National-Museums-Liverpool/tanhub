@@ -199,14 +199,14 @@ Use `--limit` and `--page-size` to override the configured defaults for one auto
 For example, edit the crontab for the web-server or deployment user:
 
 ```cron
-*/5 * * * * flock -n /var/www/tanhub/writable/tanhub-import.lock /usr/bin/php /var/www/tanhub/spark import:auto >> /var/www/tanhub/writable/import-logs/import-$(date +\%F).log 2>&1
+*/2 * * * * /usr/bin/php /var/www/tanhub/spark import:auto >> /var/www/tanhub/writable/import-logs/import-$(date +\%F).log 2>&1
 ```
 
 Replace `/var/www/tanhub` with the absolute application path and use the PHP
-binary configured for the deployment. The `flock` wrapper prevents a second run
-starting while the previous run is still processing. Choose an interval that
-allows a normal batch to finish and respects the rate limits of the configured
-Indicia Warehouse and NBN Atlas services.
+binary configured for the deployment. `import:auto` uses a MySQL advisory lock to
+prevent overlapping runs, so no `flock` utility or writable lock file is required.
+Choose an interval that allows a normal batch to finish and respects the rate limits
+of the configured Indicia Warehouse and NBN Atlas services.
 
 The `\%F` format produces filenames such as `import-2026-08-03.log`. The backslash is required
 because cron treats an unescaped `%` as a special character. These are Spark command logs and

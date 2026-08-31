@@ -72,6 +72,12 @@ class ImportAuto extends BaseCommand
         $dryRun = array_key_exists('dry-run', $params) || (bool) CLI::getOption('dry-run');
 
         try {
+            $lock = service('autoImportLock');
+            if (! $lock->acquire()) {
+                CLI::write('Automatic import already running; exiting.', 'yellow');
+                return;
+            }
+
             $service = service('autoImportService');
             $task = $service->select();
             CLI::write('Selected task: ' . $task['source_key'], 'yellow');
@@ -92,6 +98,10 @@ class ImportAuto extends BaseCommand
         } catch (Throwable $exception) {
             CLI::error($exception->getMessage());
             $this->showError($exception);
+        } finally {
+            if (isset($lock)) {
+                $lock->release();
+            }
         }
     }
 }

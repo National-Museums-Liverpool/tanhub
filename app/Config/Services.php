@@ -152,6 +152,18 @@ class Services extends BaseService
     }
 
     /**
+     * Automatic import database advisory lock.
+     */
+    public static function autoImportLock(bool $getShared = true): \App\Services\Import\AutoImportLock
+    {
+        if ($getShared) {
+            return static::getSharedInstance('autoImportLock');
+        }
+
+        return new \App\Services\Import\AutoImportLock();
+    }
+
+    /**
      * Import task result summary formatter.
      */
     public static function importTaskSummaryFormatter(bool $getShared = true): \App\Services\Import\ImportTaskSummaryFormatter

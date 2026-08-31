@@ -31,21 +31,41 @@ class TaxonStatsService
 
         try {
             $db = db_connect();
-            $rows = $this->buildRows();
+            $offsetModel = model(\App\Models\ImportOffsetModel::class);
+            $batches = $this->statBatches();
+            $batchIndex = (int) ($offsetModel->getCheckpoint('derived-stats:taxon_stats') ?? 0);
+            $batchIndex = max(0, min($batchIndex, count($batches) - 1));
+            $rows = $this->buildRows($batches[$batchIndex]);
+            $hasMore = $batchIndex < count($batches) - 1;
 
             $counts['fetched'] = count($rows);
             $counts['processed'] = $counts['fetched'];
+            $counts['has_more'] = $hasMore;
 
             if ($dryRun) {
                 return $counts;
             }
 
-            $db->table('taxon_stats')->emptyTable();
+            $taxonIds = array_values(array_unique(array_map(
+                static fn (array $row): int => (int) ($row['taxon_id'] ?? 0),
+                $rows,
+            )));
+
+            if ($taxonIds !== []) {
+                $db->table('taxon_stats')->whereIn('taxon_id', $taxonIds)->delete();
+            }
 
             if ($rows !== []) {
                 $this->insertRows($rows);
                 $counts['inserted'] = count($rows);
             }
+
+            $offsetModel->setCheckpoint(
+                'derived-stats:taxon_stats',
+                $hasMore ? (string) ($batchIndex + 1) : null,
+            );
+            $offsetModel->setCompletion('derived-stats:taxon_stats', ! $hasMore);
+            $counts['has_more'] = $hasMore;
         } catch (\Throwable $exception) {
             log_message('error', $exception->getMessage());
             $counts['status'] = 'failed';
@@ -60,14 +80,14 @@ class TaxonStatsService
      *
      * @return array<int, array<string, mixed>>
      */
-    private function buildRows(): array
+    private function buildRows(array $batch): array
     {
         $db = db_connect();
         $prefix = $db->getPrefix();
-        $reportingColumns = $this->reportingColumns();
+        $reportingColumns = $batch['columns'];
         $projectionColumns = $reportingColumns === [] ? '' : ",\n                    " . implode(",\n                    ", array_map(static fn (string $column): string => 'o.' . $column, $reportingColumns));
-        $scopedOccurrences = $this->scopedOccurrenceSql($prefix, $reportingColumns);
-        return $db->query(
+        $scopedOccurrences = $this->scopedOccurrenceSql($prefix, $reportingColumns, $batch['include_exact']);
+        $rows = $db->query(
             'WITH active_occurrences AS (
                 SELECT
                     o.id AS occurrence_id,
@@ -97,119 +117,121 @@ class TaxonStatsService
                     so.taxon_id,
                     so.geographic_region_id,
                     COUNT(*) AS occurrences_count,
-                    COUNT(DISTINCT so.grid_ref_2km) AS grid_square_count
+                    COUNT(DISTINCT so.grid_ref_2km) AS grid_square_count,
+                    MIN(so.record_date) AS first_record_date,
+                    MAX(so.record_date) AS last_record_date,
+                    MIN(CASE WHEN so.identification_verification_status LIKE "V%" THEN so.record_date END) AS first_verified_record_date,
+                    MAX(CASE WHEN so.identification_verification_status LIKE "V%" THEN so.record_date END) AS last_verified_record_date
                 FROM scoped_occurrences so
                 GROUP BY so.taxon_id, so.geographic_region_id
-            ),
-            first_rows AS (
-                SELECT
-                    ranked.taxon_id,
-                    ranked.geographic_region_id,
-                    ranked.record_date,
-                    ranked.recorded_by
-                FROM (
-                    SELECT
-                        so.*,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY so.taxon_id, so.geographic_region_id
-                            ORDER BY so.record_date ASC, so.occurrence_id ASC
-                        ) AS rn
-                    FROM scoped_occurrences so
-                ) ranked
-                WHERE ranked.rn = 1
-            ),
-            last_rows AS (
-                SELECT
-                    ranked.taxon_id,
-                    ranked.geographic_region_id,
-                    ranked.record_date,
-                    ranked.recorded_by
-                FROM (
-                    SELECT
-                        so.*,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY so.taxon_id, so.geographic_region_id
-                            ORDER BY so.record_date DESC, so.occurrence_id DESC
-                        ) AS rn
-                    FROM scoped_occurrences so
-                ) ranked
-                WHERE ranked.rn = 1
-            ),
-            first_verified_rows AS (
-                SELECT
-                    ranked.taxon_id,
-                    ranked.geographic_region_id,
-                    ranked.record_date,
-                    ranked.recorded_by
-                FROM (
-                    SELECT
-                        so.*,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY so.taxon_id, so.geographic_region_id
-                            ORDER BY so.record_date ASC, so.occurrence_id ASC
-                        ) AS rn
-                    FROM scoped_occurrences so
-                    WHERE so.identification_verification_status LIKE "V%"
-                ) ranked
-                WHERE ranked.rn = 1
-            ),
-            last_verified_rows AS (
-                SELECT
-                    ranked.taxon_id,
-                    ranked.geographic_region_id,
-                    ranked.record_date,
-                    ranked.recorded_by
-                FROM (
-                    SELECT
-                        so.*,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY so.taxon_id, so.geographic_region_id
-                            ORDER BY so.record_date DESC, so.occurrence_id DESC
-                        ) AS rn
-                    FROM scoped_occurrences so
-                    WHERE so.identification_verification_status LIKE "V%"
-                ) ranked
-                WHERE ranked.rn = 1
             )
             SELECT
                 a.taxon_id,
                 a.geographic_region_id,
                 a.occurrences_count,
                 a.grid_square_count,
-                fr.record_date AS first_record_date,
-                lr.record_date AS last_record_date,
-                fr.recorded_by AS first_recorder,
-                lr.recorded_by AS last_recorder,
-                COALESCE(fvr.record_date, fr.record_date) AS first_verified_record_date,
-                COALESCE(lvr.record_date, lr.record_date) AS last_verified_record_date,
-                COALESCE(fvr.recorded_by, fr.recorded_by) AS first_verified_recorder,
-                COALESCE(lvr.recorded_by, lr.recorded_by) AS last_verified_recorder
+                a.first_record_date,
+                a.last_record_date,
+                MIN(CASE WHEN so.record_date = a.first_record_date THEN so.occurrence_id END) AS first_occurrence_id,
+                MAX(CASE WHEN so.record_date = a.last_record_date THEN so.occurrence_id END) AS last_occurrence_id,
+                MIN(CASE WHEN so.record_date = a.first_verified_record_date
+                    AND so.identification_verification_status LIKE "V%" THEN so.occurrence_id END) AS first_verified_occurrence_id,
+                MAX(CASE WHEN so.record_date = a.last_verified_record_date
+                    AND so.identification_verification_status LIKE "V%" THEN so.occurrence_id END) AS last_verified_occurrence_id
             FROM aggregates a
-            INNER JOIN first_rows fr
-                ON fr.taxon_id = a.taxon_id
+            INNER JOIN scoped_occurrences so
+                ON so.taxon_id = a.taxon_id
                 AND (
-                    fr.geographic_region_id = a.geographic_region_id
-                    OR (fr.geographic_region_id IS NULL AND a.geographic_region_id IS NULL)
+                    so.geographic_region_id = a.geographic_region_id
+                    OR (so.geographic_region_id IS NULL AND a.geographic_region_id IS NULL)
                 )
-            INNER JOIN last_rows lr
-                ON lr.taxon_id = a.taxon_id
-                AND (
-                    lr.geographic_region_id = a.geographic_region_id
-                    OR (lr.geographic_region_id IS NULL AND a.geographic_region_id IS NULL)
-                )
-            LEFT JOIN first_verified_rows fvr
-                ON fvr.taxon_id = a.taxon_id
-                AND (
-                    fvr.geographic_region_id = a.geographic_region_id
-                    OR (fvr.geographic_region_id IS NULL AND a.geographic_region_id IS NULL)
-                )
-            LEFT JOIN last_verified_rows lvr
-                ON lvr.taxon_id = a.taxon_id
-                AND (
-                    lvr.geographic_region_id = a.geographic_region_id
-                    OR (lvr.geographic_region_id IS NULL AND a.geographic_region_id IS NULL)
-                )'
+            GROUP BY
+                a.taxon_id,
+                a.geographic_region_id,
+                a.occurrences_count,
+                a.grid_square_count,
+                a.first_record_date,
+                a.last_record_date,
+                a.first_verified_record_date,
+                a.last_verified_record_date'
         )->getResultArray();
+
+        return $this->addBoundaryOccurrenceDetails($rows);
+    }
+
+    /**
+     * Return the ordered rank and exact batches used by the derived import.
+     *
+     * @return array<int, array{columns: array<int, string>, include_exact: bool}> Batches.
+     */
+    private function statBatches(): array
+    {
+        $batches = array_map(
+            static fn (string $column): array => ['columns' => [$column], 'include_exact' => false],
+            $this->reportingColumns(),
+        );
+        $batches[] = ['columns' => [], 'include_exact' => true];
+
+        return $batches;
+    }
+
+    /**
+     * Add recorder and verified boundary details selected by the aggregate query.
+     *
+     * @param array<int, array<string, mixed>> $rows Aggregate rows.
+     *
+     * @return array<int, array<string, mixed>> Rows with record details populated.
+     */
+    private function addBoundaryOccurrenceDetails(array $rows): array
+    {
+        if ($rows === []) {
+            return [];
+        }
+
+        $occurrenceIds = [];
+        foreach ($rows as $row) {
+            foreach (['first_occurrence_id', 'last_occurrence_id', 'first_verified_occurrence_id', 'last_verified_occurrence_id'] as $field) {
+                $occurrenceId = (int) ($row[$field] ?? 0);
+                if ($occurrenceId > 0) {
+                    $occurrenceIds[$occurrenceId] = $occurrenceId;
+                }
+            }
+        }
+
+        $details = [];
+        if ($occurrenceIds !== []) {
+            $db = db_connect();
+            $details = $db->table('occurrences')
+                ->select('id, COALESCE(from_date, to_date) AS record_date, COALESCE(TRIM(recorded_by), "") AS recorded_by')
+                ->whereIn('id', array_values($occurrenceIds))
+                ->get()
+                ->getResultArray();
+            $details = array_column($details, null, 'id');
+        }
+
+        foreach ($rows as &$row) {
+            $first = $details[(int) ($row['first_occurrence_id'] ?? 0)] ?? [];
+            $last = $details[(int) ($row['last_occurrence_id'] ?? 0)] ?? [];
+            $firstVerified = $details[(int) ($row['first_verified_occurrence_id'] ?? 0)] ?? $first;
+            $lastVerified = $details[(int) ($row['last_verified_occurrence_id'] ?? 0)] ?? $last;
+
+            $row['first_recorder'] = (string) ($first['recorded_by'] ?? '');
+            $row['last_recorder'] = (string) ($last['recorded_by'] ?? '');
+            $row['first_verified_record_date'] = $firstVerified['record_date'] ?? $row['first_record_date'];
+            $row['last_verified_record_date'] = $lastVerified['record_date'] ?? $row['last_record_date'];
+            $row['first_verified_recorder'] = (string) ($firstVerified['recorded_by'] ?? $row['first_recorder']);
+            $row['last_verified_recorder'] = (string) ($lastVerified['recorded_by'] ?? $row['last_recorder']);
+
+            unset(
+                $row['first_occurrence_id'],
+                $row['last_occurrence_id'],
+                $row['first_verified_occurrence_id'],
+                $row['last_verified_occurrence_id'],
+            );
+        }
+        unset($row);
+
+        return $rows;
     }
 
     /**
@@ -534,23 +556,25 @@ class TaxonStatsService
      * @param array<int, string> $columns Reporting projection columns.
      * @return string SQL for the scoped occurrence CTE body.
      */
-    private function scopedOccurrenceSql(string $prefix, array $columns): string
+    private function scopedOccurrenceSql(string $prefix, array $columns, bool $includeExact = true): string
     {
-        $exactCondition = 'ao.is_reporting = 0';
-        $selects = [
-            'SELECT ao.occurrence_id, ao.taxon_id, gro.geographic_region_id,
-                ao.record_date, ao.grid_ref_2km, ao.recorded_by,
-                ao.identification_verification_status
-             FROM active_occurrences ao
-             INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
-                ON gro.occurrence_id = ao.occurrence_id
-             WHERE ' . $exactCondition,
-            'SELECT ao.occurrence_id, ao.taxon_id, NULL AS geographic_region_id,
-                ao.record_date, ao.grid_ref_2km, ao.recorded_by,
-                ao.identification_verification_status
-             FROM active_occurrences ao
-             WHERE ' . $exactCondition,
-        ];
+        $selects = [];
+        if ($includeExact) {
+            $selects = [
+                'SELECT ao.occurrence_id, ao.taxon_id, gro.geographic_region_id,
+                    ao.record_date, ao.grid_ref_2km, ao.recorded_by,
+                    ao.identification_verification_status
+                 FROM active_occurrences ao
+                 INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
+                    ON gro.occurrence_id = ao.occurrence_id
+                 WHERE ao.is_reporting = 0',
+                'SELECT ao.occurrence_id, ao.taxon_id, NULL AS geographic_region_id,
+                    ao.record_date, ao.grid_ref_2km, ao.recorded_by,
+                    ao.identification_verification_status
+                 FROM active_occurrences ao
+                 WHERE ao.is_reporting = 0',
+            ];
+        }
 
         foreach ($columns as $column) {
             $selects[] = 'SELECT ao.occurrence_id, ao.' . $column . ' AS taxon_id,

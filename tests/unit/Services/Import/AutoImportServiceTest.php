@@ -27,6 +27,18 @@ final class AutoImportOffsetModelDouble extends ImportOffsetModel
     {
         return $this->completion[$sourceKey] ?? false;
     }
+
+    /**
+     * Return whether a configured completion state exists.
+     *
+     * @param string $sourceKey Task source key.
+     *
+     * @return bool Whether the test double has state for the task.
+     */
+    public function hasSourceKey(string $sourceKey): bool
+    {
+        return array_key_exists($sourceKey, $this->completion);
+    }
 }
 
 /**

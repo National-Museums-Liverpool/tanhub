@@ -87,7 +87,10 @@ class DerivedImportRunner
                 : 'failed';
 
             if (! $dryRun) {
-                $importOffsetModel->setCompletion($sourceKey, $status === 'success');
+                $importOffsetModel->setCompletion(
+                    $sourceKey,
+                    $status === 'success' && (($result['has_more'] ?? false) !== true),
+                );
             }
 
             $importRunModel->update($runId, [

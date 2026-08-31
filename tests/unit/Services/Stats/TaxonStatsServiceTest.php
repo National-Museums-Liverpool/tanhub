@@ -20,6 +20,7 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $prefix = $this->db->getPrefix();
 
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_stats');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'import_offsets');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_year_stats');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'geographic_regions_occurrences');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'occurrences');
@@ -95,6 +96,16 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             last_verified_recorder VARCHAR(255) NOT NULL
         )');
 
+        $this->db->query('CREATE TABLE ' . $prefix . 'import_offsets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_key VARCHAR(64) NOT NULL UNIQUE,
+            next_offset INTEGER NOT NULL DEFAULT 0,
+            next_checkpoint VARCHAR(255) NULL,
+            is_complete INTEGER NOT NULL DEFAULT 0,
+            created_at DATETIME NULL,
+            updated_at DATETIME NULL
+        )');
+
         $this->db->query('CREATE TABLE ' . $prefix . 'taxon_year_stats (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             taxon_id INTEGER NOT NULL,
@@ -148,7 +159,7 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         ]);
 
         $service = new TaxonStatsService();
-        $counts = $service->run(false);
+        $counts = $this->runAllTaxonStatBatches($service);
 
         $this->assertSame('success', $counts['status']);
         $this->assertSame(5, $counts['inserted']);
@@ -238,7 +249,7 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             ]);
         }
 
-        $counts = (new TaxonStatsService())->run(false);
+        $counts = $this->runAllTaxonStatBatches(new TaxonStatsService());
 
         $this->assertSame('success', $counts['status']);
         $this->assertSame(100, (int) $this->findTaxonStatRow(1, null)['frequency_trend']);
@@ -294,6 +305,11 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             'geographic_region_id' => 11,
             'occurrence_id' => 100,
         ]);
+        $this->db->table('import_offsets')->insert([
+            'source_key' => 'derived-stats:taxon_stats',
+            'next_checkpoint' => '5',
+            'is_complete' => 0,
+        ]);
 
         $service = new TaxonStatsService();
         $counts = $service->run(true);
@@ -340,7 +356,7 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             'occurrence_id' => 20,
         ]);
 
-        $counts = (new TaxonStatsService())->run(false);
+        $counts = $this->runAllTaxonStatBatches(new TaxonStatsService());
 
         $this->assertSame('success', $counts['status']);
         foreach ([4, 12, 14] as $taxonId) {
@@ -367,5 +383,25 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $row = $builder->get()->getRowArray();
 
         return is_array($row) ? $row : null;
+    }
+
+    /**
+     * Run resumable taxon-stat batches until the configured ranks are complete.
+     *
+     * @param TaxonStatsService $service Taxon statistics service.
+     *
+     * @return array<string, int|string|bool> Final batch result.
+     */
+    private function runAllTaxonStatBatches(TaxonStatsService $service): array
+    {
+        $inserted = 0;
+        do {
+            $counts = $service->run(false);
+            $inserted += (int) ($counts['inserted'] ?? 0);
+        } while (($counts['has_more'] ?? false) === true);
+
+        $counts['inserted'] = $inserted;
+
+        return $counts;
     }
 }

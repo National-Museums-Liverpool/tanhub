@@ -183,6 +183,18 @@ class ImportOffsetModel extends Model
     }
 
     /**
+     * Determine whether an import offset row exists for a source key.
+     *
+     * @param string $sourceKey Source/entity tracking key.
+     *
+     * @return bool True when progress has been recorded.
+     */
+    public function hasSourceKey(string $sourceKey): bool
+    {
+        return $this->findBySourceKey($sourceKey) !== null;
+    }
+
+    /**
      * Persist completion state for a source key.
      *
      * @param string $sourceKey Source/entity tracking key.

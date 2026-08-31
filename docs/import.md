@@ -134,6 +134,11 @@ The remaining stats related imports are for processing the already collected int
 reporting outputs, e.g. count occurrence data per grid square or year. They should be run after
 any modification of the occurrence data using the `occurrences` imports.
 
+The `taxon_stats` task processes one configured reporting rank per invocation, followed by the
+exact non-reporting taxon batch. Its progress is stored in `import_offsets`, so repeated automatic
+invocations continue where the previous one stopped. Each completed batch replaces only its own
+taxon rows, leaving other completed ranks available while the refresh continues.
+
 The admin Imports page queue is transient and shows only active tasks. For execution history,
 status, and run summaries, use the `import_runs` table.
 

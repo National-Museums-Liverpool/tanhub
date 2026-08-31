@@ -131,6 +131,16 @@ class AutoImportService
 
         $now = $now ?? new DateTimeImmutable();
         $staleBefore = $now->modify('-2 hours');
+        $taxonStatsKey = 'derived-stats:taxon_stats';
+        if ($offsetModel->hasSourceKey($taxonStatsKey) && ! $offsetModel->isComplete($taxonStatsKey)) {
+            return [
+                'source_key' => $taxonStatsKey,
+                'kind' => 'derived',
+                'service' => 'taxonStatsService',
+                'reason' => 'report statistics task has an incomplete batch',
+                'last_run' => null,
+            ];
+        }
         $reportSelection = $this->leastRecentlySuccessful(self::REPORT_TASKS);
 
         if ($reportSelection['last_run'] === null || $this->isBefore($reportSelection['last_run'], $staleBefore)) {

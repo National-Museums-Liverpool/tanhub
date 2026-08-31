@@ -54,8 +54,8 @@ class AutoImportService
     private const REPORT_TASKS = [
         ['source_key' => 'derived-stats:grid_square_stats_counts', 'service' => 'gridSquareStatsCountsService'],
         ['source_key' => 'derived-stats:taxon_rarity', 'service' => 'taxonRarityService'],
-        ['source_key' => 'derived-stats:taxon_stats', 'service' => 'taxonStatsService'],
         ['source_key' => 'derived-stats:taxon_year_stats', 'service' => 'taxonYearStatsService'],
+        ['source_key' => 'derived-stats:taxon_stats', 'service' => 'taxonStatsService'],
     ];
 
     /**

@@ -414,6 +414,20 @@ final class ImportsPageTest extends CIUnitTestCase
 
         $db = db_connect();
         $db->table('import_offsets')->where('source_key', 'indicia-occurrences:occurrences')->update(['is_complete' => 1]);
+        $db->table('import_offsets')->insertBatch([
+            [
+                'source_key' => 'nbn-occurrences:occurrences',
+                'next_offset' => 0,
+                'next_checkpoint' => null,
+                'is_complete' => 1,
+            ],
+            [
+                'source_key' => 'derived-stats:taxon_year_stats',
+                'next_offset' => 0,
+                'next_checkpoint' => null,
+                'is_complete' => 1,
+            ],
+        ]);
 
         $this->authenticateAs('imports-admin-taxon-stats@example.com', 'admin');
 

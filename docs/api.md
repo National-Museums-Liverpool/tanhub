@@ -1267,7 +1267,8 @@ Examples:
 - Unique identifier: `uuid`
 - Exposed fields:
 	- `uuid`, `taxon_identifier`, `higher_geography_identifier`,
-	  `occurrences_count`, `grid_square_count`, `first_record_date`, `last_record_date`,
+	  `occurrences_count`, `grid_square_count`, `frequency_trend`, `first_record_date`,
+	  `last_record_date`,
 		`first_recorder`, `last_recorder`, `first_verified_record_date`, `last_verified_record_date`,
 		`first_verified_recorder`, `last_verified_recorder`
 - Filterable fields:
@@ -1327,6 +1328,7 @@ Examples:
 			"higher_geography_identifier": null,
 			"occurrences_count": 374,
 			"grid_square_count": 119,
+			"frequency_trend": 72,
 			"first_record_date": "1987-06-19",
 			"last_record_date": "2025-09-03",
 			"first_recorder": "J. Winter",
@@ -1378,6 +1380,7 @@ Examples:
 			"higher_geography_identifier": 13,
 			"occurrences_count": 118,
 			"grid_square_count": 34,
+			"frequency_trend": 72,
 			"first_record_date": "1999-04-12",
 			"last_record_date": "2025-08-18",
 			"first_recorder": "D. Evans",

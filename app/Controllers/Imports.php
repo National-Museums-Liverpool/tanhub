@@ -117,20 +117,20 @@ class Imports extends BaseController
             'kind' => 'occurrence',
             'supports_run' => true,
         ],
-        'derived-stats:taxon_stats' => [
-            'category' => 'Report stats',
-            'label' => 'taxon_stats',
-            'source' => null,
-            'kind' => 'derived',
-            'service' => 'taxonStatsService',
-            'supports_run' => true,
-        ],
         'derived-stats:taxon_year_stats' => [
             'category' => 'Report stats',
             'label' => 'taxon_year_stats',
             'source' => null,
             'kind' => 'derived',
             'service' => 'taxonYearStatsService',
+            'supports_run' => true,
+        ],
+        'derived-stats:taxon_stats' => [
+            'category' => 'Report stats',
+            'label' => 'taxon_stats',
+            'source' => null,
+            'kind' => 'derived',
+            'service' => 'taxonStatsService',
             'supports_run' => true,
         ],
         'derived-stats:grid_square_stats_counts' => [
@@ -188,8 +188,15 @@ class Imports extends BaseController
             'indicia-taxonomy:taxa',
             'indicia-taxonomy:taxon_names',
         ],
-        'derived-stats:taxon_stats' => ['indicia-taxonomy:taxa'],
-        'derived-stats:taxon_year_stats' => ['indicia-taxonomy:taxa'],
+        'derived-stats:taxon_stats' => [
+            'indicia-occurrences:occurrences',
+            'nbn-occurrences:occurrences',
+            'derived-stats:taxon_year_stats',
+        ],
+        'derived-stats:taxon_year_stats' => [
+            'indicia-occurrences:occurrences',
+            'nbn-occurrences:occurrences',
+        ],
         'derived-stats:grid_square_stats_counts' => [
             'indicia-taxonomy:grid_square_stats',
         ],

@@ -89,7 +89,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         }
     }
 
-    public function testRunBuildsGlobalAndRegionalRowsWithinRollingTenYears(): void
+    public function testRunBuildsGlobalAndRegionalRowsWithinNineCompletedYears(): void
     {
         $currentYear = (int) date('Y');
         $withinWindowYear = $currentYear - 2;
@@ -119,7 +119,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $counts = $service->run(false);
 
         $this->assertSame('success', $counts['status']);
-        $this->assertSame(5, (int) $counts['inserted']);
+        $this->assertSame(45, (int) $counts['inserted']);
 
         $globalTaxon1 = $this->findTaxonYearStatRow(1, null, $withinWindowYear);
         $region11Taxon1 = $this->findTaxonYearStatRow(1, 11, $withinWindowYear);
@@ -130,6 +130,11 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $this->assertNotNull($globalTaxon1);
         $this->assertSame(3, (int) $globalTaxon1['occurrences_count']);
         $this->assertSame(2, (int) $globalTaxon1['grid_square_count']);
+
+        $globalTaxon1MissingYear = $this->findTaxonYearStatRow(1, null, $currentYear - 1);
+        $this->assertNotNull($globalTaxon1MissingYear);
+        $this->assertSame(0, (int) $globalTaxon1MissingYear['occurrences_count']);
+        $this->assertSame(0, (int) $globalTaxon1MissingYear['grid_square_count']);
 
         $this->assertNotNull($region11Taxon1);
         $this->assertSame(2, (int) $region11Taxon1['occurrences_count']);
@@ -148,12 +153,14 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $outsideWindow = $this->findTaxonYearStatRow(1, 11, $outsideWindowYear);
         $this->assertNull($outsideWindow);
 
+        $this->assertCount(45, $this->db->table('taxon_year_stats')->get()->getResultArray());
+
         foreach ($this->db->table('taxon_year_stats')->get()->getResultArray() as $row) {
             $this->assertSame(36, strlen((string) $row['uuid']));
         }
     }
 
-    public function testRunDryRunDoesNotPersistChanges(): void
+    public function testRunDryRunExcludesCurrentYearAndDoesNotPersistChanges(): void
     {
         $currentYear = (int) date('Y');
 
@@ -176,7 +183,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $counts = $service->run(true);
 
         $this->assertSame('success', $counts['status']);
-        $this->assertGreaterThan(0, (int) $counts['fetched']);
+        $this->assertSame(18, (int) $counts['fetched']);
         $this->assertSame(0, $this->db->table('taxon_year_stats')->countAllResults());
     }
 
@@ -185,7 +192,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
      */
     public function testRunRollsUpNonReportingTaxonToConfiguredProjections(): void
     {
-        $currentYear = (int) date('Y');
+        $completedYear = (int) date('Y') - 1;
         $this->db->table('taxa')->insert([
             'id' => 4,
             'taxon_identifier' => 'SUBSPECIES',
@@ -206,7 +213,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             'family_id' => 12,
             'genus_id' => 13,
             'species_id' => 14,
-            'from_date' => $currentYear . '-06-01',
+            'from_date' => $completedYear . '-06-01',
             'grid_ref_2km' => 'SU20A',
             'blocked' => 0,
             'deleted_at' => null,
@@ -220,8 +227,8 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
 
         $this->assertSame('success', $counts['status']);
         foreach ([4, 12, 14] as $taxonId) {
-            $this->assertSame(1, (int) $this->findTaxonYearStatRow($taxonId, null, $currentYear)['occurrences_count']);
-            $this->assertSame(1, (int) $this->findTaxonYearStatRow($taxonId, 11, $currentYear)['occurrences_count']);
+            $this->assertSame(1, (int) $this->findTaxonYearStatRow($taxonId, null, $completedYear)['occurrences_count']);
+            $this->assertSame(1, (int) $this->findTaxonYearStatRow($taxonId, 11, $completedYear)['occurrences_count']);
         }
     }
 

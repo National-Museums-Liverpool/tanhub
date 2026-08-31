@@ -43,7 +43,7 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
         )');
 
         $rarityConfig = config(Rarity::class);
-        $rarityConfig->squareWeight = 1.0;
+        $rarityConfig->gridSquareWeight = 1.0;
         $rarityConfig->occurrenceWeight = 1.0;
     }
 
@@ -166,7 +166,7 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
     public function testRunUsesOccurrenceWeightAndIgnoresBlockedDeletedRows(): void
     {
         $rarityConfig = config(Rarity::class);
-        $rarityConfig->squareWeight = 0.0;
+        $rarityConfig->gridSquareWeight = 0.0;
         $rarityConfig->occurrenceWeight = 1.0;
 
         $this->seedTaxa([

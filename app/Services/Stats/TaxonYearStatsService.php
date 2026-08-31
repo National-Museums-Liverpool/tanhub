@@ -64,8 +64,10 @@ class TaxonYearStatsService
         $currentYear = (int) date('Y');
         $minimumYear = $currentYear - 9;
         $minimumDate = $minimumYear . '-01-01';
-        $nextYearDate = ($currentYear + 1) . '-01-01';
+        $currentYearDate = $currentYear . '-01-01';
         $driver = strtoupper((string) ($db->DBDriver ?? ''));
+        $years = range($minimumYear, $currentYear - 1);
+        $yearCte = implode(' UNION ALL ', array_fill(0, count($years), 'SELECT ? AS year'));
 
         $yearExpression = match ($driver) {
             'SQLITE3' => "CAST(strftime('%Y', record_date) AS INTEGER)",
@@ -77,7 +79,10 @@ class TaxonYearStatsService
         $scopedOccurrences = $this->scopedOccurrenceSql($prefix, $reportingColumns, $yearExpression);
 
         $rows = $db->query(
-            'WITH active_occurrences AS (
+            'WITH years AS (
+                ' . $yearCte . '
+            ),
+            active_occurrences AS (
                 SELECT
                     o.id AS occurrence_id,
                     o.taxon_id,
@@ -93,20 +98,46 @@ class TaxonYearStatsService
                     ON tr.id = t.taxon_rank_id
                 WHERE o.deleted_at IS NULL
                     AND o.blocked = 0
-                    AND COALESCE(o.from_date, o.to_date) >= ?
-                    AND COALESCE(o.from_date, o.to_date) < ?
+                    AND COALESCE(o.from_date, o.to_date) IS NOT NULL
             ),
             scoped_occurrences AS (' . $scopedOccurrences . ')
+            ,windowed_occurrences AS (
+                SELECT *
+                FROM scoped_occurrences
+                WHERE record_date >= ?
+                    AND record_date < ?
+            )
+            ,scopes AS (
+                SELECT DISTINCT taxon_id, geographic_region_id
+                FROM scoped_occurrences
+            )
+            ,aggregates AS (
+                SELECT
+                    taxon_id,
+                    geographic_region_id,
+                    year,
+                    COUNT(*) AS occurrences_count,
+                    COUNT(DISTINCT grid_ref_2km) AS grid_square_count
+                FROM windowed_occurrences
+                GROUP BY taxon_id, geographic_region_id, year
+            )
             SELECT
-                taxon_id,
-                geographic_region_id,
-                year,
-                COUNT(*) AS occurrences_count,
-                COUNT(DISTINCT grid_ref_2km) AS grid_square_count
-            FROM scoped_occurrences
-            GROUP BY taxon_id, geographic_region_id, year
-            ORDER BY taxon_id, geographic_region_id, year',
-            [$minimumDate, $nextYearDate],
+                s.taxon_id,
+                s.geographic_region_id,
+                y.year,
+                COALESCE(a.occurrences_count, 0) AS occurrences_count,
+                COALESCE(a.grid_square_count, 0) AS grid_square_count
+            FROM scopes s
+            CROSS JOIN years y
+            LEFT JOIN aggregates a
+                ON a.taxon_id = s.taxon_id
+                AND (
+                    a.geographic_region_id = s.geographic_region_id
+                    OR (a.geographic_region_id IS NULL AND s.geographic_region_id IS NULL)
+                )
+                AND a.year = y.year
+            ORDER BY s.taxon_id, s.geographic_region_id, y.year',
+            array_merge($years, [$minimumDate, $currentYearDate]),
         )->getResultArray();
 
         $result = [];
@@ -165,25 +196,25 @@ class TaxonYearStatsService
     {
         $exactCondition = 'ao.is_reporting = 0';
         $selects = [
-            'SELECT ao.occurrence_id, ao.taxon_id, gro.geographic_region_id, ' . $yearExpression . ' AS year, ao.grid_ref_2km
+            'SELECT ao.occurrence_id, ao.taxon_id, gro.geographic_region_id, ao.record_date, ' . $yearExpression . ' AS year, ao.grid_ref_2km
              FROM active_occurrences ao
              INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
                 ON gro.occurrence_id = ao.occurrence_id
              WHERE ' . $exactCondition,
-            'SELECT ao.occurrence_id, ao.taxon_id, NULL AS geographic_region_id, ' . $yearExpression . ' AS year, ao.grid_ref_2km
+            'SELECT ao.occurrence_id, ao.taxon_id, NULL AS geographic_region_id, ao.record_date, ' . $yearExpression . ' AS year, ao.grid_ref_2km
              FROM active_occurrences ao
              WHERE ' . $exactCondition,
         ];
 
         foreach ($columns as $column) {
             $selects[] = 'SELECT ao.occurrence_id, ao.' . $column . ' AS taxon_id, gro.geographic_region_id,
-                ' . $yearExpression . ' AS year, ao.grid_ref_2km
+                ao.record_date, ' . $yearExpression . ' AS year, ao.grid_ref_2km
              FROM active_occurrences ao
              INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
                 ON gro.occurrence_id = ao.occurrence_id
              WHERE ao.' . $column . ' IS NOT NULL';
             $selects[] = 'SELECT ao.occurrence_id, ao.' . $column . ' AS taxon_id, NULL AS geographic_region_id,
-                ' . $yearExpression . ' AS year, ao.grid_ref_2km
+                ao.record_date, ' . $yearExpression . ' AS year, ao.grid_ref_2km
              FROM active_occurrences ao
              WHERE ao.' . $column . ' IS NOT NULL';
         }

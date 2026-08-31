@@ -189,13 +189,19 @@ $ php spark import:indicia --source indicia --entity taxon_groups
 $ php spark import:indicia --source indicia --entity taxon_ranks
 $ php spark import:indicia --source indicia --entity taxa
 $ php spark import:indicia --source indicia --entity taxon_names
+$ php spark import:indicia --source indicia --entity occurrences
+$ php spark import:indicia --source nbn --entity occurrences
+$ php spark import:indicia --source indicia --entity taxon_year_stats
+$ php spark import:indicia --source indicia --entity taxon_stats
+$ php spark import:indicia --source indicia --entity grid_square_stats_counts
+$ php spark import:indicia --source indicia --entity taxon_rarity
 ```
 
 Repeat an individual command until it returns `Has more: no`.
 
 Mandatory parameters:
 - `--source indicia` to specify the type of server that will provide import
-  data. Currently only supports indicia.
+  data. Currently only supports indicia, or nbn for occurrences.
 - `--entity n` - set to the name of the entity that you want to import, as per
   the examples above.
 
@@ -313,7 +319,7 @@ The task:
   `occurrences.blocked = 0`)
 - counts distinct active 2km grid squares per taxon from `occurrences.grid_ref_2km`
 - ranks taxa from low to high for each metric within each rarity group
-- combines those ranks using configurable weights from `rarity.squareWeight`
+- combines those ranks using configurable weights from `rarity.gridSquareWeight`
   and `rarity.occurrenceWeight`
 - assigns categories `1..5` from rarest to commonest within each rarity group
 
@@ -323,13 +329,13 @@ Optional parameters:
 
 Configuration:
 
-- `rarity.squareWeight` controls the contribution from unique 2km squares.
+- `rarity.gridSquareWeight` controls the contribution from unique 2km squares.
 - `rarity.occurrenceWeight` controls the contribution from total active occurrences.
 
 Example `env` overrides:
 
 ```dotenv
-rarity.squareWeight = 1.0
+rarity.gridSquareWeight = 1.0
 rarity.occurrenceWeight = 1.0
 ```
 
@@ -371,7 +377,31 @@ The task:
   region
 - counts distinct active 2km grid squares per taxon and year globally and by
   region
-- includes only a rolling ten-year window (current year and previous nine)
+- includes the nine completed calendar years before the current year
+- stores a zero-valued row where a discovered taxon and scope has no records in
+  a year within the window
+
+### Derived taxon frequency trends
+
+The taxon stats task also calculates `frequency_trend` for species rows. It uses the
+zero-filled annual statistics for the nine completed years before the current year.
+Subspecies and other lower-rank records contribute through the existing species projection.
+
+For each species, globally and independently within each geographic region, the task:
+
+- calculates the least-squares slope for annual occupied 2km squares
+- calculates the least-squares slope for annual occurrence records
+- ranks each slope from lowest to highest using dense ranks, so equal slopes share a rank
+- combines the ranks using `taxonFrequencyTrend.gridSquareWeight` and `taxonFrequencyTrend.occurrenceWeight`
+- uses the weighted signed slopes to determine whether a species is increasing, decreasing,
+  or stable
+- assigns stable species `50`, distributes decreasing species from `0` to `50`, and distributes
+  increasing species from `50` to `100`
+- preserves equal combined ranks as equal trend values
+
+The most declining species in a scope receives `0`, and the most increasing receives `100`.
+Non-species rows remain `NULL`. If all species in a scope are stable, they all receive `50`.
+The task must run after `taxon_year_stats`, which must run after both occurrence imports.
 
 ### Verify derived counts
 

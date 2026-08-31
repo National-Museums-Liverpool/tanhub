@@ -34,7 +34,7 @@ class TaxonYearStats extends BaseCommand
      *
      * @var string
      */
-    protected $description = 'Recompute taxon_year_stats from active occurrences for the latest ten years.';
+    protected $description = 'Recompute taxon_year_stats from active occurrences for the latest nine completed years.';
 
     /**
      * The command's usage description for the --help Spark option.

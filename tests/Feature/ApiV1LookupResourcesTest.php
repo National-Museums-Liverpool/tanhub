@@ -611,6 +611,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
         $this->assertSame(1, $json['meta']['count']);
         $this->assertSame('NHMSYS0021054498', $json['data'][0]['taxon_identifier']);
+        $this->assertArrayHasKey('frequency_trend', $json['data'][0]);
     }
 
     public function testTaxonStatsShowReturnsNotFoundForBlockedTaxonStats(): void
@@ -1384,6 +1385,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             geographic_region_id INTEGER NULL,
             occurrences_count INTEGER NOT NULL DEFAULT 0,
             grid_square_count INTEGER NOT NULL DEFAULT 0,
+            frequency_trend INTEGER NULL DEFAULT NULL,
             first_record_date DATE NOT NULL,
             last_record_date DATE NOT NULL,
             first_recorder VARCHAR(255) NOT NULL,

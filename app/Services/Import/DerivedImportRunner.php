@@ -2,6 +2,7 @@
 
 namespace App\Services\Import;
 
+use App\Models\ImportOffsetModel;
 use App\Models\ImportRunModel;
 use RuntimeException;
 use Throwable;
@@ -23,11 +24,15 @@ class DerivedImportRunner
     /**
      * Create a derived import runner.
      *
-     * @param ImportRunModel|null $importRunModel Import run history model; resolved
-     *                                            from the container when null.
+     * @param ImportRunModel|null   $importRunModel   Import run history model; resolved from
+     *                                                the container when null.
+     * @param ImportOffsetModel|null $importOffsetModel Task completion model; resolved from
+     *                                                   the container when null.
      */
-    public function __construct(private readonly ?ImportRunModel $importRunModel = null)
-    {
+    public function __construct(
+        private readonly ?ImportRunModel $importRunModel = null,
+        private readonly ?ImportOffsetModel $importOffsetModel = null,
+    ) {
     }
 
     /**
@@ -66,6 +71,7 @@ class DerivedImportRunner
         }
 
         $importRunModel = $this->importRunModel ?? model(ImportRunModel::class);
+        $importOffsetModel = $this->importOffsetModel ?? model(ImportOffsetModel::class);
         $runId = (int) $importRunModel->insert([
             'source_key' => $sourceKey,
             'source_abbr' => 'LOCAL',
@@ -79,6 +85,10 @@ class DerivedImportRunner
             $status = strtolower((string) ($result['status'] ?? 'success')) === 'success'
                 ? 'success'
                 : 'failed';
+
+            if (! $dryRun) {
+                $importOffsetModel->setCompletion($sourceKey, $status === 'success');
+            }
 
             $importRunModel->update($runId, [
                 'status' => $status,
@@ -94,6 +104,10 @@ class DerivedImportRunner
 
             return $result;
         } catch (Throwable $exception) {
+            if (! $dryRun) {
+                $importOffsetModel->setCompletion($sourceKey, false);
+            }
+
             $importRunModel->update($runId, [
                 'status' => 'failed',
                 'error_count' => 1,

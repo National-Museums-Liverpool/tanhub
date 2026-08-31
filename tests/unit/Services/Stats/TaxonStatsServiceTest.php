@@ -20,6 +20,7 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $prefix = $this->db->getPrefix();
 
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_stats');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_year_stats');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'geographic_regions_occurrences');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'occurrences');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxa');
@@ -82,6 +83,7 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             geographic_region_id INTEGER NULL,
             occurrences_count INTEGER NOT NULL DEFAULT 0,
             grid_square_count INTEGER NOT NULL DEFAULT 0,
+            frequency_trend INTEGER NULL DEFAULT NULL,
             first_record_date DATE NOT NULL,
             last_record_date DATE NOT NULL,
             first_recorder VARCHAR(255) NOT NULL,
@@ -90,6 +92,15 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             last_verified_record_date DATE NOT NULL,
             first_verified_recorder VARCHAR(255) NOT NULL,
             last_verified_recorder VARCHAR(255) NOT NULL
+        )');
+
+        $this->db->query('CREATE TABLE ' . $prefix . 'taxon_year_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            taxon_id INTEGER NOT NULL,
+            geographic_region_id INTEGER NULL,
+            year INTEGER NOT NULL,
+            occurrences_count INTEGER NOT NULL DEFAULT 0,
+            grid_square_count INTEGER NOT NULL DEFAULT 0
         )');
 
         foreach ([
@@ -182,6 +193,57 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         }
     }
 
+    public function testRunCalculatesIncreasingAndDecreasingFrequencyTrends(): void
+    {
+        $currentYear = (int) date('Y');
+        $years = range($currentYear - 9, $currentYear - 1);
+
+        $this->db->table('taxa')->insert([
+            'id' => 4,
+            'taxon_identifier' => 'TX-4',
+            'taxon_rank_id' => 1,
+            'order_id' => 4,
+            'superfamily_id' => 4,
+            'family_id' => 4,
+            'genus_id' => 4,
+            'species_id' => 4,
+            'blocked' => 0,
+            'deleted_at' => null,
+        ]);
+
+        $this->db->table('occurrences')->insertBatch([
+            ['id' => 30, 'taxon_id' => 1, 'from_date' => ($currentYear - 1) . '-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU30A', 'recorded_by' => 'Increasing', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 31, 'taxon_id' => 2, 'from_date' => ($currentYear - 1) . '-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU31A', 'recorded_by' => 'Decreasing', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 32, 'taxon_id' => 4, 'from_date' => ($currentYear - 1) . '-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU32A', 'recorded_by' => 'Stable', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
+        ]);
+        $this->db->table('geographic_regions_occurrences')->insertBatch([
+            ['geographic_region_id' => 11, 'occurrence_id' => 30],
+            ['geographic_region_id' => 11, 'occurrence_id' => 31],
+            ['geographic_region_id' => 11, 'occurrence_id' => 32],
+        ]);
+
+        foreach ($years as $index => $year) {
+            $this->db->table('taxon_year_stats')->insertBatch([
+                ['taxon_id' => 1, 'geographic_region_id' => null, 'year' => $year, 'occurrences_count' => $index + 1, 'grid_square_count' => $index + 1],
+                ['taxon_id' => 1, 'geographic_region_id' => 11, 'year' => $year, 'occurrences_count' => $index + 1, 'grid_square_count' => $index + 1],
+                ['taxon_id' => 2, 'geographic_region_id' => null, 'year' => $year, 'occurrences_count' => 9 - $index, 'grid_square_count' => 9 - $index],
+                ['taxon_id' => 2, 'geographic_region_id' => 11, 'year' => $year, 'occurrences_count' => 9 - $index, 'grid_square_count' => 9 - $index],
+                ['taxon_id' => 4, 'geographic_region_id' => null, 'year' => $year, 'occurrences_count' => 5, 'grid_square_count' => 5],
+                ['taxon_id' => 4, 'geographic_region_id' => 11, 'year' => $year, 'occurrences_count' => 5, 'grid_square_count' => 5],
+            ]);
+        }
+
+        $counts = (new TaxonStatsService())->run(false);
+
+        $this->assertSame('success', $counts['status']);
+        $this->assertSame(100, (int) $this->findTaxonStatRow(1, null)['frequency_trend']);
+        $this->assertSame(0, (int) $this->findTaxonStatRow(2, null)['frequency_trend']);
+        $this->assertSame(100, (int) $this->findTaxonStatRow(1, 11)['frequency_trend']);
+        $this->assertSame(0, (int) $this->findTaxonStatRow(2, 11)['frequency_trend']);
+        $this->assertSame(50, (int) $this->findTaxonStatRow(4, null)['frequency_trend']);
+        $this->assertSame(50, (int) $this->findTaxonStatRow(4, 11)['frequency_trend']);
+    }
+
     public function testRunDryRunDoesNotPersistChanges(): void
     {
         $this->db->table('occurrences')->insert([
@@ -253,6 +315,7 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             $this->assertSame(1, (int) $this->findTaxonStatRow($taxonId, null)['occurrences_count']);
             $this->assertSame(1, (int) $this->findTaxonStatRow($taxonId, 11)['occurrences_count']);
         }
+        $this->assertNull($this->findTaxonStatRow(4, null)['frequency_trend']);
     }
 
     /**

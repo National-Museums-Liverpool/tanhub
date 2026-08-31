@@ -2,6 +2,8 @@
 
 namespace App\Services\Stats;
 
+use Config\TaxonFrequencyTrend;
+
 /**
  * Recomputes taxon_stats derived aggregates from active occurrences.
  */
@@ -232,6 +234,210 @@ class TaxonStatsService
     }
 
     /**
+     * Calculate frequency trends for species in each global or regional scope.
+     *
+     * @return array<string, int> Trend values keyed by taxon and region.
+     */
+    private function frequencyTrends(): array
+    {
+        $db = db_connect();
+        $prefix = $db->getPrefix();
+        $rows = $db->query(
+            'SELECT
+                tys.taxon_id,
+                tys.geographic_region_id,
+                tys.year,
+                tys.occurrences_count,
+                tys.grid_square_count
+            FROM ' . $prefix . 'taxon_year_stats tys
+            INNER JOIN ' . $prefix . 'taxa t
+                ON t.id = tys.taxon_id
+                AND t.deleted_at IS NULL
+                AND t.blocked = 0
+                AND t.species_id = t.id
+            ORDER BY tys.taxon_id, tys.geographic_region_id, tys.year'
+        )->getResultArray();
+
+        $scopes = [];
+
+        foreach ($rows as $row) {
+            $taxonId = (int) ($row['taxon_id'] ?? 0);
+            $regionId = $this->nullableInt($row['geographic_region_id'] ?? null);
+            $year = (int) ($row['year'] ?? 0);
+
+            if ($taxonId <= 0 || $year <= 0) {
+                continue;
+            }
+
+            $scopeKey = $this->scopeKey($taxonId, $regionId);
+            $scopes[$scopeKey]['taxon_id'] = $taxonId;
+            $scopes[$scopeKey]['geographic_region_id'] = $regionId;
+            $scopes[$scopeKey]['years'][$year] = [
+                'grid_square_count' => max(0, (int) ($row['grid_square_count'] ?? 0)),
+                'occurrences_count' => max(0, (int) ($row['occurrences_count'] ?? 0)),
+            ];
+        }
+
+        $config = config(TaxonFrequencyTrend::class);
+        $trends = [];
+        $groupedScopes = [];
+
+        foreach ($scopes as $scope) {
+            $scopeKey = $this->scopeKey((int) $scope['taxon_id'], $scope['geographic_region_id']);
+            $groupKey = (string) ($scope['geographic_region_id'] ?? 'global');
+            $groupedScopes[$groupKey][$scopeKey] = $scope;
+        }
+
+        foreach ($groupedScopes as $scopeRows) {
+            $scoredRows = [];
+
+            foreach ($scopeRows as $scopeKey => $scope) {
+                $squareSeries = [];
+                $occurrenceSeries = [];
+
+                foreach ($scope['years'] as $year => $values) {
+                    $squareSeries[(int) $year] = (int) $values['grid_square_count'];
+                    $occurrenceSeries[(int) $year] = (int) $values['occurrences_count'];
+                }
+
+                $scoredRows[$scopeKey] = [
+                    'taxon_id' => (int) $scope['taxon_id'],
+                    'geographic_region_id' => $scope['geographic_region_id'],
+                    'square_slope' => $this->slope($squareSeries),
+                    'occurrence_slope' => $this->slope($occurrenceSeries),
+                ];
+            }
+
+            $squareRanks = $this->denseFloatRanks($scoredRows, 'square_slope');
+            $occurrenceRanks = $this->denseFloatRanks($scoredRows, 'occurrence_slope');
+            $gridSquareWeight = (float) $config->gridSquareWeight;
+            $occurrenceWeight = (float) $config->occurrenceWeight;
+            $totalWeight = $gridSquareWeight + $occurrenceWeight;
+
+            foreach ($scoredRows as $scopeKey => &$scoredRow) {
+                $scoredRow['combined_rank'] = ($squareRanks[$scopeKey] * $gridSquareWeight)
+                    + ($occurrenceRanks[$scopeKey] * $occurrenceWeight);
+                $scoredRow['direction'] = (($scoredRow['square_slope'] * $gridSquareWeight)
+                    + ($scoredRow['occurrence_slope'] * $occurrenceWeight)) / $totalWeight;
+            }
+            unset($scoredRow);
+
+            $positive = array_filter($scoredRows, static fn (array $row): bool => $row['direction'] > 0);
+            $negative = array_filter($scoredRows, static fn (array $row): bool => $row['direction'] < 0);
+
+            $this->assignDirectionalTrends($trends, $positive, 50, 100);
+            $this->assignDirectionalTrends($trends, $negative, 0, 50);
+
+            foreach ($scoredRows as $scopeKey => $scoredRow) {
+                if ($scoredRow['direction'] === 0.0) {
+                    $trends[$scopeKey] = 50;
+                }
+            }
+        }
+
+        return $trends;
+    }
+
+    /**
+     * Calculate the least-squares slope for a time series.
+     *
+     * @param array<int, int> $series Values keyed by year.
+     *
+     * @return float Slope per year.
+     */
+    private function slope(array $series): float
+    {
+        $count = count($series);
+
+        if ($count < 2) {
+            return 0.0;
+        }
+
+        $meanX = array_sum(array_keys($series)) / $count;
+        $meanY = array_sum($series) / $count;
+        $numerator = 0.0;
+        $denominator = 0.0;
+
+        foreach ($series as $year => $value) {
+            $xDifference = $year - $meanX;
+            $numerator += $xDifference * ($value - $meanY);
+            $denominator += $xDifference * $xDifference;
+        }
+
+        return $denominator === 0.0 ? 0.0 : $numerator / $denominator;
+    }
+
+    /**
+     * Compute dense ascending ranks for a floating-point metric.
+     *
+     * @param array<string, array<string, mixed>> $rows  Rows to rank.
+     * @param string                              $metric Metric key.
+     *
+     * @return array<string, int> Ranks keyed by scope.
+     */
+    private function denseFloatRanks(array $rows, string $metric): array
+    {
+        $values = array_map(static fn (array $row): float => (float) $row[$metric], $rows);
+        $uniqueValues = array_values(array_unique($values, SORT_REGULAR));
+        sort($uniqueValues, SORT_NUMERIC);
+        $ranks = [];
+
+        foreach ($rows as $scopeKey => $row) {
+            $value = (float) $row[$metric];
+            $rank = array_search($value, $uniqueValues, true);
+            $ranks[$scopeKey] = ($rank === false ? 0 : $rank) + 1;
+        }
+
+        return $ranks;
+    }
+
+    /**
+     * Map one directional group onto its half of the frequency trend scale.
+     *
+     * @param array<string, int>                  $trends Destination trend values.
+     * @param array<string, array<string, mixed>> $rows   Directional scored rows.
+     * @param int                                 $minimum Lower scale endpoint.
+     * @param int                                 $maximum Upper scale endpoint.
+     *
+     * @return void
+     */
+    private function assignDirectionalTrends(array &$trends, array $rows, int $minimum, int $maximum): void
+    {
+        if ($rows === []) {
+            return;
+        }
+
+        $scores = array_map(static fn (array $row): float => (float) $row['combined_rank'], $rows);
+        $minimumScore = min($scores);
+        $maximumScore = max($scores);
+
+        foreach ($rows as $scopeKey => $row) {
+            if ($minimumScore === $maximumScore) {
+                $trend = $maximum > 50 ? $maximum : $minimum;
+            } else {
+                $position = ((float) $row['combined_rank'] - $minimumScore)
+                    / ($maximumScore - $minimumScore);
+                $trend = (int) round($minimum + ($position * ($maximum - $minimum)));
+            }
+
+            $trends[$scopeKey] = max(0, min(100, $trend));
+        }
+    }
+
+    /**
+     * Build a stable key for a taxon and global or regional scope.
+     *
+     * @param int      $taxonId   Taxon identifier.
+     * @param int|null $regionId Geographic region identifier.
+     *
+     * @return string Scope key.
+     */
+    private function scopeKey(int $taxonId, ?int $regionId): string
+    {
+        return $taxonId . '|' . ($regionId ?? 'global');
+    }
+
+    /**
      * Build the exact and reporting-projection occurrence scope.
      *
      * @param string             $prefix Database table prefix.
@@ -285,6 +491,7 @@ class TaxonStatsService
     {
         $db = db_connect();
         $payload = [];
+        $frequencyTrends = $this->frequencyTrends();
 
         foreach ($rows as $row) {
             $taxonId = (int) ($row['taxon_id'] ?? 0);
@@ -298,6 +505,7 @@ class TaxonStatsService
                 'uuid' => $this->stableUuid($taxonId . '|' . ($geographicRegionId ?? 'global')),
                 'taxon_id' => $taxonId,
                 'geographic_region_id' => $geographicRegionId,
+                'frequency_trend' => $frequencyTrends[$this->scopeKey($taxonId, $geographicRegionId)] ?? null,
                 'occurrences_count' => max(0, (int) ($row['occurrences_count'] ?? 0)),
                 'grid_square_count' => max(0, (int) ($row['grid_square_count'] ?? 0)),
                 'first_record_date' => (string) ($row['first_record_date'] ?? ''),

@@ -23,10 +23,17 @@
                     <?= csrf_field() ?>
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label class="form-label" for="name">Administrator name</label>
-                            <input class="form-control<?= isset($errors['name']) ? ' is-invalid' : '' ?>" id="name" name="name" type="text" value="<?= esc(old('name')) ?>" autocomplete="name" placeholder="Jane Doe">
-                            <?php if (isset($errors['name'])): ?>
-                                <div class="invalid-feedback d-block"><?= esc($errors['name']) ?></div>
+                            <label class="form-label" for="first_name">First name</label>
+                            <input class="form-control<?= isset($errors['first_name']) ? ' is-invalid' : '' ?>" id="first_name" name="first_name" type="text" value="<?= esc(old('first_name')) ?>" autocomplete="given-name" placeholder="Jane">
+                            <?php if (isset($errors['first_name'])): ?>
+                                <div class="invalid-feedback d-block"><?= esc($errors['first_name']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="last_name">Last name</label>
+                            <input class="form-control<?= isset($errors['last_name']) ? ' is-invalid' : '' ?>" id="last_name" name="last_name" type="text" value="<?= esc(old('last_name')) ?>" autocomplete="family-name" placeholder="Doe">
+                            <?php if (isset($errors['last_name'])): ?>
+                                <div class="invalid-feedback d-block"><?= esc($errors['last_name']) ?></div>
                             <?php endif; ?>
                         </div>
                         <div class="col-md-6">

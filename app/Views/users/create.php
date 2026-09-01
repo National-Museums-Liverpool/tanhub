@@ -22,6 +22,16 @@
                     <?= csrf_field() ?>
                     <div class="row g-3">
                         <div class="col-md-6">
+                            <label class="form-label" for="first_name">First name</label>
+                            <input class="form-control<?= isset($errors['first_name']) ? ' is-invalid' : '' ?>" id="first_name" name="first_name" type="text" value="<?= esc(old('first_name')) ?>" autocomplete="given-name">
+                            <?php if (isset($errors['first_name'])): ?><div class="invalid-feedback d-block"><?= esc($errors['first_name']) ?></div><?php endif; ?>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="last_name">Last name</label>
+                            <input class="form-control<?= isset($errors['last_name']) ? ' is-invalid' : '' ?>" id="last_name" name="last_name" type="text" value="<?= esc(old('last_name')) ?>" autocomplete="family-name">
+                            <?php if (isset($errors['last_name'])): ?><div class="invalid-feedback d-block"><?= esc($errors['last_name']) ?></div><?php endif; ?>
+                        </div>
+                        <div class="col-md-6">
                             <label class="form-label" for="username">Username</label>
                             <input class="form-control<?= isset($errors['username']) ? ' is-invalid' : '' ?>" id="username" name="username" type="text" maxlength="30" value="<?= esc(old('username')) ?>" autocomplete="username">
                             <?php if (isset($errors['username'])): ?>

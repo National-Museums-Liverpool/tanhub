@@ -32,6 +32,8 @@ $routes->get('users/create', 'Users::create', ['filter' => ['session', 'group:ad
 $routes->post('users/create', 'Users::store', ['filter' => ['session', 'group:admin']]);
 $routes->get('users/(:num)', 'Users::details/$1', ['filter' => ['session', 'group:admin']]);
 $routes->post('users/(:num)', 'Users::update/$1', ['filter' => ['session', 'group:admin']]);
+$routes->get('account', 'Account::index', ['filter' => 'session']);
+$routes->post('account', 'Account::update', ['filter' => 'session']);
 $routes->get('imports', 'Imports::index', ['filter' => ['session', 'group:admin,manager']]);
 $routes->post('imports/run', 'Imports::run', ['filter' => ['session', 'group:admin,manager']]);
 

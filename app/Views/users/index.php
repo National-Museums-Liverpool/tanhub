@@ -63,7 +63,7 @@
                 <thead>
                 <tr>
                     <th scope="col"><a href="<?= esc($sortUrl('id')) ?>">ID<?= esc($sortIndicator('id')) ?></a></th>
-                    <th scope="col"><a href="<?= esc($sortUrl('username')) ?>">Username<?= esc($sortIndicator('username')) ?></a></th>
+                    <th scope="col"><a href="<?= esc($sortUrl('username')) ?>">Name<?= esc($sortIndicator('username')) ?></a></th>
                     <th scope="col">Email</th>
                     <th scope="col"><a href="<?= esc($sortUrl('active')) ?>">Active<?= esc($sortIndicator('active')) ?></a></th>
                     <th scope="col">Groups</th>
@@ -80,7 +80,10 @@
                     <?php foreach ($page['users'] as $user): ?>
                         <tr>
                             <td><?= esc((string) $user->id) ?></td>
-                            <td><?= esc((string) $user->username) ?></td>
+                            <td>
+                                <?= esc(trim((string) (($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: (string) $user->username)) ?><br>
+                                <small class="text-muted"><?= esc((string) $user->username) ?></small>
+                            </td>
                             <td><?= esc((string) ($user->getEmail() ?? '')) ?></td>
                             <td><?= ! empty($user->active) ? 'Yes' : 'No' ?></td>
                             <td><?= esc(implode(', ', $user->getGroups() ?? [])) ?></td>

@@ -24,6 +24,16 @@
                 <form action="<?= esc(site_url('users/' . $page['managedUser']->id)) ?>" method="post" novalidate>
                     <?= csrf_field() ?>
                     <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="first_name">First name</label>
+                            <input class="form-control<?= isset($errors['first_name']) ? ' is-invalid' : '' ?>" id="first_name" name="first_name" type="text" value="<?= esc(old('first_name', $page['firstName'])) ?>" autocomplete="given-name">
+                            <?php if (isset($errors['first_name'])): ?><div class="invalid-feedback d-block"><?= esc($errors['first_name']) ?></div><?php endif; ?>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="last_name">Last name</label>
+                            <input class="form-control<?= isset($errors['last_name']) ? ' is-invalid' : '' ?>" id="last_name" name="last_name" type="text" value="<?= esc(old('last_name', $page['lastName'])) ?>" autocomplete="family-name">
+                            <?php if (isset($errors['last_name'])): ?><div class="invalid-feedback d-block"><?= esc($errors['last_name']) ?></div><?php endif; ?>
+                        </div>
                         <div class="col-md-4">
                             <label class="form-label" for="id">
                                 ID

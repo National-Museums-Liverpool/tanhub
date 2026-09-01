@@ -83,6 +83,8 @@ class Users extends BaseController
     public function store(): RedirectResponse
     {
         $rules = [
+            'first_name' => 'required|min_length[1]|max_length[100]',
+            'last_name' => 'required|min_length[1]|max_length[100]',
             'username' => 'required|min_length[3]|max_length[30]|regex_match[/^[A-Za-z0-9._-]+$/]',
             'email' => 'required|valid_email|max_length[254]',
             'active' => 'required|in_list[0,1]',
@@ -96,6 +98,8 @@ class Users extends BaseController
         }
 
         $username = trim((string) $this->request->getPost('username'));
+        $firstName = trim((string) $this->request->getPost('first_name'));
+        $lastName = trim((string) $this->request->getPost('last_name'));
         $email = strtolower(trim((string) $this->request->getPost('email')));
         $active = (int) $this->request->getPost('active') === 1;
         $groups = $this->sanitizeGroups($this->request->getPost('groups'));
@@ -117,6 +121,8 @@ class Users extends BaseController
 
         $user = $users->createNewUser([
             'username' => $username,
+            'first_name' => $firstName,
+            'last_name' => $lastName,
             'email' => $email,
             'password' => $password,
         ]);
@@ -152,6 +158,8 @@ class Users extends BaseController
             'metaDescription' => 'Edit user account settings.',
             'bodyClass' => 'app-shell auth-page',
             'managedUser' => $user,
+            'firstName' => (string) ($user->first_name ?? ''),
+            'lastName' => (string) ($user->last_name ?? ''),
             'email' => (string) ($user->getEmail() ?? ''),
             'groups' => $user->getGroups() ?? [],
             'groupOptions' => $this->allowedGroups(),
@@ -169,6 +177,8 @@ class Users extends BaseController
         $user = $this->findUser($id);
 
         $rules = [
+            'first_name' => 'required|min_length[1]|max_length[100]',
+            'last_name' => 'required|min_length[1]|max_length[100]',
             'username' => 'required|min_length[3]|max_length[30]|regex_match[/^[A-Za-z0-9._-]+$/]',
             'email' => 'required|valid_email|max_length[254]',
             'active' => 'required|in_list[0,1]',
@@ -182,6 +192,8 @@ class Users extends BaseController
         }
 
         $username = trim((string) $this->request->getPost('username'));
+        $firstName = trim((string) $this->request->getPost('first_name'));
+        $lastName = trim((string) $this->request->getPost('last_name'));
         $email = strtolower(trim((string) $this->request->getPost('email')));
         $active = (int) $this->request->getPost('active') === 1;
         $groups = $this->sanitizeGroups($this->request->getPost('groups'));
@@ -200,6 +212,8 @@ class Users extends BaseController
         }
 
         $user->username = $username;
+        $user->first_name = $firstName;
+        $user->last_name = $lastName;
         $user->email = $email;
         $user->active = $active;
 

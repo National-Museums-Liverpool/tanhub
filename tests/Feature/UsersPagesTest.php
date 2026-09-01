@@ -110,6 +110,8 @@ final class UsersPagesTest extends CIUnitTestCase
         $this->authenticateAs('admin-create@example.com', 'admin');
 
         $result = $this->post('users/create', [
+            'first_name' => 'New',
+            'last_name' => 'Blocked',
             'username' => 'new-blocked',
             'email' => 'new-blocked@example.com',
             'active' => '0',
@@ -142,6 +144,8 @@ final class UsersPagesTest extends CIUnitTestCase
         $this->assertNotNull($before);
 
         $result = $this->post('users/' . $target->id, [
+            'first_name' => 'Target',
+            'last_name' => 'Updated',
             'username' => 'target-user-updated',
             'email' => 'target-user-updated@example.com',
             'active' => '0',

@@ -59,7 +59,7 @@
                     </div>
 
                     <?php if (setting('Auth.allowMagicLinkLogins')) : ?>
-                        <p class="text-center"><?= lang('Auth.forgotPassword') ?> <a href="<?= url_to('magic-link') ?>"><?= lang('Auth.useMagicLink') ?></a></p>
+                        <p class="text-center"><a href="<?= url_to('magic-link') ?>">Forgot your password? Email me a sign-in link</a></p>
                     <?php endif ?>
 
                     <?php if (setting('Auth.allowRegistration')) : ?>

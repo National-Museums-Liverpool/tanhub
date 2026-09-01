@@ -449,6 +449,16 @@ IX* indicates compound indexes on `build_id, projection, taxon_id, geographic_re
 and `build_id, year`. These indexes support replacing a processed projection/year range and
 selecting all rows belonging to a completed build.
 
+## User profile fields
+
+CodeIgniter Shield stores login identifiers and password hashes in its authentication tables. The
+application adds `first_name` and `last_name` columns to Shield's `users` table. These profile
+fields are independent of `username`, which remains a stable login identifier and is not changed
+when a user's name changes.
+
+Authenticated users can edit these fields and change their password through `/account`. Password
+recovery is provided through Shield's one-time email magic-link flow from `/login`.
+
 ## Import utility tables
 
 The following tables are used to manage and track data import tasks.

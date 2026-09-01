@@ -71,7 +71,8 @@ class SetupAdminUser extends BaseController
     private function handleSubmit(): RedirectResponse
     {
         $rules = [
-            'name' => 'required|min_length[2]|max_length[80]',
+            'first_name' => 'required|min_length[1]|max_length[100]',
+            'last_name' => 'required|min_length[1]|max_length[100]',
             'email' => 'required|valid_email|max_length[254]',
             'password' => 'required|min_length[8]',
             'password_confirm' => 'required|matches[password]',
@@ -83,7 +84,8 @@ class SetupAdminUser extends BaseController
 
         try {
             $user = $this->createAdminUser(
-                (string) $this->request->getPost('name'),
+                (string) $this->request->getPost('first_name'),
+                (string) $this->request->getPost('last_name'),
                 (string) $this->request->getPost('email'),
                 (string) $this->request->getPost('password'),
             );
@@ -109,13 +111,14 @@ class SetupAdminUser extends BaseController
      * user is added to the default Shield group and then explicitly granted
      * the `admin` group before being activated (no email verification step).
      *
-     * @param string $name     Display name used to derive the username.
+        * @param string $firstName First name stored in the profile and used to derive the username.
+        * @param string $lastName  Last name stored in the profile and used to derive the username.
      * @param string $email    Administrator email address.
      * @param string $password Plaintext password to be hashed by Shield.
      * @return object Newly created and activated Shield user entity.
      * @throws DatabaseException If a user already exists or the created user cannot be reloaded.
      */
-    private function createAdminUser(string $name, string $email, string $password)
+    private function createAdminUser(string $firstName, string $lastName, string $email, string $password)
     {
         if ($this->hasAnyUsers()) {
             throw new DatabaseException('Setup is only available before the first account is created.');
@@ -124,11 +127,13 @@ class SetupAdminUser extends BaseController
         /** @var UserModel $users */
         $users = model(setting('Auth.userProvider'));
 
-        $username = $this->makeUsername($name, $email);
+        $username = $this->makeUsername($firstName . ' ' . $lastName, $email);
         $user = $users->createNewUser([
             'username' => $username,
             'email' => $email,
             'password' => $password,
+            'first_name' => trim($firstName),
+            'last_name' => trim($lastName),
         ]);
 
         $users->save($user);

@@ -142,7 +142,12 @@ cp env .env
    - This is the only self-service account creation step.
     - After setup, open the Users page from the menu (`/users`) when logged in as an admin to
        create and manage all other users.
+      - Each account stores first and last names separately from its username. Users can update
+         their profile and password at `/account` after signing in.
    - Public `/register` self-registration is disabled.
+
+      If a user forgets their password, the login page provides a one-time email sign-in link. This
+      requires the application email settings to be configured.
 
    When setup is complete, future homepage visits by logged-in users show a warning and link to
    `/update` whenever new migrations are pending.

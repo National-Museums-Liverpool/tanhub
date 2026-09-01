@@ -127,11 +127,11 @@ The report-stat tasks recalculate reporting data from active occurrences:
   [derived taxon rarity categories](import.md#derived-taxon-rarity-categories).
 - `taxon_stats` updates global and per-region records in `taxon_stats`. See
 -  [derived taxon stats](import.md#derived-taxon-stats), including species frequency trends.
-- `taxon_year_stats` updates rolling nine-completed-year global and per-region records in
+- `taxon_year_stats` updates configured completed-year global and per-region records in
   `taxon_year_stats`. See [derived taxon year stats](import.md#derived-taxon-year-stats).
 
 `taxon_year_stats` must complete before `taxon_stats`, since frequency trends use its
-zero-filled annual series.
+recent annual series with missing years filled during analysis.
 
 ## Table coverage and behaviour
 

@@ -264,6 +264,9 @@ class TaxonStatsService
     {
         $db = db_connect();
         $prefix = $db->getPrefix();
+        $config = config(TaxonFrequencyTrend::class);
+        $currentYear = (int) date('Y');
+        $firstYear = $currentYear - (int) $config->analysisYears;
         $rows = $db->query(
             'SELECT
                 tys.taxon_id,
@@ -280,8 +283,9 @@ class TaxonStatsService
             INNER JOIN ' . $prefix . 'taxon_ranks tr
                 ON tr.id = t.taxon_rank_id
                 AND tr.is_reporting = 1
+            WHERE tys.year >= ? AND tys.year < ?
             ORDER BY tys.taxon_id, tys.geographic_region_id, tys.year'
-        )->getResultArray();
+        , [$firstYear, $currentYear])->getResultArray();
 
         $scopes = [];
 
@@ -304,7 +308,6 @@ class TaxonStatsService
             ];
         }
 
-        $config = config(TaxonFrequencyTrend::class);
         $trends = [];
         $groupedScopes = [];
 
@@ -321,9 +324,13 @@ class TaxonStatsService
                 $squareSeries = [];
                 $occurrenceSeries = [];
 
-                foreach ($scope['years'] as $year => $values) {
-                    $squareSeries[(int) $year] = (int) $values['grid_square_count'];
-                    $occurrenceSeries[(int) $year] = (int) $values['occurrences_count'];
+                for ($year = $firstYear; $year < $currentYear; $year++) {
+                    $values = $scope['years'][$year] ?? [
+                        'grid_square_count' => 0,
+                        'occurrences_count' => 0,
+                    ];
+                    $squareSeries[$year] = (int) $values['grid_square_count'];
+                    $occurrenceSeries[$year] = (int) $values['occurrences_count'];
                 }
 
                 $squareRegression = $this->regression($squareSeries, (float) $config->recentYearHalfLife);

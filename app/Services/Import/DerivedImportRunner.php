@@ -49,7 +49,8 @@ class DerivedImportRunner
      *                            (e.g. `derived-stats:taxon_stats`).
      * @param string $serviceName CodeIgniter service name implementing the task;
      *                            must expose a `run(bool $dryRun): array` method.
-     * @param bool   $dryRun      Whether persistence is disabled for this run.
+    * @param bool   $dryRun      Whether persistence is disabled for this run.
+    * @param callable(int): void|null $onRunCreated Callback invoked with the new run ID.
      *
      * @return array<string, mixed> The derived service's result array (shape
      *                              defined by that service; commonly includes
@@ -61,7 +62,7 @@ class DerivedImportRunner
      * @throws Throwable        Any exception thrown by the underlying service,
      *                          after the run row has been marked failed.
      */
-    public function run(string $sourceKey, string $serviceName, bool $dryRun = false): array
+    public function run(string $sourceKey, string $serviceName, bool $dryRun = false, ?callable $onRunCreated = null): array
     {
         $sourceKey = trim($sourceKey);
         $serviceName = trim($serviceName);
@@ -79,6 +80,9 @@ class DerivedImportRunner
             'checkpoint' => null,
             'started_at' => date('Y-m-d H:i:s'),
         ]);
+        if ($onRunCreated !== null) {
+            $onRunCreated($runId);
+        }
 
         try {
             $result = service($serviceName)->run($dryRun);

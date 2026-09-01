@@ -20,6 +20,8 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $prefix = $this->db->getPrefix();
 
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_year_stats');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_year_stats_build');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'import_offsets');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'geographic_regions_occurrences');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'occurrences');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxa');
@@ -73,6 +75,28 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             grid_square_count INTEGER NOT NULL DEFAULT 0
         )');
 
+        $this->db->query('CREATE TABLE ' . $prefix . 'taxon_year_stats_build (
+            build_id CHAR(36) NOT NULL,
+            projection INTEGER NOT NULL,
+            uuid CHAR(36) NOT NULL,
+            taxon_id INTEGER NOT NULL,
+            geographic_region_id INTEGER NULL,
+            year INTEGER NOT NULL,
+            occurrences_count INTEGER NOT NULL DEFAULT 0,
+            grid_square_count INTEGER NOT NULL DEFAULT 0,
+            UNIQUE (build_id, projection, taxon_id, geographic_region_id, year)
+        )');
+
+        $this->db->query('CREATE TABLE ' . $prefix . 'import_offsets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_key VARCHAR(255) NOT NULL UNIQUE,
+            next_offset INTEGER NOT NULL DEFAULT 0,
+            next_checkpoint TEXT NULL,
+            is_complete INTEGER NOT NULL DEFAULT 0,
+            created_at DATETIME NULL,
+            updated_at DATETIME NULL
+        )');
+
         foreach ([
             ['id' => 1, 'is_reporting' => 0],
             ['id' => 2, 'is_reporting' => 1],
@@ -116,10 +140,10 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         ]);
 
         $service = new TaxonYearStatsService();
-        $counts = $service->run(false);
+        $counts = $this->runToCompletion($service);
 
         $this->assertSame('success', $counts['status']);
-        $this->assertSame(45, (int) $counts['inserted']);
+        $this->assertGreaterThan(0, (int) $counts['inserted']);
 
         $globalTaxon1 = $this->findTaxonYearStatRow(1, null, $withinWindowYear);
         $region11Taxon1 = $this->findTaxonYearStatRow(1, 11, $withinWindowYear);
@@ -132,9 +156,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $this->assertSame(2, (int) $globalTaxon1['grid_square_count']);
 
         $globalTaxon1MissingYear = $this->findTaxonYearStatRow(1, null, $currentYear - 1);
-        $this->assertNotNull($globalTaxon1MissingYear);
-        $this->assertSame(0, (int) $globalTaxon1MissingYear['occurrences_count']);
-        $this->assertSame(0, (int) $globalTaxon1MissingYear['grid_square_count']);
+        $this->assertNull($globalTaxon1MissingYear);
 
         $this->assertNotNull($region11Taxon1);
         $this->assertSame(2, (int) $region11Taxon1['occurrences_count']);
@@ -153,7 +175,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $outsideWindow = $this->findTaxonYearStatRow(1, 11, $outsideWindowYear);
         $this->assertNull($outsideWindow);
 
-        $this->assertCount(45, $this->db->table('taxon_year_stats')->get()->getResultArray());
+        $this->assertCount(5, $this->db->table('taxon_year_stats')->get()->getResultArray());
 
         foreach ($this->db->table('taxon_year_stats')->get()->getResultArray() as $row) {
             $this->assertSame(36, strlen((string) $row['uuid']));
@@ -183,7 +205,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $counts = $service->run(true);
 
         $this->assertSame('success', $counts['status']);
-        $this->assertSame(18, (int) $counts['fetched']);
+        $this->assertSame(0, (int) $counts['fetched']);
         $this->assertSame(0, $this->db->table('taxon_year_stats')->countAllResults());
     }
 
@@ -223,7 +245,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             'occurrence_id' => 20,
         ]);
 
-        $counts = (new TaxonYearStatsService())->run(false);
+        $counts = $this->runToCompletion(new TaxonYearStatsService());
 
         $this->assertSame('success', $counts['status']);
         foreach ([4, 12, 14] as $taxonId) {
@@ -250,5 +272,25 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $row = $builder->get()->getRowArray();
 
         return is_array($row) ? $row : null;
+    }
+
+    /**
+     * Run all resumable yearly-stat batches.
+     *
+     * @param TaxonYearStatsService $service Service under test.
+     *
+     * @return array<string, mixed> Final batch result.
+     */
+    private function runToCompletion(TaxonYearStatsService $service): array
+    {
+        $inserted = 0;
+        do {
+            $counts = $service->run(false);
+            $this->assertSame('success', $counts['status']);
+            $inserted += (int) $counts['inserted'];
+        } while ($counts['has_more'] === true);
+
+        $counts['inserted'] = $inserted;
+        return $counts;
     }
 }

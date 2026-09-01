@@ -378,15 +378,17 @@ The task:
   region
 - counts distinct active 2km grid squares per taxon and year globally and by
   region
-- includes the nine completed calendar years before the current year
-- stores a zero-valued row where a discovered taxon and scope has no records in
-  a year within the window
+- includes the configured completed calendar years before the current year
+- stores only observed taxon, scope, and year combinations; trend analysis
+  zero-fills missing years in its bounded analysis window
+- processes the rebuild in resumable year batches and publishes the staged
+  result atomically
 
 ### Derived taxon frequency trends
 
 The taxon stats task also calculates `frequency_trend` for rows at every configured reporting
-taxonomic level. It uses the zero-filled annual statistics for the nine completed years before the
-current year. Non-reporting taxa contribute through the configured reporting projections.
+taxonomic level. It uses sparse annual statistics and zero-fills missing years in the configured
+recent analysis window. Non-reporting taxa contribute through the configured reporting projections.
 
 For each reporting taxon, globally and independently within each geographic region, the task:
 

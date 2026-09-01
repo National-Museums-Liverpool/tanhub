@@ -2,284 +2,182 @@
 
 namespace App\Services\Stats;
 
+use Config\TaxonYearStats;
+
 /**
- * Recomputes taxon_year_stats derived aggregates from active occurrences.
+ * Recomputes sparse taxon_year_stats aggregates using resumable staging batches.
  */
 class TaxonYearStatsService
 {
+    private const SOURCE_KEY = 'derived-stats:taxon_year_stats';
+
     /**
-     * Recompute taxon year stats for global and regional scopes.
+     * Recompute one bounded taxon year stats batch.
      *
      * @param bool $dryRun Whether persistence is disabled for this run.
      *
-     * @return array<string, int|string>
+     * @return array<string, int|string|bool> Batch result and continuation state.
      */
     public function run(bool $dryRun = false): array
     {
-        $counts = [
-            'status' => 'success',
-            'fetched' => 0,
-            'processed' => 0,
-            'inserted' => 0,
-            'updated' => 0,
-            'not changed' => 0,
-            'skipped' => 0,
-            'errors' => 0,
-        ];
+        $counts = ['status' => 'success', 'fetched' => 0, 'processed' => 0, 'inserted' => 0,
+            'updated' => 0, 'not changed' => 0, 'skipped' => 0, 'errors' => 0, 'has_more' => false];
 
         try {
-            $rows = $this->buildRows();
-            $counts['fetched'] = count($rows);
-            $counts['processed'] = $counts['fetched'];
+            $db = db_connect();
+            $config = config(TaxonYearStats::class);
+            $columns = $this->reportingColumns();
+            $projectionCount = count($columns) + 1;
+            $years = $this->completedYears($config->historyYears);
+            $state = $this->state();
+            if ($state === null || (int) ($state['projection_count'] ?? 0) !== $projectionCount
+                || (int) ($state['first_year'] ?? 0) !== ($years[0] ?? 0)
+                || (int) ($state['last_year'] ?? 0) !== ($years[count($years) - 1] ?? 0)) {
+                $state = ['build_id' => $this->stableUuid((string) microtime(true)), 'projection' => 0,
+                    'year' => $years[0] ?? 0, 'projection_count' => $projectionCount,
+                    'first_year' => $years[0] ?? 0, 'last_year' => $years[count($years) - 1] ?? 0];
+                if (! $dryRun) {
+                    $db->table('taxon_year_stats_build')->emptyTable();
+                    $this->saveState($state);
+                }
+            }
 
-            if ($dryRun) {
+            if ($years === [] || (int) $state['projection'] >= $projectionCount) {
+                if (! $dryRun) {
+                    $this->publish((string) $state['build_id']);
+                    $this->clearState();
+                }
                 return $counts;
             }
 
-            $db = db_connect();
-            $db->table('taxon_year_stats')->emptyTable();
-
+            $projection = (int) $state['projection'];
+            $startYear = max((int) $state['year'], $years[0]);
+            $endYear = min($startYear + $config->yearsPerRun - 1, $years[count($years) - 1]);
+            $rows = $this->buildRows($projection, $columns, $startYear, $endYear, (string) $state['build_id']);
+            $counts['fetched'] = count($rows);
+            $counts['processed'] = count($rows);
+            $counts['inserted'] = count($rows);
+            $hasMore = $endYear < $years[count($years) - 1] || $projection + 1 < $projectionCount;
+            $counts['has_more'] = $hasMore;
+            if ($dryRun) {
+                return $counts;
+            }
             if ($rows !== []) {
-                $this->insertRows($rows);
-                $counts['inserted'] = count($rows);
+                $db->table('taxon_year_stats_build')
+                    ->where('build_id', (string) $state['build_id'])
+                    ->where('projection', $projection)
+                    ->where('year >=', $startYear)
+                    ->where('year <=', $endYear)
+                    ->delete();
+                $db->table('taxon_year_stats_build')->insertBatch($rows);
+            }
+            if ($hasMore) {
+                $state['projection'] = $endYear < $years[count($years) - 1] ? $projection : $projection + 1;
+                $state['year'] = $state['projection'] === $projection ? $endYear + 1 : $years[0];
+                $this->saveState($state);
+            } else {
+                $this->publish((string) $state['build_id']);
+                $this->clearState();
             }
         } catch (\Throwable $exception) {
             log_message('error', $exception->getMessage());
             $counts['status'] = 'failed';
-            $counts['errors']++;
+            $counts['errors'] = 1;
         }
 
         return $counts;
     }
 
     /**
-     * Build recomputed taxon year stats rows.
+     * Build sparse rows for one projection and year range.
      *
-     * @return array<int, array<string, int|null|string>>
+     * @param int $projection Projection index; zero is exact taxon.
+     * @param array<int, string> $columns Reporting columns.
+     * @param int $startYear Inclusive first year.
+     * @param int $endYear Inclusive last year.
+     * @param string $buildId Staging build identifier.
+     *
+     * @return array<int, array<string, int|null|string>> Aggregate rows.
      */
-    private function buildRows(): array
+    private function buildRows(int $projection, array $columns, int $startYear, int $endYear, string $buildId): array
     {
         $db = db_connect();
         $prefix = $db->getPrefix();
-        $currentYear = (int) date('Y');
-        $minimumYear = $currentYear - 9;
-        $minimumDate = $minimumYear . '-01-01';
-        $currentYearDate = $currentYear . '-01-01';
-        $driver = strtoupper((string) ($db->DBDriver ?? ''));
-        $years = range($minimumYear, $currentYear - 1);
-        $yearCte = implode(' UNION ALL ', array_fill(0, count($years), 'SELECT ? AS year'));
+        $column = $projection === 0 ? 'taxon_id' : $columns[$projection - 1];
+        $condition = $projection === 0 ? 'tr.is_reporting = 0' : 'o.' . $column . ' IS NOT NULL';
+        $yearExpression = strtoupper((string) ($db->DBDriver ?? '')) === 'SQLITE3'
+            ? "CAST(strftime('%Y', COALESCE(o.from_date, o.to_date)) AS INTEGER)" : 'YEAR(COALESCE(o.from_date, o.to_date))';
+        $base = ' FROM ' . $prefix . 'occurrences o INNER JOIN ' . $prefix . 'taxa t ON t.id = o.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0
+            INNER JOIN ' . $prefix . 'taxon_ranks tr ON tr.id = t.taxon_rank_id LEFT JOIN ' . $prefix . 'geographic_regions_occurrences gro ON gro.occurrence_id = o.id
+            WHERE o.deleted_at IS NULL AND o.blocked = 0 AND COALESCE(o.from_date, o.to_date) IS NOT NULL AND ' . $condition . ' AND ' . $yearExpression . ' BETWEEN ? AND ?';
+        $rows = $db->query('SELECT o.' . $column . ' AS taxon_id, gro.geographic_region_id, ' . $yearExpression . ' AS year, COUNT(*) AS occurrences_count, COUNT(DISTINCT NULLIF(UPPER(TRIM(o.grid_ref_2km)), "")) AS grid_square_count' . $base . ' GROUP BY o.' . $column . ', gro.geographic_region_id, ' . $yearExpression . ' UNION ALL SELECT o.' . $column . ' AS taxon_id, NULL AS geographic_region_id, ' . $yearExpression . ' AS year, COUNT(*) AS occurrences_count, COUNT(DISTINCT NULLIF(UPPER(TRIM(o.grid_ref_2km)), "")) AS grid_square_count' . $base . ' GROUP BY o.' . $column . ', ' . $yearExpression, [$startYear, $endYear, $startYear, $endYear])->getResultArray();
 
-        $yearExpression = match ($driver) {
-            'SQLITE3' => "CAST(strftime('%Y', record_date) AS INTEGER)",
-            'POSTGRE' => 'EXTRACT(YEAR FROM record_date)',
-            default => 'YEAR(record_date)',
-        };
-        $reportingColumns = $this->reportingColumns();
-        $projectionColumns = $reportingColumns === [] ? '' : ",\n                    " . implode(",\n                    ", array_map(static fn (string $column): string => 'o.' . $column, $reportingColumns));
-        $scopedOccurrences = $this->scopedOccurrenceSql($prefix, $reportingColumns, $yearExpression);
-
-        $rows = $db->query(
-            'WITH years AS (
-                ' . $yearCte . '
-            ),
-            active_occurrences AS (
-                SELECT
-                    o.id AS occurrence_id,
-                    o.taxon_id,
-                    tr.is_reporting,
-                    COALESCE(o.from_date, o.to_date) AS record_date,
-                    NULLIF(UPPER(TRIM(o.grid_ref_2km)), "") AS grid_ref_2km' . $projectionColumns . '
-                FROM ' . $prefix . 'occurrences o
-                INNER JOIN ' . $prefix . 'taxa t
-                    ON t.id = o.taxon_id
-                    AND t.deleted_at IS NULL
-                    AND t.blocked = 0
-                INNER JOIN ' . $prefix . 'taxon_ranks tr
-                    ON tr.id = t.taxon_rank_id
-                WHERE o.deleted_at IS NULL
-                    AND o.blocked = 0
-                    AND COALESCE(o.from_date, o.to_date) IS NOT NULL
-            ),
-            scoped_occurrences AS (' . $scopedOccurrences . ')
-            ,windowed_occurrences AS (
-                SELECT *
-                FROM scoped_occurrences
-                WHERE record_date >= ?
-                    AND record_date < ?
-            )
-            ,scopes AS (
-                SELECT DISTINCT taxon_id, geographic_region_id
-                FROM scoped_occurrences
-            )
-            ,aggregates AS (
-                SELECT
-                    taxon_id,
-                    geographic_region_id,
-                    year,
-                    COUNT(*) AS occurrences_count,
-                    COUNT(DISTINCT grid_ref_2km) AS grid_square_count
-                FROM windowed_occurrences
-                GROUP BY taxon_id, geographic_region_id, year
-            )
-            SELECT
-                s.taxon_id,
-                s.geographic_region_id,
-                y.year,
-                COALESCE(a.occurrences_count, 0) AS occurrences_count,
-                COALESCE(a.grid_square_count, 0) AS grid_square_count
-            FROM scopes s
-            CROSS JOIN years y
-            LEFT JOIN aggregates a
-                ON a.taxon_id = s.taxon_id
-                AND (
-                    a.geographic_region_id = s.geographic_region_id
-                    OR (a.geographic_region_id IS NULL AND s.geographic_region_id IS NULL)
-                )
-                AND a.year = y.year
-            ORDER BY s.taxon_id, s.geographic_region_id, y.year',
-            array_merge($years, [$minimumDate, $currentYearDate]),
-        )->getResultArray();
-
-        $result = [];
-
-        foreach ($rows as $row) {
-            $taxonId = (int) ($row['taxon_id'] ?? 0);
-            $regionId = $this->nullableInt($row['geographic_region_id'] ?? null);
-            $year = (int) ($row['year'] ?? 0);
-
-            if ($taxonId <= 0 || $year <= 0) {
-                continue;
-            }
-
-            $seedRegion = $regionId === null ? 'global' : (string) $regionId;
-            $result[] = [
-                'uuid' => $this->stableUuid($taxonId . '|' . $seedRegion . '|' . $year),
-                'taxon_id' => $taxonId,
-                'geographic_region_id' => $regionId,
-                'year' => $year,
-                'occurrences_count' => max(0, (int) ($row['occurrences_count'] ?? 0)),
-                'grid_square_count' => max(0, (int) ($row['grid_square_count'] ?? 0)),
-            ];
-        }
-
-        return $result;
+        return array_map(function (array $row) use ($buildId, $projection): array {
+            $taxonId = (int) $row['taxon_id'];
+            $region = $row['geographic_region_id'] === null ? 'global' : (string) $row['geographic_region_id'];
+            $year = (int) $row['year'];
+            return ['build_id' => $buildId, 'projection' => $projection, 'uuid' => $this->stableUuid($taxonId . '|' . $region . '|' . $year),
+                'taxon_id' => $taxonId, 'geographic_region_id' => $row['geographic_region_id'] === null ? null : (int) $row['geographic_region_id'],
+                'year' => $year, 'occurrences_count' => (int) $row['occurrences_count'], 'grid_square_count' => (int) $row['grid_square_count']];
+        }, $rows);
     }
 
-    /**
-     * Return configured reporting projection columns.
-     *
-     * @return array<int, string> Normalised occurrence column names.
-     */
+    /** @return array<int, int> */
+    private function completedYears(int $historyYears): array
+    {
+        $currentYear = (int) date('Y');
+        if ($historyYears > 0) {
+            return range($currentYear - $historyYears, $currentYear - 1);
+        }
+        $db = db_connect();
+        $row = $db->query('SELECT MIN(CAST(strftime("%Y", COALESCE(from_date, to_date)) AS INTEGER)) AS year FROM ' . $db->getPrefix() . 'occurrences WHERE deleted_at IS NULL AND blocked = 0 AND COALESCE(from_date, to_date) IS NOT NULL')->getRowArray();
+        $firstYear = (int) ($row['year'] ?? 0);
+        return $firstYear > 0 && $firstYear < $currentYear ? range($firstYear, $currentYear - 1) : [];
+    }
+
+    /** @return array<int, string> */
     private function reportingColumns(): array
     {
         $ranks = config('Import')->taxonRanks ?? [];
         $ranks = is_array($ranks) ? $ranks : explode(',', (string) $ranks);
-
-        return array_values(array_filter(array_map(static function ($rank): string {
-            if (! is_scalar($rank)) {
-                return '';
-            }
-
-            return trim((string) preg_replace('/[^a-z0-9]+/i', '_', strtolower(trim((string) $rank))), '_') . '_id';
-        }, $ranks)));
+        return array_values(array_filter(array_map(static fn ($rank): string => is_scalar($rank) ? trim((string) preg_replace('/[^a-z0-9]+/i', '_', strtolower(trim((string) $rank))), '_') . '_id' : '', $ranks)));
     }
 
-    /**
-     * Build exact and reporting scoped rows for yearly aggregation.
-     *
-     * @param string             $prefix Database table prefix.
-     * @param array<int, string> $columns Reporting projection columns.
-     * @param string             $yearExpression Database year expression.
-     * @return string SQL CTE body.
-     */
-    private function scopedOccurrenceSql(string $prefix, array $columns, string $yearExpression): string
+    /** @return array<string, mixed>|null */
+    private function state(): ?array
     {
-        $exactCondition = 'ao.is_reporting = 0';
-        $selects = [
-            'SELECT ao.occurrence_id, ao.taxon_id, gro.geographic_region_id, ao.record_date, ' . $yearExpression . ' AS year, ao.grid_ref_2km
-             FROM active_occurrences ao
-             INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
-                ON gro.occurrence_id = ao.occurrence_id
-             WHERE ' . $exactCondition,
-            'SELECT ao.occurrence_id, ao.taxon_id, NULL AS geographic_region_id, ao.record_date, ' . $yearExpression . ' AS year, ao.grid_ref_2km
-             FROM active_occurrences ao
-             WHERE ' . $exactCondition,
-        ];
-
-        foreach ($columns as $column) {
-            $selects[] = 'SELECT ao.occurrence_id, ao.' . $column . ' AS taxon_id, gro.geographic_region_id,
-                ao.record_date, ' . $yearExpression . ' AS year, ao.grid_ref_2km
-             FROM active_occurrences ao
-             INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
-                ON gro.occurrence_id = ao.occurrence_id
-             WHERE ao.' . $column . ' IS NOT NULL';
-            $selects[] = 'SELECT ao.occurrence_id, ao.' . $column . ' AS taxon_id, NULL AS geographic_region_id,
-                ao.record_date, ' . $yearExpression . ' AS year, ao.grid_ref_2km
-             FROM active_occurrences ao
-             WHERE ao.' . $column . ' IS NOT NULL';
-        }
-
-        return implode("\n                UNION\n                ", $selects);
+        $checkpoint = model(\App\Models\ImportOffsetModel::class)->getCheckpoint(self::SOURCE_KEY);
+        $state = $checkpoint === null ? null : json_decode($checkpoint, true);
+        return is_array($state) ? $state : null;
     }
 
-    /**
-     * Insert computed rows into taxon_year_stats.
-     *
-     * @param array<int, array<string, int|null|string>> $rows Computed rows.
-     *
-     * @return void
-     */
-    private function insertRows(array $rows): void
+    /** @param array<string, mixed> $state */
+    private function saveState(array $state): void
+    {
+        $offset = model(\App\Models\ImportOffsetModel::class);
+        $offset->setCheckpoint(self::SOURCE_KEY, json_encode($state, JSON_THROW_ON_ERROR));
+        $offset->setCompletion(self::SOURCE_KEY, false);
+    }
+
+    private function clearState(): void
+    {
+        $offset = model(\App\Models\ImportOffsetModel::class);
+        $offset->setCheckpoint(self::SOURCE_KEY, null);
+        $offset->setCompletion(self::SOURCE_KEY, true);
+    }
+
+    private function publish(string $buildId): void
     {
         $db = db_connect();
-        $chunks = array_chunk($rows, 500);
-
-        foreach ($chunks as $chunk) {
-            $db->table('taxon_year_stats')->insertBatch($chunk);
-        }
+        $db->transStart();
+        $db->table('taxon_year_stats')->emptyTable();
+        $db->query('INSERT INTO ' . $db->getPrefix() . 'taxon_year_stats (uuid, taxon_id, geographic_region_id, year, occurrences_count, grid_square_count) SELECT uuid, taxon_id, geographic_region_id, year, occurrences_count, grid_square_count FROM ' . $db->getPrefix() . 'taxon_year_stats_build WHERE build_id = ?', [$buildId]);
+        $db->transComplete();
     }
 
-    /**
-     * Convert mixed values to nullable integer.
-     *
-     * @param mixed $value Raw value.
-     *
-     * @return int|null
-     */
-    private function nullableInt(mixed $value): ?int
-    {
-        if (! is_scalar($value)) {
-            return null;
-        }
-
-        $string = trim((string) $value);
-
-        if ($string === '' || ! is_numeric($string)) {
-            return null;
-        }
-
-        return (int) $string;
-    }
-
-    /**
-     * Build a deterministic UUID-like value from a seed string.
-     *
-     * @param string $seed Identifier seed.
-     *
-     * @return string
-     */
     private function stableUuid(string $seed): string
     {
         $hex = md5($seed);
-
-        return sprintf(
-            '%s-%s-4%s-%s%s-%s',
-            substr($hex, 0, 8),
-            substr($hex, 8, 4),
-            substr($hex, 13, 3),
-            dechex((hexdec(substr($hex, 16, 1)) & 0x3) | 0x8),
-            substr($hex, 17, 3),
-            substr($hex, 20, 12),
-        );
+        return sprintf('%s-%s-4%s-%s%s-%s', substr($hex, 0, 8), substr($hex, 8, 4), substr($hex, 13, 3), dechex((hexdec(substr($hex, 16, 1)) & 0x3) | 0x8), substr($hex, 17, 3), substr($hex, 20, 12));
     }
 }

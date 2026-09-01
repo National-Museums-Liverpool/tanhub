@@ -32,6 +32,13 @@ class TaxonFrequencyTrend extends BaseConfig
     public int $minimumOccupiedYears = 3;
 
     /**
+     * Number of completed years included in trend analysis.
+     *
+     * @var int
+     */
+    public int $analysisYears = 10;
+
+    /**
      * Minimum weighted coefficient of determination required for a directional trend.
      *
      * @var float
@@ -67,7 +74,13 @@ class TaxonFrequencyTrend extends BaseConfig
             'taxonFrequencyTrend.minimumOccupiedYears',
             $this->minimumOccupiedYears,
             1,
-            9,
+            10000,
+        );
+        $this->analysisYears = $this->integerFromEnvironment(
+            'taxonFrequencyTrend.analysisYears',
+            $this->analysisYears,
+            1,
+            10000,
         );
         $this->minimumRSquared = $this->boundedFloatFromEnvironment(
             'taxonFrequencyTrend.minimumRSquared',

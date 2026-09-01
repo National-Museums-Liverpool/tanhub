@@ -208,8 +208,8 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
     public function testRunCalculatesIncreasingAndDecreasingFrequencyTrends(): void
     {
         $currentYear = (int) date('Y');
-        $years = range($currentYear - 9, $currentYear - 1);
-        $noisySeries = [8, 0, 0, 8, 0, 0, 8, 0, 1];
+        $years = range($currentYear - 10, $currentYear - 1);
+        $noisySeries = [8, 8, 0, 0, 8, 0, 0, 8, 0, 1];
 
         $this->db->table('taxa')->insertBatch([
             ['id' => 4, 'taxon_identifier' => 'TX-4', 'taxon_rank_id' => 1, 'order_id' => 4, 'superfamily_id' => 4, 'family_id' => 4, 'genus_id' => 4, 'species_id' => 4, 'blocked' => 0, 'deleted_at' => null],

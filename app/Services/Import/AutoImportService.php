@@ -131,6 +131,16 @@ class AutoImportService
 
         $now = $now ?? new DateTimeImmutable();
         $staleBefore = $now->modify('-2 hours');
+        $taxonYearStatsKey = 'derived-stats:taxon_year_stats';
+        if ($offsetModel->hasSourceKey($taxonYearStatsKey) && ! $offsetModel->isComplete($taxonYearStatsKey)) {
+            return [
+                'source_key' => $taxonYearStatsKey,
+                'kind' => 'derived',
+                'service' => 'taxonYearStatsService',
+                'reason' => 'yearly statistics task has an incomplete batch',
+                'last_run' => null,
+            ];
+        }
         $taxonStatsKey = 'derived-stats:taxon_stats';
         if ($offsetModel->hasSourceKey($taxonStatsKey) && ! $offsetModel->isComplete($taxonStatsKey)) {
             return [

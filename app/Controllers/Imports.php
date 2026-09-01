@@ -313,7 +313,11 @@ class Imports extends BaseController
             ]);
 
             try {
-                $result = $this->runTask($state);
+                $result = $this->runTask($state, function (int $runId) use ($queueModel, $nextQueued): void {
+                    if ($runId > 0) {
+                        $queueModel->update((int) $nextQueued['id'], ['run_id' => $runId]);
+                    }
+                });
                 $runId = (int) ($result['run_id'] ?? 0);
                 $summary = $this->summarizeTaskResult($state, $result);
                 $runStatus = strtolower((string) ($result['status'] ?? 'success'));
@@ -472,7 +476,7 @@ class Imports extends BaseController
      *
      * @throws RuntimeException If the task's entity is missing, or its `kind` is not runnable.
      */
-    private function runTask(array $state): array
+    private function runTask(array $state, ?callable $onRunCreated = null): array
     {
         $config = config(ImportConfig::class);
         $kind = (string) $state['kind'];
@@ -513,7 +517,7 @@ class Imports extends BaseController
         }
 
         if ($kind === 'derived') {
-            return $this->runDerivedTask($state);
+            return $this->runDerivedTask($state, $onRunCreated);
         }
 
         throw new RuntimeException('Task is not runnable yet.');
@@ -634,6 +638,23 @@ class Imports extends BaseController
                 } elseif (is_array($run) && (string) ($run['status'] ?? '') === 'success') {
                     $queueStatus = 'completed';
                 }
+            } else {
+                $sourceKey = (string) ($staleTask['source_key'] ?? '');
+                if ($sourceKey !== '') {
+                    $run = $importRunModel
+                        ->where('source_key', $sourceKey)
+                        ->where('status', 'running')
+                        ->where('started_at >=', (string) ($staleTask['started_at'] ?? ''))
+                        ->orderBy('id', 'DESC')
+                        ->first();
+                    if (is_array($run)) {
+                        $importRunModel->update((int) $run['id'], [
+                            'status' => 'failed',
+                            'message' => $message,
+                            'finished_at' => $finishedAt,
+                        ]);
+                    }
+                }
             }
 
             $queueModel->update((int) $staleTask['id'], [
@@ -691,7 +712,7 @@ class Imports extends BaseController
      * @return array<string, mixed> Result reported by the derived service, including a
      *                              `status` key.
      */
-    private function runDerivedTask(array $state): array
+    private function runDerivedTask(array $state, ?callable $onRunCreated = null): array
     {
         $serviceName = trim((string) ($state['service'] ?? ''));
         $sourceKey = (string) ($state['source_key'] ?? '');
@@ -699,6 +720,6 @@ class Imports extends BaseController
         /** @var \App\Services\Import\DerivedImportRunner $runner */
         $runner = service('derivedImportRunner');
 
-        return $runner->run($sourceKey, $serviceName);
+        return $runner->run($sourceKey, $serviceName, false, $onRunCreated);
     }
 }

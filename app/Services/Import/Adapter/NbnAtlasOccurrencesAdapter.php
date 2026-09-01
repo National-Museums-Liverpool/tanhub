@@ -318,7 +318,8 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             $taxonConceptId = trim((string) ($record['scientificNameID'] ?? ''));
         }
 
-        [$fromDate, $toDate] = $this->normalizeEventDate($record['eventDate'] ?? null);
+        $eventDate = $record['eventDate'] ?? $this->eventDateFromParts($record);
+        [$fromDate, $toDate] = $this->normalizeEventDate($eventDate);
 
         return [
             'remote_id' => $remoteId,
@@ -345,6 +346,60 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             'blocked' => (bool) ($record['blocked'] ?? false),
             'blocked_reason' => $record['blocked_reason'] ?? null,
         ];
+    }
+
+    /**
+     * Build an event date from the separate date parts returned by NBN search.
+     *
+     * @param array<string, mixed> $record Raw NBN Atlas occurrence record.
+     *
+     * @return string|null Most precise valid date represented by the available parts.
+     */
+    private function eventDateFromParts(array $record): ?string
+    {
+        $year = $record['year'] ?? null;
+
+        if (! is_scalar($year) || preg_match('/^\d{4}$/', trim((string) $year)) !== 1) {
+            return null;
+        }
+
+        $year = (int) $year;
+
+        if ($year < 1) {
+            return null;
+        }
+
+        $month = $record['month'] ?? null;
+
+        if ($month === null || (is_scalar($month) && trim((string) $month) === '')) {
+            return sprintf('%04d', $year);
+        }
+
+        if (! is_scalar($month) || preg_match('/^\d{1,2}$/', trim((string) $month)) !== 1) {
+            return null;
+        }
+
+        $month = (int) $month;
+
+        if (! checkdate($month, 1, $year)) {
+            return null;
+        }
+
+        $day = $record['day'] ?? null;
+
+        if ($day === null || (is_scalar($day) && trim((string) $day) === '')) {
+            return sprintf('%04d-%02d', $year, $month);
+        }
+
+        if (! is_scalar($day) || preg_match('/^\d{1,2}$/', trim((string) $day)) !== 1) {
+            return null;
+        }
+
+        $day = (int) $day;
+
+        return checkdate($month, $day, $year)
+            ? sprintf('%04d-%02d-%02d', $year, $month, $day)
+            : null;
     }
 
     /**

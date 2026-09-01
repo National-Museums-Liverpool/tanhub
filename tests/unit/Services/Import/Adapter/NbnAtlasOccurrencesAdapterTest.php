@@ -173,6 +173,59 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         ];
     }
 
+    /**
+     * Verify separate NBN date parts are used when eventDate is omitted.
+     *
+     * @param array<string, int|string> $dateParts    Raw NBN date fields.
+     * @param string                    $expectedFrom Expected inclusive range start.
+     * @param string                    $expectedTo   Expected inclusive range end.
+     *
+     * @return void
+     *
+     * @dataProvider separateDatePartsProvider
+     */
+    public function testFetchPageNormalizesSeparateDateParts(
+        array $dateParts,
+        string $expectedFrom,
+        string $expectedTo,
+    ): void {
+        $response = $this->createMock(ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn(200);
+        $response->method('getBody')->willReturn((string) json_encode([
+            'totalRecords' => 1,
+            'occurrences' => [[
+                'uuid' => 'date-parts-test',
+                'taxonConceptID' => 'NHMSYS0001',
+            ] + $dateParts],
+        ], JSON_THROW_ON_ERROR));
+
+        $client = $this->createMock(CURLRequest::class);
+        $client->method('get')->willReturn($response);
+        $adapter = new NbnAtlasOccurrencesAdapter(
+            $client,
+            ['endpoint' => 'https://example.test/nbn'],
+            10,
+        );
+
+        $record = $adapter->fetchPage(null, 50)->records[0];
+
+        $this->assertSame($expectedFrom, $record['from_date']);
+        $this->assertSame($expectedTo, $record['to_date']);
+    }
+
+    /**
+     * Supply valid date-part combinations returned by NBN search.
+     *
+     * @return array<string, array{0: array<string, int|string>, 1: string, 2: string}> Test cases.
+     */
+    public static function separateDatePartsProvider(): array
+    {
+        return [
+            'year and month' => [['year' => 1991, 'month' => '06'], '1991-06-01', '1991-06-30'],
+            'year only' => [['year' => 1991], '1991-01-01', '1991-12-31'],
+        ];
+    }
+
     public function testFetchPageThrowsForHttpErrors(): void
     {
         $response = $this->createMock(ResponseInterface::class);

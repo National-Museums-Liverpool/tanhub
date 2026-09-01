@@ -103,11 +103,72 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         $this->assertSame('NHMSYS0001', $record['given_name_identifier']);
         $this->assertSame('Biological Records Centre', $record['data_provider_name']);
         $this->assertSame('iRecord Bats', $record['source_name']);
+        $this->assertSame('2024-05-01', $record['from_date']);
+        $this->assertSame('2024-05-01', $record['to_date']);
         $this->assertSame('SU123456', $record['grid_ref']);
         $this->assertSame('SU123', $record['grid_ref_2km']);
         $this->assertSame('EPSG:4326', $record['grid_ref_system']);
         $this->assertSame('V', $record['identification_verification_status']);
         $this->assertSame(1500.0, $record['coordinate_uncertainty_in_meters']);
+    }
+
+    /**
+     * Verify supported NBN event dates become inclusive ISO date ranges.
+     *
+     * @param string      $eventDate   Raw NBN event date.
+     * @param string|null $expectedFrom Expected inclusive range start.
+     * @param string|null $expectedTo   Expected inclusive range end.
+     *
+     * @return void
+     *
+     * @dataProvider eventDateProvider
+     */
+    public function testFetchPageNormalizesEventDateRanges(
+        string $eventDate,
+        ?string $expectedFrom,
+        ?string $expectedTo,
+    ): void {
+        $response = $this->createMock(ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn(200);
+        $response->method('getBody')->willReturn((string) json_encode([
+            'totalRecords' => 1,
+            'occurrences' => [[
+                'uuid' => 'date-test',
+                'taxonConceptID' => 'NHMSYS0001',
+                'eventDate' => $eventDate,
+            ]],
+        ], JSON_THROW_ON_ERROR));
+
+        $client = $this->createMock(CURLRequest::class);
+        $client->method('get')->willReturn($response);
+        $adapter = new NbnAtlasOccurrencesAdapter(
+            $client,
+            ['endpoint' => 'https://example.test/nbn'],
+            10,
+        );
+
+        $record = $adapter->fetchPage(null, 50)->records[0];
+
+        $this->assertSame($expectedFrom, $record['from_date']);
+        $this->assertSame($expectedTo, $record['to_date']);
+    }
+
+    /**
+     * Supply supported, partial, interval, and invalid NBN event dates.
+     *
+     * @return array<string, array{0: string, 1: string|null, 2: string|null}> Test cases.
+     */
+    public static function eventDateProvider(): array
+    {
+        return [
+            'ISO full date' => ['2014-05-15', '2014-05-15', '2014-05-15'],
+            'ISO date and time' => ['2014-05-15T10:30:00Z', '2014-05-15', '2014-05-15'],
+            'UK full date' => ['27/11/1991', '1991-11-27', '1991-11-27'],
+            'year and month' => ['2024-02', '2024-02-01', '2024-02-29'],
+            'year only' => ['1986', '1986-01-01', '1986-12-31'],
+            'ISO interval' => ['2020-06/2021-02', '2020-06-01', '2021-02-28'],
+            'invalid date' => ['2024-02-31', null, null],
+        ];
     }
 
     public function testFetchPageThrowsForHttpErrors(): void

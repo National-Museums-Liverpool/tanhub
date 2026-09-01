@@ -3,6 +3,7 @@
 namespace App\Services\Import\Adapter;
 
 use CodeIgniter\HTTP\CURLRequest;
+use DateTimeImmutable;
 use RuntimeException;
 
 /**
@@ -283,8 +284,11 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
     }
 
     /**
-     * @param array<string, mixed> $record
-     * @return array<string, mixed>
+     * Normalize an NBN Atlas occurrence record for persistence.
+     *
+     * @param array<string, mixed> $record Raw NBN Atlas occurrence record.
+     *
+     * @return array<string, mixed> Normalized occurrence record.
      */
     private function normalizeRecord(array $record): array
     {
@@ -314,6 +318,8 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             $taxonConceptId = trim((string) ($record['scientificNameID'] ?? ''));
         }
 
+        [$fromDate, $toDate] = $this->normalizeEventDate($record['eventDate'] ?? null);
+
         return [
             'remote_id' => $remoteId,
             'occurrence_id' => trim((string) ($record['occurrenceID'] ?? '')),
@@ -321,8 +327,8 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             'data_provider_name' => (string) ($record['dataProviderName'] ?? $record['data_provider_name'] ?? ''),
             'scientific_name_identifier' => $taxonConceptId,
             'given_name_identifier' => $taxonConceptId,
-            'from_date' => $record['from_date'] ?? $record['eventDate'] ?? null,
-            'to_date' => $record['to_date'] ?? null,
+            'from_date' => $record['from_date'] ?? $fromDate,
+            'to_date' => $record['to_date'] ?? $toDate,
             'grid_ref' => $gridRef,
             'grid_ref_system' => $gridRefSystem,
             'grid_ref_2km' => $gridRef2km,
@@ -342,6 +348,117 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
     }
 
     /**
+     * Convert a Darwin Core event date into an inclusive date range.
+     *
+     * Supports ISO 8601 calendar dates at year, month, or day precision,
+     * ISO 8601 intervals, and the NBN compatibility format `DD/MM/YYYY`.
+     *
+     * @param mixed $value Raw event date value.
+     *
+     * @return array{0: string|null, 1: string|null} Inclusive start and end dates.
+     */
+    private function normalizeEventDate($value): array
+    {
+        if (! is_scalar($value)) {
+            return [null, null];
+        }
+
+        $eventDate = trim((string) $value);
+
+        if ($eventDate === '') {
+            return [null, null];
+        }
+
+        $extent = $this->dateExtent($eventDate);
+
+        if ($extent !== null) {
+            return $extent;
+        }
+
+        $interval = explode('/', $eventDate, 2);
+
+        if (count($interval) !== 2) {
+            return [null, null];
+        }
+
+        $startExtent = $this->dateExtent(trim($interval[0]));
+        $endExtent = $this->dateExtent(trim($interval[1]));
+
+        if ($startExtent === null || $endExtent === null || $startExtent[0] > $endExtent[1]) {
+            return [null, null];
+        }
+
+        return [$startExtent[0], $endExtent[1]];
+    }
+
+    /**
+     * Expand one supported date value to its earliest and latest date.
+     *
+     * @param string $value Date value at year, month, or day precision.
+     *
+     * @return array{0: string, 1: string}|null Inclusive extent, or null when invalid.
+     */
+    private function dateExtent(string $value): ?array
+    {
+        if (preg_match('/^(\d{4})$/', $value, $matches) === 1) {
+            $year = (int) $matches[1];
+
+            return $year > 0 ? [sprintf('%04d-01-01', $year), sprintf('%04d-12-31', $year)] : null;
+        }
+
+        if (preg_match('/^(\d{4})-(\d{2})$/', $value, $matches) === 1) {
+            $year = (int) $matches[1];
+            $month = (int) $matches[2];
+
+            if ($year <= 0 || ! checkdate($month, 1, $year)) {
+                return null;
+            }
+
+            $firstDate = sprintf('%04d-%02d-01', $year, $month);
+            $lastDay = (new DateTimeImmutable($firstDate))->format('t');
+
+            return [$firstDate, sprintf('%04d-%02d-%s', $year, $month, $lastDay)];
+        }
+
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $matches) === 1) {
+            $year = (int) $matches[1];
+            $month = (int) $matches[2];
+            $day = (int) $matches[3];
+
+            return checkdate($month, $day, $year) ? [$value, $value] : null;
+        }
+
+        if (preg_match(
+            '/^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|[+-](?:[01]\d|2[0-3]):?[0-5]\d)?$/',
+            $value,
+            $matches,
+        ) === 1) {
+            $year = (int) $matches[1];
+            $month = (int) $matches[2];
+            $day = (int) $matches[3];
+            $date = sprintf('%04d-%02d-%02d', $year, $month, $day);
+
+            return checkdate($month, $day, $year) ? [$date, $date] : null;
+        }
+
+        if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', $value, $matches) === 1) {
+            $day = (int) $matches[1];
+            $month = (int) $matches[2];
+            $year = (int) $matches[3];
+
+            if (! checkdate($month, $day, $year)) {
+                return null;
+            }
+
+            $date = sprintf('%04d-%02d-%02d', $year, $month, $day);
+
+            return [$date, $date];
+        }
+
+        return null;
+    }
+
+    /**
      * @param array<int, string> $values
      */
     private function buildOrFilter(string $field, array $values): ?string
@@ -355,6 +472,13 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         return $field . ':(' . implode(' OR ', $escapedValues) . ')';
     }
 
+    /**
+     * Escape one value for use in an NBN Atlas filter expression.
+     *
+     * @param string $value Raw filter value.
+     *
+     * @return string Escaped filter value.
+     */
     private function escapeFilterValue(string $value): string
     {
         return str_replace(['\\', '"'], ['\\\\', '\\"'], $value);

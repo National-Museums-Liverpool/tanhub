@@ -39,6 +39,9 @@ when importing Indicia taxonomy or occurrence data.
   task is recovered as failed. The default is `3600` seconds (one hour). Set
   this above the longest expected legitimate UI run, with enough margin for the
   web-server timeout.
+- `import.autoImportLockFile`: local file used to prevent overlapping `import:auto`
+  processes on one host. It defaults to `writable/import-auto.lock`; the cron user
+  must be able to create and write it.
 
 ## Import scope
 

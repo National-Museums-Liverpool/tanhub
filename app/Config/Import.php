@@ -39,14 +39,46 @@ class Import extends BaseConfig
      */
     public string $autoImportLockName = 'tanhub:import:auto';
 
+    /**
+     * File used to prevent overlapping automatic imports on this host.
+     *
+     * @var string
+     */
+    public string $autoImportLockFile = WRITEPATH . 'import-auto.lock';
+
+    /**
+     * Indicia Warehouse base URL.
+     *
+     * @var string
+     */
     public string $indiciaWarehouseUrl = '';
 
+    /**
+     * Indicia REST API project identifier.
+     *
+     * @var string
+     */
     public string $indiciaProjId = '';
 
+    /**
+     * Indicia taxon list identifier to import.
+     *
+     * @var int
+     */
     public int $indiciaTaxonListId = 0;
 
+    /**
+     * Indicia REST API username.
+     *
+     * @var string
+     */
     public string $indiciaUsername = '';
 
+    /**
+     * Indicia REST API authentication secret.
+     *
+     * @var string
+     */
     public string $indiciaSecret = '';
 
     /**
@@ -247,6 +279,13 @@ class Import extends BaseConfig
         }
     }
 
+    /**
+     * Validate and normalize an integer configuration value.
+     *
+     * @param mixed $value Configuration value to validate.
+     *
+     * @return int|null Normalized integer, or null when invalid.
+     */
     private function validateInt($value): ?int
     {
         if (is_scalar($value)) {

@@ -426,6 +426,29 @@ region.
 
 UQ* indicates there is a compound unique key on `taxon_id`, `geographic_region_id` and `year`.
 
+### taxon_year_stats_build
+
+Internal staging table used by resumable `taxon_year_stats` rebuilds. Rows are written under a
+build identifier while projections and year ranges are processed, then copied to
+`taxon_year_stats` when the build completes. The table is cleared when a new build starts and is
+not intended to be used as a public reporting source.
+
+| Column | Type | Null | Key | Default | Description |
+| --- | --- | --- | --- | --- | --- |
+| id | BIGINT | NO | PK | AUTO_INCREMENT | Primary key |
+| build_id | CHAR(36) | NO | IX* | | In-progress statistics build identifier |
+| projection | INT | NO | IX* | | Projection index; zero is the exact taxon |
+| uuid | CHAR(36) | NO | | | Stable identifier for the eventual stats row |
+| taxon_id | BIGINT | NO | | | Taxon represented by the aggregate |
+| geographic_region_id | BIGINT | YES | | | Region, or null for all regions |
+| year | INT | NO | IX* | | Year the statistics apply to |
+| occurrences_count | INT | NO | | 0 | Occurrence count for the taxon, year and region |
+| grid_square_count | INT | NO | | 0 | Grid-square count for the taxon, year and region |
+
+IX* indicates compound indexes on `build_id, projection, taxon_id, geographic_region_id, year`
+and `build_id, year`. These indexes support replacing a processed projection/year range and
+selecting all rows belonging to a completed build.
+
 ## Import utility tables
 
 The following tables are used to manage and track data import tasks.

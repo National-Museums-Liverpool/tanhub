@@ -5,6 +5,7 @@ namespace Tests;
 use App\Models\ImportOffsetModel;
 use App\Models\ImportRunModel;
 use App\Services\Import\AutoImportService;
+use App\Services\Import\ImportTaskDependencyService;
 use CodeIgniter\Test\CIUnitTestCase;
 use DateTimeImmutable;
 
@@ -96,6 +97,23 @@ final class AutoImportRunModelDouble extends ImportRunModel
 }
 
 /**
+ * Import dependency resolver double for selector tests.
+ */
+final class AutoImportDependencyServiceDouble extends ImportTaskDependencyService
+{
+    /**
+     * Treat all registered test tasks as runnable.
+     *
+     * @param string $sourceKey Task source key.
+     * @return bool Always true for these selector tests.
+     */
+    public function isRunnable(string $sourceKey): bool
+    {
+        return true;
+    }
+}
+
+/**
  * @internal
  */
 final class AutoImportServiceTest extends CIUnitTestCase
@@ -114,7 +132,7 @@ final class AutoImportServiceTest extends CIUnitTestCase
             'indicia-taxonomy:taxon_ranks' => false,
         ];
 
-        $service = new AutoImportService($offsetModel, new AutoImportRunModelDouble());
+        $service = new AutoImportService($offsetModel, new AutoImportRunModelDouble(), null, null, new AutoImportDependencyServiceDouble());
         $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
 
         $this->assertSame('indicia-taxonomy:taxon_ranks', $task['source_key']);
@@ -135,7 +153,7 @@ final class AutoImportServiceTest extends CIUnitTestCase
             'derived-stats:taxon_year_stats' => '2026-07-31 09:00:00',
         ];
 
-        $service = new AutoImportService($offsetModel, $runModel);
+        $service = new AutoImportService($offsetModel, $runModel, null, null, new AutoImportDependencyServiceDouble());
         $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
 
         $this->assertSame('derived-stats:taxon_rarity', $task['source_key']);
@@ -155,7 +173,7 @@ final class AutoImportServiceTest extends CIUnitTestCase
             'derived-stats:taxon_stats' => '2026-07-31 11:00:00',
         ];
 
-        $service = new AutoImportService($offsetModel, $runModel);
+        $service = new AutoImportService($offsetModel, $runModel, null, null, new AutoImportDependencyServiceDouble());
         $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
 
         $this->assertSame('derived-stats:taxon_year_stats', $task['source_key']);
@@ -177,7 +195,7 @@ final class AutoImportServiceTest extends CIUnitTestCase
             'nbn-occurrences:occurrences' => '2026-07-31 10:00:00',
         ];
 
-        $service = new AutoImportService($offsetModel, $runModel);
+        $service = new AutoImportService($offsetModel, $runModel, null, null, new AutoImportDependencyServiceDouble());
         $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
 
         $this->assertSame('indicia-occurrences:occurrences', $task['source_key']);

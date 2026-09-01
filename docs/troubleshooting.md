@@ -53,6 +53,10 @@ completed. Run the listed prerequisite tasks until their offset is complete,
 then return to the dependent task. Queued tasks run in the order added; a task
 that does not complete does not unblock its dependants.
 
+The same dependency checks are used by `php spark import:auto`. Automation skips
+blocked tasks rather than running them out of order, so a task shown as blocked in
+the UI remains ineligible until its listed prerequisites complete.
+
 See [Import](import.md#running-the-imports-using-the-admin-user-interface) for
 task categories and the command-line alternatives.
 

@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Models\ImportOffsetModel;
 use App\Models\ImportRunModel;
 use App\Models\ImportTaskQueueModel;
+use App\Services\Import\ImportTaskDependencyService;
 use CodeIgniter\HTTP\RedirectResponse;
 use Config\Import as ImportConfig;
 use RuntimeException;
@@ -148,60 +149,6 @@ class Imports extends BaseController
             'kind' => 'derived',
             'service' => 'taxonRarityService',
             'supports_run' => true,
-        ],
-    ];
-
-    /**
-     * Dependency graph for the tasks declared in {@see self::TASKS}.
-     *
-     * Each entry maps a source key to the source keys that must be complete
-     * (see {@see ImportOffsetModel::isComplete()}) before that task may run.
-     * Consumed by {@see self::buildTaskStates()} to populate each task's
-     * `blocked_by` list.
-     *
-     * @var array<string, array<int, string>>
-     */
-    private const DEPENDENCIES = [
-        'indicia-taxonomy:grid_square_stats' => ['indicia-taxonomy:geographic_regions'],
-        'indicia-taxonomy:taxa' => [
-            'indicia-taxonomy:recording_schemes',
-            'indicia-taxonomy:geographic_regions',
-            'indicia-taxonomy:taxon_groups',
-            'indicia-taxonomy:taxon_ranks',
-        ],
-        'indicia-taxonomy:taxon_names' => ['indicia-taxonomy:taxa'],
-        'indicia-occurrences:occurrences' => [
-            'indicia-taxonomy:recording_schemes',
-            'indicia-taxonomy:geographic_regions',
-            'indicia-taxonomy:grid_square_stats',
-            'indicia-taxonomy:taxon_groups',
-            'indicia-taxonomy:taxon_ranks',
-            'indicia-taxonomy:taxa',
-            'indicia-taxonomy:taxon_names',
-        ],
-        'nbn-occurrences:occurrences' => [
-            'indicia-taxonomy:recording_schemes',
-            'indicia-taxonomy:geographic_regions',
-            'indicia-taxonomy:grid_square_stats',
-            'indicia-taxonomy:taxon_groups',
-            'indicia-taxonomy:taxon_ranks',
-            'indicia-taxonomy:taxa',
-            'indicia-taxonomy:taxon_names',
-        ],
-        'derived-stats:taxon_stats' => [
-            'indicia-occurrences:occurrences',
-            'nbn-occurrences:occurrences',
-            'derived-stats:taxon_year_stats',
-        ],
-        'derived-stats:taxon_year_stats' => [
-            'indicia-occurrences:occurrences',
-            'nbn-occurrences:occurrences',
-        ],
-        'derived-stats:grid_square_stats_counts' => [
-            'indicia-taxonomy:grid_square_stats',
-        ],
-        'derived-stats:taxon_rarity' => [
-            'indicia-taxonomy:taxa',
         ],
     ];
 
@@ -437,27 +384,14 @@ class Imports extends BaseController
             $states[$sourceKey]['queue_status'] = $queueStatus;
         }
 
-        foreach (self::DEPENDENCIES as $sourceKey => $dependencies) {
-            if (! isset($states[$sourceKey])) {
-                continue;
-            }
-
-            $blockedBy = [];
-
-            foreach ($dependencies as $dependencySourceKey) {
-                $dependencyState = $states[$dependencySourceKey] ?? null;
-
-                if ($dependencyState === null) {
-                    continue;
-                }
-
-                if (! (bool) $dependencyState['is_complete']) {
-                    $blockedBy[] = (string) $dependencyState['label'];
-                }
-            }
-
-            $states[$sourceKey]['blocked_by'] = $blockedBy;
+        $dependencyService = service('importTaskDependencyService');
+        foreach ($states as $sourceKey => &$state) {
+            $state['blocked_by'] = array_map(
+                static fn (string $dependency): string => (string) ($states[$dependency]['label'] ?? $dependency),
+                $dependencyService->blockedBy($sourceKey),
+            );
         }
+        unset($state);
 
         return $states;
     }

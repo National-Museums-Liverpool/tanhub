@@ -89,6 +89,7 @@ class AutoImportService
         private readonly ?ImportRunModel $importRunModel = null,
         private readonly ?DerivedImportRunner $derivedImportRunner = null,
         private readonly ?StatsDirtyScopeService $statsDirtyScopeService = null,
+        private readonly ?ImportTaskDependencyService $taskDependencyService = null,
     ) {
     }
 
@@ -203,6 +204,11 @@ class AutoImportService
         string $sourceKey,
         string $statType,
     ): bool {
+        $dependencyService = $this->taskDependencyService ?? service('importTaskDependencyService');
+        if (! $dependencyService->isRunnable($sourceKey)) {
+            return false;
+        }
+
         if ($offsetModel->hasSourceKey($sourceKey)) {
             return ! $offsetModel->isComplete($sourceKey)
                 || $dirtyScopeService->hasWork($statType);

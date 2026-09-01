@@ -97,6 +97,10 @@ limited to a batch of 5000 records so you may need to run each import several ti
 completion. Where an import requires another import to complete before it can be run, the blocking
 import tasks are shown.
 
+The dependency rules are shared with the `import:auto` command. A task that is shown as blocked
+here is skipped by automation until all its prerequisite tasks are complete. Automatic scheduling
+does not bypass these checks when selecting stale statistics or occurrence sources.
+
 The following imports are for simple population of lookup tables and should not need to be run
 again after completion:
 * `recording_schemes`
@@ -179,6 +183,12 @@ run is more than two hours old. The least recently run stale report-stat task wi
 When all report-stat tasks are current, the least recently run occurrence source is
 selected between Indicia and NBN. A task with no successful run is treated as the
 oldest task.
+
+Before this age-based selection, `import:auto` applies the same completion dependencies as the
+admin Imports page. For example, `taxon_year_stats` is not selected until both occurrence imports
+are complete, and `taxon_stats` is not selected until `taxon_year_stats` and both occurrence
+imports are complete. When a prerequisite is incomplete, automation skips the blocked task and
+continues looking for another eligible task on a later invocation.
 
 If refreshing an import from the beginning, use the appropriate `--since=0` or `--offset=0`
 override and clear the relevant `import_offsets` rows. Existing `import_runs` history may provide

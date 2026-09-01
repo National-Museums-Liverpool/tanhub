@@ -159,6 +159,23 @@ class Services extends BaseService
     }
 
     /**
+     * Import task dependency resolver.
+     *
+     * @param bool $getShared Whether to return a shared service instance.
+     * @return \App\Services\Import\ImportTaskDependencyService Dependency resolver.
+     */
+    public static function importTaskDependencyService(bool $getShared = true): \App\Services\Import\ImportTaskDependencyService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('importTaskDependencyService');
+        }
+
+        return new \App\Services\Import\ImportTaskDependencyService(
+            model(\App\Models\ImportOffsetModel::class),
+        );
+    }
+
+    /**
      * Derived import task runner.
      */
     public static function derivedImportRunner(bool $getShared = true): \App\Services\Import\DerivedImportRunner
@@ -210,6 +227,7 @@ class Services extends BaseService
             model(\App\Models\ImportRunModel::class),
             static::derivedImportRunner(false),
             static::statsDirtyScopeService(false),
+            static::importTaskDependencyService(false),
         );
     }
 

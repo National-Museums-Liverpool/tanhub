@@ -18,7 +18,10 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         private readonly array $config,
         private readonly int $timeout,
     ) {
-        log_message('debug', 'IndiciaOccurrencesAdapter initialized with config: ' . json_encode($config));
+        $logConfig = $config;
+        $logConfig['secret'] = '***';
+
+        log_message('debug', 'IndiciaOccurrencesAdapter initialized with config: ' . json_encode($logConfig));
     }
 
     /**
@@ -236,6 +239,11 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         ];
     }
 
+    /**
+     * Resolve the endpoint URL for the Indicia service.
+     *
+     * @return string The endpoint URL.
+     */
     private function resolveEndpoint(): string
     {
         $configuredEndpoint = trim((string) ($this->config['endpoint'] ?? ''));

@@ -164,6 +164,8 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
             'ISO full date' => ['2014-05-15', '2014-05-15', '2014-05-15'],
             'ISO date and time' => ['2014-05-15T10:30:00Z', '2014-05-15', '2014-05-15'],
             'UK full date' => ['27/11/1991', '1991-11-27', '1991-11-27'],
+            'Unix timestamp in milliseconds' => ['1556496000000', '2019-04-29', '2019-04-29'],
+            'pre-1970 Unix timestamp in milliseconds' => ['-2208988800000', '1900-01-01', '1900-01-01'],
             'year and month' => ['2024-02', '2024-02-01', '2024-02-29'],
             'year only' => ['1986', '1986-01-01', '1986-12-31'],
             'ISO interval' => ['2020-06/2021-02', '2020-06-01', '2021-02-28'],

@@ -350,8 +350,9 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
     /**
      * Convert a Darwin Core event date into an inclusive date range.
      *
-     * Supports ISO 8601 calendar dates at year, month, or day precision,
-     * ISO 8601 intervals, and the NBN compatibility format `DD/MM/YYYY`.
+    * Supports Unix timestamps in milliseconds, ISO 8601 calendar dates at
+    * year, month, or day precision, ISO 8601 intervals, and the NBN
+    * compatibility format `DD/MM/YYYY`.
      *
      * @param mixed $value Raw event date value.
      *
@@ -375,6 +376,12 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             return $extent;
         }
 
+        $timestampDate = $this->dateFromUnixMilliseconds($eventDate);
+
+        if ($timestampDate !== null) {
+            return [$timestampDate, $timestampDate];
+        }
+
         $interval = explode('/', $eventDate, 2);
 
         if (count($interval) !== 2) {
@@ -389,6 +396,29 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         }
 
         return [$startExtent[0], $endExtent[1]];
+    }
+
+    /**
+     * Convert a Unix timestamp in milliseconds to its UTC calendar date.
+     *
+     * @param string $value Potential millisecond timestamp.
+     *
+     * @return string|null UTC date, or null when the value is not a plausible timestamp.
+     */
+    private function dateFromUnixMilliseconds(string $value): ?string
+    {
+        if (preg_match('/^-?\d{11,14}$/', $value) !== 1) {
+            return null;
+        }
+
+        $milliseconds = (int) $value;
+        $seconds = intdiv($milliseconds, 1000);
+
+        if ($milliseconds < 0 && $milliseconds % 1000 !== 0) {
+            $seconds--;
+        }
+
+        return (new DateTimeImmutable('@' . $seconds))->format('Y-m-d');
     }
 
     /**

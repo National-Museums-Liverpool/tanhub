@@ -15,6 +15,12 @@ class CreateTaxonYearStatsBuildTable extends Migration
     public function up(): void
     {
         $this->forge->addField([
+            'id' => [
+                'type'           => 'BIGINT',
+                'constraint'     => 20,
+                'unsigned'       => true,
+                'auto_increment' => true,
+            ],
             'build_id' => ['type' => 'CHAR', 'constraint' => 36],
             'projection' => ['type' => 'INT', 'constraint' => 4, 'unsigned' => true],
             'uuid' => ['type' => 'CHAR', 'constraint' => 36],
@@ -24,7 +30,8 @@ class CreateTaxonYearStatsBuildTable extends Migration
             'occurrences_count' => ['type' => 'INT', 'constraint' => 11, 'unsigned' => true, 'default' => 0],
             'grid_square_count' => ['type' => 'INT', 'constraint' => 11, 'unsigned' => true, 'default' => 0],
         ]);
-        $this->forge->addKey(['build_id', 'projection', 'taxon_id', 'geographic_region_id', 'year'], true);
+        $this->forge->addKey('id', true);
+        $this->forge->addKey(['build_id', 'projection', 'taxon_id', 'geographic_region_id', 'year']);
         $this->forge->addKey(['build_id', 'year']);
         $this->forge->createTable('taxon_year_stats_build', true);
     }

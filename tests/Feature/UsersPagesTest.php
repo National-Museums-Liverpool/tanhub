@@ -37,6 +37,22 @@ final class UsersPagesTest extends CIUnitTestCase
         $migrate = service('migrations');
         $migrate->setNamespace(null);
         $migrate->latest();
+
+        $db = db_connect();
+        $db->query('CREATE TABLE IF NOT EXISTS ' . $db->getPrefix() . 'auth_identities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            type VARCHAR(255) NOT NULL,
+            name VARCHAR(255) NULL,
+            secret VARCHAR(255) NOT NULL,
+            secret2 VARCHAR(255) NULL,
+            expires DATETIME NULL,
+            extra TEXT NULL,
+            force_reset INTEGER NOT NULL DEFAULT 0,
+            last_used_at DATETIME NULL,
+            created_at DATETIME NULL,
+            updated_at DATETIME NULL
+        )');
     }
 
     public function testUsersPagesRequireAdminLogin(): void
@@ -82,7 +98,7 @@ final class UsersPagesTest extends CIUnitTestCase
         $this->createManagedUser('managed-list@example.com', 'managed-list', true);
         $this->authenticateAs('admin-list@example.com', 'admin');
 
-        $result = $this->get('users');
+        $result = $this->get('users?q=managed-list@example.com');
 
         $result->assertStatus(200);
         $result->assertSee('Users');

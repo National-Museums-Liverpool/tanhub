@@ -383,7 +383,9 @@ class Users extends BaseController
     private function authTable(string $key): string
     {
         $tables = config(\Config\Auth::class)->tables;
+        $table = (string) ($tables[$key] ?? $key);
+        $prefix = db_connect()->getPrefix();
 
-        return (string) ($tables[$key] ?? $key);
+        return str_starts_with($table, $prefix) ? $table : $prefix . $table;
     }
 }

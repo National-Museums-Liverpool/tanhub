@@ -2,6 +2,7 @@
 
 namespace App\Commands;
 
+use App\Commands\Support\UsesImportLock;
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
 use Config\Import as ImportConfig;
@@ -17,6 +18,8 @@ use Throwable;
  */
 class ImportIndicia extends BaseCommand
 {
+    use UsesImportLock;
+
     /**
      * The group the command is lumped under when using Spark list.
      *
@@ -97,19 +100,21 @@ class ImportIndicia extends BaseCommand
             CLI::write('Limit: ' . $limit . ' | Page size: ' . $pageSize . ($checkpoint !== '' ? ' | SINCE: ' . $checkpoint : '') . ($dryRun ? ' | DRY-RUN' : ''), 'yellow');
 
             try {
-                $result = $orchestrator->run(
-                    $source,
-                    max(1, $limit),
-                    max(1, $pageSize),
-                    $dryRun,
-                    $checkpoint !== '' ? $checkpoint : null,
-                );
+                $this->runWithImportLock(function () use ($orchestrator, $source, $limit, $pageSize, $dryRun, $checkpoint): void {
+                    $result = $orchestrator->run(
+                        $source,
+                        max(1, $limit),
+                        max(1, $pageSize),
+                        $dryRun,
+                        $checkpoint !== '' ? $checkpoint : null,
+                    );
 
-                CLI::write('Import completed with status: ' . $result['status'], 'green');
-                CLI::write('Run ID: ' . $result['run_id'], 'green');
-                CLI::write(service('importTaskSummaryFormatter')->format($source . ' occurrences', $result));
-                CLI::write('Fetched: ' . $result['fetched'] . ', Inserted: ' . $result['inserted'] . ', Updated: ' . $result['updated'] . ', Skipped: ' . $result['skipped'] . ', Errors: ' . $result['errors']);
-                CLI::write('Checkpoint: ' . (string) ($result['checkpoint'] ?? '(none)'));
+                    CLI::write('Import completed with status: ' . $result['status'], 'green');
+                    CLI::write('Run ID: ' . $result['run_id'], 'green');
+                    CLI::write(service('importTaskSummaryFormatter')->format($source . ' occurrences', $result));
+                    CLI::write('Fetched: ' . $result['fetched'] . ', Inserted: ' . $result['inserted'] . ', Updated: ' . $result['updated'] . ', Skipped: ' . $result['skipped'] . ', Errors: ' . $result['errors']);
+                    CLI::write('Checkpoint: ' . (string) ($result['checkpoint'] ?? '(none)'));
+                });
             } catch (Throwable $exception) {
                 CLI::error($exception->getMessage());
                 $this->showError($exception);
@@ -124,20 +129,22 @@ class ImportIndicia extends BaseCommand
         CLI::write('Entity: ' . $entity . ' | Limit: ' . $limit . ($offset !== null ? ' | OFFSET: ' . $offset : '') . ($dryRun ? ' | DRY-RUN' : ''), 'yellow');
 
         try {
-            $result = $orchestrator->run(
-                $source,
-                $entity,
-                max(1, $limit),
-                $dryRun,
-                $offset,
-            );
+            $this->runWithImportLock(function () use ($orchestrator, $source, $entity, $limit, $dryRun, $offset): void {
+                $result = $orchestrator->run(
+                    $source,
+                    $entity,
+                    max(1, $limit),
+                    $dryRun,
+                    $offset,
+                );
 
-            CLI::write('Import completed with status: ' . $result['status'], 'green');
-            CLI::write('Run ID: ' . $result['run_id'], 'green');
-            CLI::write(service('importTaskSummaryFormatter')->format($entity, $result));
-            CLI::write('Entity: ' . $result['entity'], 'green');
-            CLI::write('Fetched: ' . $result['fetched'] . ', Inserted: ' . $result['inserted'] . ', Updated: ' . $result['updated'] . ', Skipped: ' . $result['skipped'] . ', Errors: ' . $result['errors']);
-            CLI::write('Offset used: ' . (string) ($result['offset'] ?? 0) . ' | Next offset: ' . (string) ($result['next_offset'] ?? 0) . ' | Has more: ' . (($result['has_more'] ?? false) ? 'yes' : 'no'));
+                CLI::write('Import completed with status: ' . $result['status'], 'green');
+                CLI::write('Run ID: ' . $result['run_id'], 'green');
+                CLI::write(service('importTaskSummaryFormatter')->format($entity, $result));
+                CLI::write('Entity: ' . $result['entity'], 'green');
+                CLI::write('Fetched: ' . $result['fetched'] . ', Inserted: ' . $result['inserted'] . ', Updated: ' . $result['updated'] . ', Skipped: ' . $result['skipped'] . ', Errors: ' . $result['errors']);
+                CLI::write('Offset used: ' . (string) ($result['offset'] ?? 0) . ' | Next offset: ' . (string) ($result['next_offset'] ?? 0) . ' | Has more: ' . (($result['has_more'] ?? false) ? 'yes' : 'no'));
+            });
         } catch (Throwable $exception) {
             CLI::error($exception->getMessage());
             $this->showError($exception);

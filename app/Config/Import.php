@@ -33,18 +33,18 @@ class Import extends BaseConfig
     public int $uiTaskStaleAfter = 3600;
 
     /**
-     * MySQL advisory lock name used to serialize automatic imports.
+    * MySQL advisory lock name used to serialize imports.
      *
      * @var string
      */
-    public string $autoImportLockName = 'tanhub:import:auto';
+    public string $importLockName = 'tanhub:import';
 
     /**
-     * File used to prevent overlapping automatic imports on this host.
+    * File used to prevent overlapping imports on this host.
      *
      * @var string
      */
-    public string $autoImportLockFile = WRITEPATH . 'import-auto.lock';
+    public string $importLockFile = WRITEPATH . 'import.lock';
 
     /**
      * Indicia Warehouse base URL.

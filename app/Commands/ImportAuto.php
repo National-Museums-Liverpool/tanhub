@@ -2,6 +2,7 @@
 
 namespace App\Commands;
 
+use App\Commands\Support\UsesImportLock;
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
 use Config\Import as ImportConfig;
@@ -18,6 +19,8 @@ use Throwable;
  */
 class ImportAuto extends BaseCommand
 {
+    use UsesImportLock;
+
     /**
      * The group the command is lumped under when using Spark list.
      *
@@ -72,36 +75,28 @@ class ImportAuto extends BaseCommand
         $dryRun = array_key_exists('dry-run', $params) || (bool) CLI::getOption('dry-run');
 
         try {
-            $lock = service('autoImportLock');
-            if (! $lock->acquire()) {
-                CLI::write('Automatic import already running; exiting.', 'yellow');
-                return;
-            }
+            $this->runWithImportLock(function () use ($limit, $pageSize, $dryRun): void {
+                $service = service('autoImportService');
+                $task = $service->select();
+                CLI::write('Selected task: ' . $task['source_key'], 'yellow');
+                CLI::write('Reason: ' . $task['reason'], 'yellow');
 
-            $service = service('autoImportService');
-            $task = $service->select();
-            CLI::write('Selected task: ' . $task['source_key'], 'yellow');
-            CLI::write('Reason: ' . $task['reason'], 'yellow');
+                $execution = $service->run($limit, $pageSize, $dryRun, $task);
+                $result = $execution['result'];
+                CLI::write('Import completed with status: ' . (string) ($result['status'] ?? 'unknown'), 'green');
 
-            $execution = $service->run($limit, $pageSize, $dryRun, $task);
-            $result = $execution['result'];
-            CLI::write('Import completed with status: ' . (string) ($result['status'] ?? 'unknown'), 'green');
+                if (isset($result['run_id'])) {
+                    CLI::write('Run ID: ' . (string) $result['run_id'], 'green');
+                }
 
-            if (isset($result['run_id'])) {
-                CLI::write('Run ID: ' . (string) $result['run_id'], 'green');
-            }
-
-            CLI::write(service('importTaskSummaryFormatter')->format(
-                (string) $task['source_key'],
-                $result,
-            ));
+                CLI::write(service('importTaskSummaryFormatter')->format(
+                    (string) $task['source_key'],
+                    $result,
+                ));
+            });
         } catch (Throwable $exception) {
             CLI::error($exception->getMessage());
             $this->showError($exception);
-        } finally {
-            if (isset($lock)) {
-                $lock->release();
-            }
         }
     }
 }

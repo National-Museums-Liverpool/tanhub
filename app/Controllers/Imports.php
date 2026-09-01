@@ -291,17 +291,26 @@ class Imports extends BaseController
                 break;
             }
 
-            $queueModel->update((int) $nextQueued['id'], [
-                'status' => 'running',
-                'started_at' => date('Y-m-d H:i:s'),
-                'run_id' => null,
-            ]);
-
             if (! $state['supports_run']) {
                 $errorMessages[] = 'Task ' . $state['label'] . ' is not implemented yet.';
                 $queueModel->delete((int) $nextQueued['id']);
                 continue;
             }
+
+            $lock = service('importLock');
+
+            if (! $lock->acquire()) {
+                return redirect()->to(site_url('imports'))->with(
+                    'message',
+                    'Task was queued. Another import is currently running.',
+                );
+            }
+
+            $queueModel->update((int) $nextQueued['id'], [
+                'status' => 'running',
+                'started_at' => date('Y-m-d H:i:s'),
+                'run_id' => null,
+            ]);
 
             try {
                 $result = $this->runTask($state);
@@ -331,6 +340,8 @@ class Imports extends BaseController
                 $errorMessages[] = 'Task ' . $state['label'] . ' failed: ' . $exception->getMessage();
                 $queueModel->delete((int) $nextQueued['id']);
                 break;
+            } finally {
+                $lock->release();
             }
         }
 

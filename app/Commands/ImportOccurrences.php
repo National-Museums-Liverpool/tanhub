@@ -2,6 +2,7 @@
 
 namespace App\Commands;
 
+use App\Commands\Support\UsesImportLock;
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
 use Config\Import as ImportConfig;
@@ -15,6 +16,8 @@ use Throwable;
  */
 class ImportOccurrences extends BaseCommand
 {
+    use UsesImportLock;
+
     /**
      * The group the command is lumped under when using Spark list.
      *
@@ -85,19 +88,21 @@ class ImportOccurrences extends BaseCommand
         CLI::write('Limit: ' . $limit . ' | Page size: ' . $pageSize . ($dryRun ? ' | DRY-RUN' : ''), 'yellow');
 
         try {
-            $result = $orchestrator->run(
-                $source,
-                max(1, $limit),
-                max(1, $pageSize),
-                $dryRun,
-                $checkpoint !== '' ? $checkpoint : null,
-            );
+            $this->runWithImportLock(function () use ($orchestrator, $source, $limit, $pageSize, $dryRun, $checkpoint): void {
+                $result = $orchestrator->run(
+                    $source,
+                    max(1, $limit),
+                    max(1, $pageSize),
+                    $dryRun,
+                    $checkpoint !== '' ? $checkpoint : null,
+                );
 
-            CLI::write('Import completed with status: ' . $result['status'], 'green');
-            CLI::write('Run ID: ' . $result['run_id'], 'green');
-            CLI::write(service('importTaskSummaryFormatter')->format($source . ' occurrences', $result));
-            CLI::write('Fetched: ' . $result['fetched'] . ', Inserted: ' . $result['inserted'] . ', Updated: ' . $result['updated'] . ', Skipped: ' . $result['skipped'] . ', Errors: ' . $result['errors']);
-            CLI::write('Checkpoint: ' . (string) ($result['checkpoint'] ?? '(none)'));
+                CLI::write('Import completed with status: ' . $result['status'], 'green');
+                CLI::write('Run ID: ' . $result['run_id'], 'green');
+                CLI::write(service('importTaskSummaryFormatter')->format($source . ' occurrences', $result));
+                CLI::write('Fetched: ' . $result['fetched'] . ', Inserted: ' . $result['inserted'] . ', Updated: ' . $result['updated'] . ', Skipped: ' . $result['skipped'] . ', Errors: ' . $result['errors']);
+                CLI::write('Checkpoint: ' . (string) ($result['checkpoint'] ?? '(none)'));
+            });
         } catch (Throwable $exception) {
             CLI::error($exception->getMessage());
             $this->showError($exception);

@@ -8,9 +8,9 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Prevents concurrent automatic imports using local and database locks.
+ * Prevents concurrent imports using local and database locks.
  */
-class AutoImportLock
+class ImportLock
 {
     /**
      * @var resource|null Local file handle holding the process-lifetime lock.
@@ -23,7 +23,7 @@ class AutoImportLock
     private ?object $connection = null;
 
     /**
-     * Create an automatic import lock.
+     * Create an import lock.
      *
      * @param Closure(): object|null $connectionFactory Optional database connection factory.
      * @param string|null            $lockFile          Optional local lock file path.
@@ -35,20 +35,20 @@ class AutoImportLock
     }
 
     /**
-     * Acquire the local and database automatic import locks without waiting.
+     * Acquire the local and database import locks without waiting.
      *
      * @return bool True when this process acquired the lock.
      *
-     * @throws RuntimeException When locking cannot be initialized or is unsupported.
+    * @throws RuntimeException When file locking cannot be initialized.
      */
     public function acquire(): bool
     {
         $config = config(ImportConfig::class);
-        $lockFile = $this->lockFile ?? (string) $config->autoImportLockFile;
+        $lockFile = $this->lockFile ?? (string) $config->importLockFile;
         $fileHandle = @fopen($lockFile, 'c');
 
         if ($fileHandle === false) {
-            throw new RuntimeException('Unable to open the automatic import lock file: ' . $lockFile);
+            throw new RuntimeException('Unable to open the import lock file: ' . $lockFile);
         }
 
         if (! flock($fileHandle, LOCK_EX | LOCK_NB)) {
@@ -71,12 +71,11 @@ class AutoImportLock
 
         if ($driver !== 'MYSQLI') {
             $connection->close();
-            $this->releaseFileLock();
-            throw new RuntimeException('Automatic import locking requires a MySQL-compatible database.');
+            return true;
         }
 
         try {
-            $lockName = (string) $config->autoImportLockName;
+            $lockName = (string) $config->importLockName;
             $result = $connection->query('SELECT GET_LOCK(?, 0) AS acquired', [$lockName])->getRowArray();
         } catch (Throwable $exception) {
             $connection->close();
@@ -103,7 +102,7 @@ class AutoImportLock
     {
         try {
             if ($this->connection !== null) {
-                $lockName = (string) config(ImportConfig::class)->autoImportLockName;
+                $lockName = (string) config(ImportConfig::class)->importLockName;
                 $this->connection->query('SELECT RELEASE_LOCK(?)', [$lockName]);
             }
         } finally {

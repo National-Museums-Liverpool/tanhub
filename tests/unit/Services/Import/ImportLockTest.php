@@ -2,14 +2,14 @@
 
 namespace Tests;
 
-use App\Services\Import\AutoImportLock;
+use App\Services\Import\ImportLock;
 use CodeIgniter\Test\CIUnitTestCase;
 use RuntimeException;
 
 /**
  * Query result double for advisory lock responses.
  */
-final class AutoImportLockResultDouble
+final class ImportLockResultDouble
 {
     /**
      * Create an advisory lock result.
@@ -32,9 +32,9 @@ final class AutoImportLockResultDouble
 }
 
 /**
- * MySQL connection double for automatic import lock tests.
+ * Database connection double for import lock tests.
  */
-final class AutoImportLockConnectionDouble
+final class ImportLockConnectionDouble
 {
     /**
      * @var string Database driver name.
@@ -55,7 +55,9 @@ final class AutoImportLockConnectionDouble
     public function __construct(
         private readonly int $acquired = 1,
         private readonly bool $failOnRelease = false,
+        string $driver = 'MySQLi',
     ) {
+        $this->DBDriver = $driver;
     }
 
     /**
@@ -64,15 +66,15 @@ final class AutoImportLockConnectionDouble
      * @param string                   $sql    SQL statement.
      * @param array<int, string>|null  $params Query parameters.
      *
-     * @return AutoImportLockResultDouble Advisory lock query result.
+    * @return ImportLockResultDouble Advisory lock query result.
      */
-    public function query(string $sql, ?array $params = null): AutoImportLockResultDouble
+    public function query(string $sql, ?array $params = null): ImportLockResultDouble
     {
         if ($this->failOnRelease && str_contains($sql, 'RELEASE_LOCK')) {
             throw new RuntimeException('Release failed.');
         }
 
-        return new AutoImportLockResultDouble($this->acquired);
+        return new ImportLockResultDouble($this->acquired);
     }
 
     /**
@@ -87,11 +89,11 @@ final class AutoImportLockConnectionDouble
 }
 
 /**
- * Verifies automatic imports retain a process-lifetime local lock.
+ * Verifies imports retain a process-lifetime exclusive lock.
  *
  * @internal
  */
-final class AutoImportLockTest extends CIUnitTestCase
+final class ImportLockTest extends CIUnitTestCase
 {
     /**
      * @var string Lock file path for the current test.
@@ -133,14 +135,14 @@ final class AutoImportLockTest extends CIUnitTestCase
      */
     public function testLocalLockPreventsConcurrentAcquisition(): void
     {
-        $firstConnection = new AutoImportLockConnectionDouble();
-        $secondConnection = new AutoImportLockConnectionDouble();
+        $firstConnection = new ImportLockConnectionDouble();
+        $secondConnection = new ImportLockConnectionDouble();
         $secondFactoryCalls = 0;
-        $firstLock = new AutoImportLock(
+        $firstLock = new ImportLock(
             static fn (): object => $firstConnection,
             $this->lockFile,
         );
-        $secondLock = new AutoImportLock(
+        $secondLock = new ImportLock(
             static function () use ($secondConnection, &$secondFactoryCalls): object {
                 $secondFactoryCalls++;
                 return $secondConnection;
@@ -166,12 +168,12 @@ final class AutoImportLockTest extends CIUnitTestCase
      */
     public function testDatabaseLockRefusalReleasesLocalLock(): void
     {
-        $refusedLock = new AutoImportLock(
-            static fn (): object => new AutoImportLockConnectionDouble(0),
+        $refusedLock = new ImportLock(
+            static fn (): object => new ImportLockConnectionDouble(0),
             $this->lockFile,
         );
-        $nextLock = new AutoImportLock(
-            static fn (): object => new AutoImportLockConnectionDouble(),
+        $nextLock = new ImportLock(
+            static fn (): object => new ImportLockConnectionDouble(),
             $this->lockFile,
         );
 
@@ -187,13 +189,13 @@ final class AutoImportLockTest extends CIUnitTestCase
      */
     public function testDatabaseReleaseFailureStillReleasesLocalLock(): void
     {
-        $connection = new AutoImportLockConnectionDouble(1, true);
-        $failedReleaseLock = new AutoImportLock(
+        $connection = new ImportLockConnectionDouble(1, true);
+        $failedReleaseLock = new ImportLock(
             static fn (): object => $connection,
             $this->lockFile,
         );
-        $nextLock = new AutoImportLock(
-            static fn (): object => new AutoImportLockConnectionDouble(),
+        $nextLock = new ImportLock(
+            static fn (): object => new ImportLockConnectionDouble(),
             $this->lockFile,
         );
 
@@ -209,5 +211,30 @@ final class AutoImportLockTest extends CIUnitTestCase
         $this->assertTrue($connection->closed);
         $this->assertTrue($nextLock->acquire());
         $nextLock->release();
+    }
+
+    /**
+     * Enforce local exclusion when database advisory locks are unavailable.
+     *
+     * @return void
+     */
+    public function testNonMysqlConnectionsStillUseLocalLock(): void
+    {
+        $firstLock = new ImportLock(
+            static fn (): object => new ImportLockConnectionDouble(1, false, 'SQLite3'),
+            $this->lockFile,
+        );
+        $secondLock = new ImportLock(
+            static fn (): object => new ImportLockConnectionDouble(1, false, 'SQLite3'),
+            $this->lockFile,
+        );
+
+        $this->assertTrue($firstLock->acquire());
+        $this->assertFalse($secondLock->acquire());
+
+        $firstLock->release();
+
+        $this->assertTrue($secondLock->acquire());
+        $secondLock->release();
     }
 }

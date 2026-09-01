@@ -203,13 +203,13 @@ For example, edit the crontab for the web-server or deployment user:
 ```
 
 Replace `/var/www/tanhub` with the absolute application path and use the PHP
-binary configured for the deployment. `import:auto` holds a non-blocking file lock at
-`writable/import-auto.lock` for the process lifetime and also uses a MySQL advisory lock for
-cross-host coordination. The file lock continues to protect a host if MySQL closes an idle
-advisory-lock connection during a long import, so no external `flock` utility is required. The
-cron user must have permission to create and write the lock file. Choose an interval that allows
-a normal batch to finish and respects the rate limits of the configured Indicia Warehouse and NBN
-Atlas services.
+binary configured for the deployment. Every CLI and admin import holds a non-blocking file lock at
+`writable/import.lock` for the process lifetime and also uses a MySQL advisory lock for cross-host
+coordination. The file lock continues to protect a host if MySQL closes an idle advisory-lock
+connection during a long import, so no external `flock` utility is required. The web-server and
+CLI users that run imports must have permission to create and write the same lock file. Choose an
+interval that allows a normal batch to finish and respects the rate limits of the configured
+Indicia Warehouse and NBN Atlas services.
 
 The `\%F` format produces filenames such as `import-2026-08-03.log`. The backslash is required
 because cron treats an unescaped `%` as a special character. These are Spark command logs and

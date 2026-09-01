@@ -152,15 +152,15 @@ class Services extends BaseService
     }
 
     /**
-     * Automatic import database advisory lock.
+     * Exclusive import lock.
      */
-    public static function autoImportLock(bool $getShared = true): \App\Services\Import\AutoImportLock
+    public static function importLock(bool $getShared = true): \App\Services\Import\ImportLock
     {
         if ($getShared) {
-            return static::getSharedInstance('autoImportLock');
+            return static::getSharedInstance('importLock');
         }
 
-        return new \App\Services\Import\AutoImportLock();
+        return new \App\Services\Import\ImportLock();
     }
 
     /**

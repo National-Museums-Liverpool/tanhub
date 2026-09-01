@@ -3,6 +3,7 @@
 namespace Tests;
 
 use App\Services\Import\EntityImportOrchestrator;
+use App\Services\Import\ImportLock;
 use App\Services\Import\ImportOrchestrator;
 use App\Services\Stats\GridSquareStatsCountsService;
 use App\Services\Stats\TaxonRarityService;
@@ -122,6 +123,43 @@ final class ImportsPageTest extends CIUnitTestCase
             ->getRowArray();
 
         $this->assertNull($queueRow);
+    }
+
+    /**
+     * Keep an admin task queued when another import owns the exclusive lock.
+     *
+     * @return void
+     */
+    public function testRunTaskRemainsQueuedWhenAnotherImportIsRunning(): void
+    {
+        $this->markTaxonomyDependenciesComplete();
+        $this->authenticateAs('imports-admin-lock@example.com', 'admin');
+
+        $lock = $this->createMock(ImportLock::class);
+        $lock->expects($this->once())->method('acquire')->willReturn(false);
+        $lock->expects($this->never())->method('release');
+        \Config\Services::injectMock('importLock', $lock);
+
+        $orchestrator = $this->createMock(EntityImportOrchestrator::class);
+        $orchestrator->expects($this->never())->method('run');
+        \Config\Services::injectMock('importOrchestrator', $orchestrator);
+
+        $result = $this->post('imports/run', [
+            'source_key' => 'indicia-taxonomy:taxon_names',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirectTo(site_url('imports'));
+        $result->assertSessionHas('message');
+
+        $queueRow = db_connect()
+            ->table('import_task_queue')
+            ->where('source_key', 'indicia-taxonomy:taxon_names')
+            ->get()
+            ->getRowArray();
+
+        $this->assertIsArray($queueRow);
+        $this->assertSame('queued', $queueRow['status']);
     }
 
     public function testRunNbnOccurrenceTaskQueuesAndRuns(): void

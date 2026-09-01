@@ -87,6 +87,19 @@ NBN occurrence imports use `https://records-ws.nbnatlas.org/occurrences/search`.
 
 See [Import](import.md) for the required import order and source behaviour.
 
+## Incremental derived statistics
+
+- `taxonYearStats.historyYears`: completed years retained by the yearly statistics rebuild; zero
+  means all available history.
+- `taxonYearStats.yearsPerRun`: number of years processed by one staged rebuild invocation.
+- `taxonYearStats.maxScopes`: maximum dirty taxon/year scopes processed by one incremental
+  invocation; defaults to `100`.
+- `taxonYearStats.maxRuntimeSeconds`: runtime limit for one incremental statistics invocation;
+  defaults to `30` seconds.
+
+The first population and reconciliation runs still use the resumable staged rebuild. Once the
+aggregate tables contain data, occurrence changes are processed through the dirty-scope queue.
+
 ## Taxon media
 
 All taxon media is stored below `writable/uploads`.

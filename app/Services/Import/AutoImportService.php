@@ -4,6 +4,7 @@ namespace App\Services\Import;
 
 use App\Models\ImportOffsetModel;
 use App\Models\ImportRunModel;
+use App\Services\Stats\StatsDirtyScopeService;
 use Config\Import as ImportConfig;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -81,11 +82,13 @@ class AutoImportService
      * @param ImportOffsetModel|null   $importOffsetModel   Completion state model.
      * @param ImportRunModel|null      $importRunModel       Run history model.
      * @param DerivedImportRunner|null $derivedImportRunner Derived task runner.
+    * @param StatsDirtyScopeService|null $statsDirtyScopeService Dirty stats queue service.
      */
     public function __construct(
         private readonly ?ImportOffsetModel $importOffsetModel = null,
         private readonly ?ImportRunModel $importRunModel = null,
         private readonly ?DerivedImportRunner $derivedImportRunner = null,
+        private readonly ?StatsDirtyScopeService $statsDirtyScopeService = null,
     ) {
     }
 
@@ -131,27 +134,38 @@ class AutoImportService
 
         $now = $now ?? new DateTimeImmutable();
         $staleBefore = $now->modify('-2 hours');
+        $dirtyScopeService = $this->statsDirtyScopeService ?? service('statsDirtyScopeService');
         $taxonYearStatsKey = 'derived-stats:taxon_year_stats';
-        if ($offsetModel->hasSourceKey($taxonYearStatsKey) && ! $offsetModel->isComplete($taxonYearStatsKey)) {
+        if ($this->statsTaskHasWork($offsetModel, $dirtyScopeService, $taxonYearStatsKey, StatsDirtyScopeService::TAXON_YEAR)) {
             return [
                 'source_key' => $taxonYearStatsKey,
                 'kind' => 'derived',
                 'service' => 'taxonYearStatsService',
-                'reason' => 'yearly statistics task has an incomplete batch',
+                'reason' => 'yearly statistics task has dirty scopes',
                 'last_run' => null,
             ];
         }
         $taxonStatsKey = 'derived-stats:taxon_stats';
-        if ($offsetModel->hasSourceKey($taxonStatsKey) && ! $offsetModel->isComplete($taxonStatsKey)) {
+        if ($this->statsTaskHasWork($offsetModel, $dirtyScopeService, $taxonStatsKey, StatsDirtyScopeService::TAXON)) {
             return [
                 'source_key' => $taxonStatsKey,
                 'kind' => 'derived',
                 'service' => 'taxonStatsService',
-                'reason' => 'report statistics task has an incomplete batch',
+                'reason' => 'report statistics task has dirty scopes',
                 'last_run' => null,
             ];
         }
-        $reportSelection = $this->leastRecentlySuccessful(self::REPORT_TASKS);
+        $reportTasks = array_values(array_filter(self::REPORT_TASKS, function (array $task) use ($offsetModel, $dirtyScopeService): bool {
+            if ($task['source_key'] === 'derived-stats:taxon_year_stats') {
+                return $this->statsTaskHasWork($offsetModel, $dirtyScopeService, $task['source_key'], StatsDirtyScopeService::TAXON_YEAR);
+            }
+            if ($task['source_key'] === 'derived-stats:taxon_stats') {
+                return $this->statsTaskHasWork($offsetModel, $dirtyScopeService, $task['source_key'], StatsDirtyScopeService::TAXON);
+            }
+
+            return true;
+        }));
+        $reportSelection = $this->leastRecentlySuccessful($reportTasks);
 
         if ($reportSelection['last_run'] === null || $this->isBefore($reportSelection['last_run'], $staleBefore)) {
             return [
@@ -172,6 +186,40 @@ class AutoImportService
             'reason' => 'occurrence source was least recently run',
             'last_run' => $occurrenceSelection['last_run'],
         ];
+    }
+
+    /**
+     * Determine whether a stats task needs initial, incomplete, or dirty work.
+     *
+     * @param ImportOffsetModel       $offsetModel Import completion model.
+     * @param StatsDirtyScopeService  $dirtyScopeService Dirty queue service.
+     * @param string                  $sourceKey Stats task source key.
+     * @param string                  $statType Queue statistic type.
+     * @return bool True when the task should be considered by automation.
+     */
+    private function statsTaskHasWork(
+        ImportOffsetModel $offsetModel,
+        StatsDirtyScopeService $dirtyScopeService,
+        string $sourceKey,
+        string $statType,
+    ): bool {
+        if ($offsetModel->hasSourceKey($sourceKey)) {
+            return ! $offsetModel->isComplete($sourceKey)
+                || $dirtyScopeService->hasWork($statType);
+        }
+
+        $runModel = $this->importRunModel ?? model(ImportRunModel::class);
+        $run = $runModel
+            ->where('source_key', $sourceKey)
+            ->where('status', 'success')
+            ->orderBy('finished_at', 'desc')
+            ->first();
+
+        if ($run === null) {
+            return true;
+        }
+
+        return $dirtyScopeService->hasWork($statType);
     }
 
     /**

@@ -80,9 +80,10 @@ class OccurrenceImportService
      * @param bool                              $dryRun       When true, compute counts without
      *                                                        writing changes.
      *
-        * @return array<string, int|string|null|array<int, int>> Result counts: `fetched`, `processed`,
-        *        `inserted`, `updated`, `skipped`, `errors`, `last_checkpoint` (highest `_checkpoint`
-        *        value seen, or null), and `changed_occurrence_ids` (IDs inserted or updated).
+        * @return array<string, int|string|null|array<int, int>|array<int, array<string, mixed>>> Result
+        *        counts: `fetched`, `processed`, `inserted`, `updated`, `skipped`, `errors`,
+        *        `last_checkpoint` (highest `_checkpoint` value seen, or null), `changed_occurrence_ids`
+        *        (stats-relevant changed IDs), and `changed_occurrences` (old/new scope snapshots).
      */
     public function import(array $records, int $dataSourceId, string $sourceAbbr, bool $dryRun = false): array
     {
@@ -95,6 +96,7 @@ class OccurrenceImportService
             'errors' => 0,
             'last_checkpoint' => null,
             'changed_occurrence_ids' => [],
+            'changed_occurrences' => [],
         ];
 
         if ($records === []) {
@@ -245,10 +247,20 @@ class OccurrenceImportService
 
                 if ($existing !== null) {
                     $counts['updated']++;
-                    $counts['changed_occurrence_ids'][] = (int) $existing['id'];
+                    $changed = $this->statsRelevantOccurrenceChanged($existing, $row);
 
                     if (! $dryRun) {
                         $occurrenceModel->update((int) $existing['id'], $row);
+
+                        if ($changed) {
+                            $occurrenceId = (int) $existing['id'];
+                            $counts['changed_occurrence_ids'][] = $occurrenceId;
+                            $counts['changed_occurrences'][] = [
+                                'old' => $existing,
+                                'new' => $row + ['id' => $occurrenceId],
+                                'old_region_ids' => $this->regionIds($occurrenceId),
+                            ];
+                        }
                     }
 
                     $counts['processed']++;
@@ -264,6 +276,11 @@ class OccurrenceImportService
                     $newId = (int) $occurrenceModel->getInsertID();
                     $counts['changed_occurrence_ids'][] = $newId;
                     $occurrencesByUniqueKey[$uniqueKey] = $row + ['id' => $newId];
+                    $counts['changed_occurrences'][] = [
+                        'old' => null,
+                        'new' => $row + ['id' => $newId],
+                        'old_region_ids' => [],
+                    ];
                 }
 
                 $counts['processed']++;
@@ -276,6 +293,81 @@ class OccurrenceImportService
         }
 
         return $counts;
+    }
+
+    /**
+     * Determine whether an occurrence update can affect derived statistics.
+     *
+     * @param array<string, mixed> $existing Existing occurrence row.
+     * @param array<string, mixed> $incoming Normalised replacement values.
+     * @return bool True when a statistic input changed.
+     */
+    private function statsRelevantOccurrenceChanged(array $existing, array $incoming): bool
+    {
+        $fields = [
+            'taxon_id',
+            'from_date',
+            'to_date',
+            'grid_ref_2km',
+            'recorded_by',
+            'identification_verification_status',
+            'latitude',
+            'longitude',
+        ];
+        foreach ($this->reportingColumns() as $column) {
+            $fields[] = $column;
+        }
+
+        foreach ($fields as $field) {
+            if (($existing[$field] ?? null) != ($incoming[$field] ?? null)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Return the current geographic memberships for an occurrence.
+     *
+     * @param int $occurrenceId Occurrence identifier.
+     * @return array<int, int> Geographic region IDs.
+     */
+    private function regionIds(int $occurrenceId): array
+    {
+        $db = db_connect();
+        if (! $db->tableExists('geographic_regions_occurrences')) {
+            return [];
+        }
+
+        return array_values(array_unique(array_map(
+            static fn (array $row): int => (int) $row['geographic_region_id'],
+            $db->table('geographic_regions_occurrences')
+                ->select('geographic_region_id')
+                ->where('occurrence_id', $occurrenceId)
+                ->get()
+                ->getResultArray(),
+        )));
+    }
+
+    /**
+     * Return configured physical reporting-rank columns.
+     *
+     * @return array<int, string> Normalised occurrence columns.
+     */
+    private function reportingColumns(): array
+    {
+        $ranks = config('Import')->taxonRanks ?? [];
+        $ranks = is_array($ranks) ? $ranks : explode(',', (string) $ranks);
+
+        return array_values(array_filter(array_map(static function ($rank): string {
+            if (! is_scalar($rank)) {
+                return '';
+            }
+            $column = preg_replace('/[^a-z0-9]+/i', '_', strtolower(trim((string) $rank)));
+
+            return trim((string) $column, '_') . '_id';
+        }, $ranks)));
     }
 
     /**

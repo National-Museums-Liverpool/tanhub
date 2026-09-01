@@ -8,6 +8,7 @@ use App\Models\ImportRunModel;
 use App\Services\Import\Adapter\OccurrenceSourceAdapterFactory;
 use App\Services\Import\Persistence\GeographicRegionsOccurrenceImportService;
 use App\Services\Import\Persistence\OccurrenceImportService;
+use App\Services\Stats\StatsDirtyScopeService;
 use Config\Import as ImportConfig;
 use InvalidArgumentException;
 use RuntimeException;
@@ -38,6 +39,7 @@ class ImportOrchestrator
      * @param DataSourceModel|null                $dataSourceModel Data source model.
      * @param ImportOffsetModel|null              $importOffsetModel Import offset/checkpoint model.
     * @param GeographicRegionsOccurrenceImportService|null $geographicRegionsOccurrenceImportService Geographic assignment service.
+        * @param StatsDirtyScopeService|null             $statsDirtyScopeService Dirty statistics queue service.
      */
     public function __construct(
         private readonly ?ImportConfig $config = null,
@@ -47,6 +49,7 @@ class ImportOrchestrator
         private readonly ?DataSourceModel $dataSourceModel = null,
         private readonly ?ImportOffsetModel $importOffsetModel = null,
         private readonly ?GeographicRegionsOccurrenceImportService $geographicRegionsOccurrenceImportService = null,
+        private readonly ?StatsDirtyScopeService $statsDirtyScopeService = null,
     ) {
     }
 
@@ -171,11 +174,22 @@ class ImportOrchestrator
                 $total['skipped'] += $counts['skipped'];
                 $total['errors'] += $counts['errors'];
 
+                $changedOccurrences = (array) ($counts['changed_occurrences'] ?? []);
+                if ($changedOccurrences !== [] && ! $dryRun) {
+                    ($this->statsDirtyScopeService ?? service('statsDirtyScopeService'))
+                        ->enqueueOccurrenceChanges($changedOccurrences);
+                }
+
                 if ($counts['errors'] === 0 && ! $dryRun) {
                     $assignmentResult = $geographicRegionsOccurrenceImportService->run(
                         false,
                         (array) ($counts['changed_occurrence_ids'] ?? []),
                     );
+
+                    if ($changedOccurrences !== []) {
+                        ($this->statsDirtyScopeService ?? service('statsDirtyScopeService'))
+                            ->enqueueCurrentOccurrenceScopes((array) ($counts['changed_occurrence_ids'] ?? []));
+                    }
 
                     if (((int) ($assignmentResult['errors'] ?? 0)) > 0) {
                         $total['errors'] += (int) ($assignmentResult['errors'] ?? 0);

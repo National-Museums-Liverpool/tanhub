@@ -342,7 +342,9 @@ class Taxa extends BaseController
         }
 
         if ($updateData !== []) {
+            service('statsDirtyScopeService')->enqueueTaxonOccurrenceScopes($id);
             $model->update($id, $updateData);
+            service('statsDirtyScopeService')->enqueueTaxonOccurrenceScopes($id);
         }
 
         return redirect()->to(site_url('taxa/' . $id))->with('message', 'Taxon details updated.');

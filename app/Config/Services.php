@@ -122,7 +122,9 @@ class Services extends BaseService
             return static::getSharedInstance('taxonStatsService');
         }
 
-        return new \App\Services\Stats\TaxonStatsService();
+        return new \App\Services\Stats\TaxonStatsService(
+            static::statsDirtyScopeService(false),
+        );
     }
 
     /**
@@ -134,7 +136,26 @@ class Services extends BaseService
             return static::getSharedInstance('taxonYearStatsService');
         }
 
-        return new \App\Services\Stats\TaxonYearStatsService();
+        return new \App\Services\Stats\TaxonYearStatsService(
+            static::statsDirtyScopeService(false),
+        );
+    }
+
+    /**
+     * Dirty statistic scope queue service.
+     *
+     * @param bool $getShared Whether to return a shared service instance.
+     * @return \App\Services\Stats\StatsDirtyScopeService Queue service.
+     */
+    public static function statsDirtyScopeService(bool $getShared = true): \App\Services\Stats\StatsDirtyScopeService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('statsDirtyScopeService');
+        }
+
+        return new \App\Services\Stats\StatsDirtyScopeService(
+            model(\App\Models\StatsDirtyScopeModel::class),
+        );
     }
 
     /**
@@ -188,6 +209,7 @@ class Services extends BaseService
             model(\App\Models\ImportOffsetModel::class),
             model(\App\Models\ImportRunModel::class),
             static::derivedImportRunner(false),
+            static::statsDirtyScopeService(false),
         );
     }
 
@@ -232,6 +254,7 @@ class Services extends BaseService
             model(\App\Models\DataSourceModel::class),
             model(\App\Models\ImportOffsetModel::class),
             static::geographicRegionsOccurrenceImportService(false),
+            static::statsDirtyScopeService(false),
         );
     }
 

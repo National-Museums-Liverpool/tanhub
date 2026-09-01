@@ -3,6 +3,8 @@
 namespace Tests;
 
 use App\Services\Stats\TaxonYearStatsService;
+use App\Services\Stats\StatsDirtyScopeService;
+use App\Models\StatsDirtyScopeModel;
 use CodeIgniter\Test\CIUnitTestCase;
 
 /**
@@ -21,6 +23,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
 
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_year_stats');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_year_stats_build');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'stats_dirty_scopes');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'import_offsets');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'geographic_regions_occurrences');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'occurrences');
@@ -97,6 +100,18 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             updated_at DATETIME NULL
         )');
 
+        $this->db->query('CREATE TABLE ' . $prefix . 'stats_dirty_scopes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope_key VARCHAR(180) NOT NULL UNIQUE,
+            stat_type VARCHAR(32) NOT NULL,
+            projection VARCHAR(64) NOT NULL,
+            taxon_id INTEGER NOT NULL,
+            geographic_region_id INTEGER NULL,
+            year INTEGER NULL,
+            created_at DATETIME NULL,
+            updated_at DATETIME NULL
+        )');
+
         foreach ([
             ['id' => 1, 'is_reporting' => 0],
             ['id' => 2, 'is_reporting' => 1],
@@ -113,11 +128,11 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         }
     }
 
-    public function testRunBuildsGlobalAndRegionalRowsWithinNineCompletedYears(): void
+    public function testRunBuildsGlobalAndRegionalRowsWithinConfiguredHistory(): void
     {
         $currentYear = (int) date('Y');
         $withinWindowYear = $currentYear - 2;
-        $outsideWindowYear = $currentYear - 11;
+        $outsideWindowYear = $currentYear - 31;
 
         $this->db->table('occurrences')->insertBatch([
             ['id' => 1, 'taxon_id' => 1, 'from_date' => $withinWindowYear . '-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU01A', 'blocked' => 0, 'deleted_at' => null],
@@ -252,6 +267,49 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             $this->assertSame(1, (int) $this->findTaxonYearStatRow($taxonId, null, $completedYear)['occurrences_count']);
             $this->assertSame(1, (int) $this->findTaxonYearStatRow($taxonId, 11, $completedYear)['occurrences_count']);
         }
+    }
+
+    /**
+     * Verify a queued taxon-year scope is recomputed without a full publish.
+     */
+    public function testRunProcessesQueuedScopeAndLeavesUnchangedRowsAlone(): void
+    {
+        $completedYear = (int) date('Y') - 1;
+        $this->db->table('occurrences')->insert([
+            'id' => 30,
+            'taxon_id' => 1,
+            'from_date' => $completedYear . '-01-01',
+            'grid_ref_2km' => 'SU30A',
+            'blocked' => 0,
+            'deleted_at' => null,
+        ]);
+
+        $service = new TaxonYearStatsService(new StatsDirtyScopeService(new StatsDirtyScopeModel()));
+        $this->runToCompletion($service);
+        $before = $this->findTaxonYearStatRow(1, null, $completedYear);
+
+        $this->db->table('occurrences')->insert([
+            'id' => 31,
+            'taxon_id' => 1,
+            'from_date' => $completedYear . '-02-01',
+            'grid_ref_2km' => 'SU31B',
+            'blocked' => 0,
+            'deleted_at' => null,
+        ]);
+        $dirty = new StatsDirtyScopeService(new StatsDirtyScopeModel());
+        $queued = $dirty->enqueueOccurrenceChanges([[
+            'old' => null,
+            'new' => ['taxon_id' => 1, 'from_date' => $completedYear . '-02-01', 'grid_ref_2km' => 'SU31B'],
+            'old_region_ids' => [],
+        ]]);
+
+        $this->assertGreaterThan(0, $queued);
+        $counts = $service->run();
+
+        $this->assertSame('success', $counts['status']);
+        $this->assertSame(2, (int) $this->findTaxonYearStatRow(1, null, $completedYear)['occurrences_count']);
+        $this->assertNotSame((int) $before['occurrences_count'], (int) $this->findTaxonYearStatRow(1, null, $completedYear)['occurrences_count']);
+        $this->assertFalse($dirty->hasDirtyScopes(StatsDirtyScopeService::TAXON_YEAR));
     }
 
     /**

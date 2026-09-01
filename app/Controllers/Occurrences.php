@@ -138,10 +138,12 @@ class Occurrences extends BaseController
 
         /** @var OccurrenceModel $model */
         $model = model(OccurrenceModel::class);
+        service('statsDirtyScopeService')->enqueueCurrentOccurrenceScopes([$id]);
         $model->update($id, [
             'blocked' => $blocked ? 1 : 0,
             'blocked_reason' => $blocked ? $blockedReason : null,
         ]);
+        service('statsDirtyScopeService')->enqueueCurrentOccurrenceScopes([$id]);
 
         return redirect()->to(site_url('occurrences/' . $id))->with('message', 'Occurrence moderation settings updated.');
     }

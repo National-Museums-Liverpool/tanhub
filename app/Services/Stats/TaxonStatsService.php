@@ -3,12 +3,22 @@
 namespace App\Services\Stats;
 
 use Config\TaxonFrequencyTrend;
+use Config\TaxonYearStats;
 
 /**
  * Recomputes taxon_stats derived aggregates from active occurrences.
  */
 class TaxonStatsService
 {
+    /**
+     * Create the taxon statistics service.
+     *
+     * @param StatsDirtyScopeService|null $dirtyScopeService Dirty queue service.
+     */
+    public function __construct(private readonly ?StatsDirtyScopeService $dirtyScopeService = null)
+    {
+    }
+
     /**
      * Recompute taxon stats for global and regional scopes.
      *
@@ -18,6 +28,13 @@ class TaxonStatsService
      */
     public function run(bool $dryRun = false): array
     {
+        $db = db_connect();
+        if ($db->table('taxon_stats')->countAllResults() > 0
+            && $this->dirtyScopeService !== null
+            && $this->dirtyScopeService->hasDirtyScopes(StatsDirtyScopeService::TAXON)) {
+            return $this->runIncremental($dryRun);
+        }
+
         $counts = [
             'status' => 'success',
             'fetched' => 0,
@@ -76,17 +93,132 @@ class TaxonStatsService
     }
 
     /**
+     * Process queued global and regional taxon scopes within configured limits.
+     *
+     * Frequency trends remain calculated by the existing full trend routine so
+     * dense ranking continues to use every taxon in the affected rank/scope.
+     *
+     * @param bool $dryRun Whether persistence is disabled for this run.
+     * @return array<string, int|string|bool> Incremental result and continuation state.
+     */
+    private function runIncremental(bool $dryRun): array
+    {
+        $counts = [
+            'status' => 'success', 'fetched' => 0, 'processed' => 0, 'inserted' => 0,
+            'updated' => 0, 'not changed' => 0, 'skipped' => 0, 'errors' => 0, 'has_more' => false,
+        ];
+        $dirty = $this->dirtyScopeService ?? service('statsDirtyScopeService');
+        $config = config(TaxonYearStats::class);
+        $startedAt = microtime(true);
+
+        try {
+            $scopes = $dirty->next(StatsDirtyScopeService::TAXON, $config->maxScopes);
+            $counts['fetched'] = count($scopes);
+            foreach ($scopes as $scope) {
+                if ($counts['processed'] > 0 && microtime(true) - $startedAt >= $config->maxRuntimeSeconds) {
+                    break;
+                }
+
+                $projection = (string) ($scope['projection'] ?? '');
+                $batch = $projection === 'exact'
+                    ? ['columns' => [], 'include_exact' => true]
+                    : ['columns' => [$projection], 'include_exact' => false];
+                $rows = $this->buildRows($batch, $scope);
+                $this->replaceDirtyRows($scope, $rows, $dryRun);
+                if (! $dryRun) {
+                    $dirty->acknowledge([(int) $scope['id']]);
+                }
+                $counts['processed']++;
+                $counts['updated']++;
+                $counts['inserted'] += count($rows);
+            }
+            if (! $dryRun && $counts['processed'] > 0) {
+                $this->refreshFrequencyTrends();
+            }
+            $counts['has_more'] = $dirty->hasDirtyScopes(StatsDirtyScopeService::TAXON);
+        } catch (\Throwable $exception) {
+            log_message('error', $exception->getMessage());
+            $counts['status'] = 'failed';
+            $counts['errors'] = 1;
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Reapply dense frequency trends after a partial aggregate update.
+     *
+     * @return void
+     */
+    private function refreshFrequencyTrends(): void
+    {
+        $db = db_connect();
+        $trends = $this->frequencyTrends();
+        $rows = $db->table('taxon_stats')->select('id, taxon_id, geographic_region_id')->get()->getResultArray();
+
+        foreach ($rows as $row) {
+            $trend = $trends[$this->scopeKey(
+                (int) $row['taxon_id'],
+                $this->nullableInt($row['geographic_region_id'] ?? null),
+            )] ?? ['score' => null, 'state' => null];
+            $db->table('taxon_stats')->where('id', (int) $row['id'])->update([
+                'frequency_trend' => $trend['score'],
+                'frequency_trend_state' => $trend['state'],
+            ]);
+        }
+    }
+
+    /**
+     * Replace a dirty taxon aggregate, deleting it when no active records remain.
+     *
+     * @param array<string, mixed>        $scope Dirty queue row.
+     * @param array<int, array<string,mixed>> $rows Recomputed rows.
+     * @param bool                         $dryRun Whether persistence is disabled.
+     * @return void
+     */
+    private function replaceDirtyRows(array $scope, array $rows, bool $dryRun): void
+    {
+        if ($dryRun) {
+            return;
+        }
+
+        $db = db_connect();
+        $builder = $db->table('taxon_stats')
+            ->where('taxon_id', (int) $scope['taxon_id']);
+        if ($scope['geographic_region_id'] === null) {
+            $builder->where('geographic_region_id', null);
+        } else {
+            $builder->where('geographic_region_id', (int) $scope['geographic_region_id']);
+        }
+        $builder->delete();
+        if ($rows !== []) {
+            $this->insertRows($rows);
+        }
+    }
+
+    /**
      * Build recomputed taxon stats rows.
      *
      * @return array<int, array<string, mixed>>
      */
-    private function buildRows(array $batch): array
+    private function buildRows(array $batch, ?array $scope = null): array
     {
         $db = db_connect();
         $prefix = $db->getPrefix();
         $reportingColumns = $batch['columns'];
         $projectionColumns = $reportingColumns === [] ? '' : ",\n                    " . implode(",\n                    ", array_map(static fn (string $column): string => 'o.' . $column, $reportingColumns));
         $scopedOccurrences = $this->scopedOccurrenceSql($prefix, $reportingColumns, $batch['include_exact']);
+        $scopedTable = 'scoped_occurrences';
+        $scopeCte = '';
+        if ($scope !== null) {
+            $scopeTaxonId = (int) ($scope['taxon_id'] ?? 0);
+            $scopeRegion = $scope['geographic_region_id'] === null ? 'IS NULL' : '= ' . (int) $scope['geographic_region_id'];
+            $scopedTable = 'filtered_scoped_occurrences';
+            $scopeCte = ', filtered_scoped_occurrences AS (
+                SELECT * FROM scoped_occurrences
+                WHERE taxon_id = ' . $scopeTaxonId . ' AND geographic_region_id ' . $scopeRegion . '
+            )';
+        }
         $rows = $db->query(
             'WITH active_occurrences AS (
                 SELECT
@@ -111,7 +243,7 @@ class TaxonStatsService
                     AND o.blocked = 0
                     AND COALESCE(o.from_date, o.to_date) IS NOT NULL
             ),
-            scoped_occurrences AS (' . $scopedOccurrences . '),
+            scoped_occurrences AS (' . $scopedOccurrences . ')' . $scopeCte . ',
             aggregates AS (
                 SELECT
                     so.taxon_id,
@@ -122,7 +254,7 @@ class TaxonStatsService
                     MAX(so.record_date) AS last_record_date,
                     MIN(CASE WHEN so.identification_verification_status LIKE "V%" THEN so.record_date END) AS first_verified_record_date,
                     MAX(CASE WHEN so.identification_verification_status LIKE "V%" THEN so.record_date END) AS last_verified_record_date
-                FROM scoped_occurrences so
+                FROM ' . $scopedTable . ' so
                 GROUP BY so.taxon_id, so.geographic_region_id
             )
             SELECT
@@ -139,7 +271,7 @@ class TaxonStatsService
                 MAX(CASE WHEN so.record_date = a.last_verified_record_date
                     AND so.identification_verification_status LIKE "V%" THEN so.occurrence_id END) AS last_verified_occurrence_id
             FROM aggregates a
-            INNER JOIN scoped_occurrences so
+            INNER JOIN ' . $scopedTable . ' so
                 ON so.taxon_id = a.taxon_id
                 AND (
                     so.geographic_region_id = a.geographic_region_id

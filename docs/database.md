@@ -449,6 +449,24 @@ IX* indicates compound indexes on `build_id, projection, taxon_id, geographic_re
 and `build_id, year`. These indexes support replacing a processed projection/year range and
 selecting all rows belonging to a completed build.
 
+### stats_dirty_scopes
+
+Internal deduplicated work queue populated by occurrence imports. Each row identifies a statistic
+type (`taxon` or `taxon_year`), an exact or configured reporting projection, a taxon, an optional
+geographic region, and an optional year. The stable `scope_key` prevents repeated occurrence
+updates in one import period from creating duplicate work. Rows are removed only after the
+corresponding aggregate has been recomputed successfully.
+
+| Column               | Type         | Null | Key | Description |
+| -------------------- | ------------ | ---- | --- | ----------- |
+| id                   | BIGINT       | NO   | PK  | Queue row identifier |
+| scope_key            | VARCHAR(180) | NO   | UQ  | Stable deduplication key |
+| stat_type            | VARCHAR(32)  | NO   | IX  | `taxon` or `taxon_year` |
+| projection           | VARCHAR(64)  | NO   |     | `exact` or a reporting occurrence column |
+| taxon_id             | BIGINT       | NO   | IX  | Aggregate taxon identifier |
+| geographic_region_id | BIGINT       | YES  |     | Region, or null for global scope |
+| year                 | INT          | YES  |     | Completed record year, or null for base stats |
+
 ## User profile fields
 
 CodeIgniter Shield stores login identifiers and password hashes in its authentication tables. The

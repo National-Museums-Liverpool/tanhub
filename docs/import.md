@@ -384,6 +384,19 @@ The task:
 - processes the rebuild in resumable year batches and publishes the staged
   result atomically
 
+Occurrence inserts and statistics-relevant updates enqueue deduplicated dirty scopes for the
+affected exact taxon, configured reporting taxa, year, and geographic regions. Old scopes are
+queued before an update and current region scopes after geographic membership reassignment, so
+taxon moves, date changes, and region changes remove stale aggregates as well as adding new ones.
+Identical occurrence replays do not enqueue work. After the initial staged population (or a
+deliberate reconciliation rebuild), subsequent runs process dirty scopes only, bounded by
+`taxonYearStats.maxScopes` and `taxonYearStats.maxRuntimeSeconds`.
+
+The base `taxon_stats` task uses the same dirty queue where possible. Frequency trends remain
+calculated with the existing whole-rank dense-ranking routine; this is intentionally conservative
+because a single scope change can alter the relative score of every taxon in that rank and region.
+The task therefore preserves current trend behavior while processing aggregate rows incrementally.
+
 ### Derived taxon frequency trends
 
 The taxon stats task also calculates `frequency_trend` for rows at every configured reporting

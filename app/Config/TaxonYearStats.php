@@ -16,6 +16,12 @@ class TaxonYearStats extends BaseConfig
     /** @var int Number of years processed per resumable task invocation. */
     public int $yearsPerRun = 5;
 
+    /** @var int Maximum dirty scopes processed per incremental invocation. */
+    public int $maxScopes = 100;
+
+    /** @var int Maximum runtime in seconds for an incremental invocation. */
+    public int $maxRuntimeSeconds = 30;
+
     /**
      * Load and validate yearly-statistics settings.
      *
@@ -26,6 +32,8 @@ class TaxonYearStats extends BaseConfig
         parent::__construct();
         $this->historyYears = $this->integerFromEnvironment('taxonYearStats.historyYears', $this->historyYears, 0, 10000);
         $this->yearsPerRun = $this->integerFromEnvironment('taxonYearStats.yearsPerRun', $this->yearsPerRun, 1, 1000);
+        $this->maxScopes = $this->integerFromEnvironment('taxonYearStats.maxScopes', $this->maxScopes, 1, 100000);
+        $this->maxRuntimeSeconds = $this->integerFromEnvironment('taxonYearStats.maxRuntimeSeconds', $this->maxRuntimeSeconds, 1, 86400);
     }
 
     /**

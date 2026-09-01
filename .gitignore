@@ -62,6 +62,8 @@ Vagrantfile
 
 /writable/uploads/*
 !/writable/uploads/index.html
+/writable/uploads/taxon-media/
+!/writable/uploads/taxon-media/index.html
 
 /writable/debugbar/*
 !/writable/debugbar/index.html

@@ -161,18 +161,17 @@ CI_ENVIRONMENT = production
 
 11. Ensure writable media directories exist and are writable by the web server user:
 
-```bash
-mkdir -p writable/uploads/taxon-media
-chmod -R ug+rwX writable/uploads
-```
+   ```bash
+   mkdir -p writable/uploads/taxon-media
+   chmod -R ug+rwX writable/uploads
+   ```
 
-   The scheduled import command writes its console output to a separate directory. Create it
-   and make it writable by the user that runs the cron job:
+   The scheduled import command writes its console output to a separate directory. Ensure it is
+   writable by the user that runs the cron job:
 
-```bash
-mkdir -p writable/import-logs
-chmod -R ug+rwX writable/import-logs
-```
+   ```bash
+   chmod -R ug+rwX writable/import-logs
+   ```
 
 12. Optional taxon media configuration in `.env`:
 
@@ -220,13 +219,17 @@ The `\%F` format produces filenames such as `import-2026-08-03.log`. The backsla
 because cron treats an unescaped `%` as a special character. These are Spark command logs and
 are separate from CodeIgniter's application logs in `writable/logs`.
 
-To remove import logs older than 30 days, add a separate scheduled cleanup command:
+## 4. Use Cron to tidy old log files
+
+To remove import logs older than 30 days, add a separate scheduled cleanup command for both import
+and CodeIgniter logs; change `+30` to a different number of days if required:
 
 ```cron
+15 3 * * * find /var/www/tanhub/writable/logs -type f -name 'log-*.log' -mtime +30 -delete
 15 3 * * * find /var/www/tanhub/writable/import-logs -type f -name 'import-*.log' -mtime +30 -delete
 ```
 
-## 4. API Configuration
+## 5. API Configuration
 
 If tanhub is configured to serve only publicly viewable data, API access can be allowed without
 authentication, in which case rate limits are applied to prevent misuse or denial-of-service
@@ -265,7 +268,7 @@ CORS_SUPPORTS_CREDENTIALS=true
 CORS_ALLOWED_HEADERS=Origin,Content-Type,Accept,Authorization,X-Requested-With
 ```
 
-## 5. Link tanhub to an Indicia Warehouse
+## 6. Link tanhub to an Indicia Warehouse
 
 1. In the warehouse, open `Admin > REST API Clients` from the menu. If you don't have privileges to
    see this menu item then you will have to request that the warehouse administrator does this for
@@ -317,7 +320,7 @@ CORS_ALLOWED_HEADERS=Origin,Content-Type,Accept,Authorization,X-Requested-With
   - `Config\Import.indiciaSecret` - set to the secret given for your API client.
   - `Config\Import.indiciaOccurrencesEsEndpoint` - match the endpoint from step 5.
 
-## 6. Prepare the Indicia Warehouse
+## 7. Prepare the Indicia Warehouse
 
 1. If you are using the BRC Community Warehouse for your Indicia installation, then the required
    reports are already present on the server. If not, then copy the
@@ -331,7 +334,7 @@ grant select on recording_scheme_taxa to indicia_report_user;
 grant select on recording_schemes to indicia_report_user;
 ```
 
-## 7. Next Step
+## 8. Next Step
 
 After installation and warehouse linkage, continue with the import process in [Import](import.md).
 

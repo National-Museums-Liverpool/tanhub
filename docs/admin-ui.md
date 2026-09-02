@@ -40,6 +40,73 @@ The menu hierarchy is:
 - Imports
 - Users
 
+## Typical day-to-day tasks for managers
+
+Most day-to-day work involves improving how taxa are presented, or checking records before they
+appear in reports and visualisations. The steps below use the names in the main menu.
+
+### Add a friendly name to a taxon group
+
+A friendly name is the clear, public-facing name shown instead of a source system's name. For
+example, you might change a technical group name to “Bees, Wasps and Ants”.
+
+1. Open **Taxonomy > Taxon groups**.
+2. Find the group and open it for editing.
+3. Enter the preferred wording in **Friendly**. Leave the other fields unchanged.
+4. Save the group and check that the new name is displayed.
+
+### Block a taxon
+
+Blocking a taxon keeps it out of reports. Always give a short reason so another person can
+understand the decision later. Taxon blocking is currently an Admin-only task. A manager who needs
+to block a taxon should ask an Admin to make the change and provide the reason.
+
+1. Open **Taxonomy > Taxa** and search for the taxon.
+2. Open the taxon's details page and choose **Edit**.
+3. Set **Blocked** to **Yes** and enter the reason in **Blocked reason**.
+4. Save the changes. To allow the taxon in reports again, set **Blocked** to **No** and save.
+
+### Block an occurrence
+
+Blocking an occurrence removes that record from reports without deleting it. Record why it should
+not be used, for example because it is a duplicate or has been identified as an error.
+
+1. Open **Occurrences** and search or filter for the record.
+2. Open the occurrence and choose **Edit**.
+3. Set **Blocked** to **Yes** and enter the reason in **Blocked reason**.
+4. Save the changes. To include the occurrence in reports again, set **Blocked** to **No** and
+  save.
+
+### Add remarks to a taxon
+
+Use remarks for useful text about a taxon, such as a description or species account. This text is
+used to provide species account text in tanvis visualisation outputs.
+
+1. Open **Taxonomy > Taxa** and search for the taxon.
+2. Open the taxon's details page and choose **Edit**.
+3. Enter or update the text in **Taxon remarks**.
+4. Save the changes.
+
+### Add a media file to a taxon
+
+You can attach an image to an individual taxon from its details page. Use a clear, relevant image
+and add descriptive information where it is available.
+
+1. Open **Taxonomy > Taxa** and search for the taxon.
+2. Open the taxon's details page and find the **Taxon media** section.
+3. Choose an image file, add any available alternative text, caption, attribution, licence, or
+  primary-image setting, then upload it.
+4. Check that the new image appears in the taxon's media list.
+
+### Bulk upload taxon media
+
+Use bulk upload when adding images to many taxa at once. Prepare a CSV containing a taxon
+identifier or name and a matching filename for each image, then upload the CSV and image files from
+**Taxonomy > Bulk media import**. The page shows progress while the files are checked and processed.
+
+For the required columns, accepted identifiers, matching rules, and what to do when processing is
+paused, see [Bulk taxon media import](administration.md#bulk-taxon-media-import).
+
 ## Shared page behaviour
 
 All list pages should follow the same interaction model:

@@ -8,6 +8,9 @@ query, analyze, and visualize ecological observation data for research, reportin
 purposes. Tanhub uses technology commonly found on shared web-servers so is easy to install and
 low-cost to run.
 
+[tanvis](https://github.com/National-Museums-Liverpool/tanvis) is the ideal companion for building
+visualisations from the data held on a [tanhub server](https://github.com/National-Museums-Liverpool/tanhub).
+
 ## Documentation
 
 See [docs/README.md](docs/README.md) for the full documentation index, covering installation,

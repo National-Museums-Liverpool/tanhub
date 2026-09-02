@@ -154,6 +154,36 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
     }
 
     /**
+     * Validate geographic region search, sorting, and occurrence counts.
+     */
+    public function testGeographicRegionsListAppliesSearchSortAndCounts(): void
+    {
+        $this->authenticateAs('manager-geography-list@example.com', 'manager');
+
+        $result = $this->get('geographic-regions?q=South&sort=higher_geography&direction=desc');
+
+        $result->assertStatus(200);
+        $result->assertSee('South Lancashire');
+        $result->assertSee('2');
+        $result->assertDontSee('Cheshire');
+    }
+
+    /**
+     * Validate geographic region details include source and linked occurrence count.
+     */
+    public function testGeographicRegionDetailsShowsSourceAndOccurrenceCount(): void
+    {
+        $this->authenticateAs('manager-geography-detail@example.com', 'manager');
+
+        $result = $this->get('geographic-regions/1');
+
+        $result->assertStatus(200);
+        $result->assertSee('Cheshire');
+        $this->assertStringContainsString('NBN Atlas (NBN)', (string) $result->response()->getBody());
+        $this->assertStringContainsString('value="2"', (string) $result->response()->getBody());
+    }
+
+    /**
      * Validate recording schemes list columns and default sort behavior.
      */
     public function testRecordingSchemesListMatchesSpecification(): void
@@ -237,7 +267,7 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
     {
         $this->authenticateAs('manager-missing@example.com', 'manager');
 
-        foreach (['taxon-ranks/9999', 'recording-schemes/9999'] as $path) {
+        foreach (['taxon-ranks/9999', 'recording-schemes/9999', 'geographic-regions/9999'] as $path) {
             try {
                 $this->get($path);
                 $this->fail('Expected PageNotFoundException for path: ' . $path);
@@ -269,6 +299,53 @@ final class AdminReferenceTablesTest extends CIUnitTestCase
         $db->table('taxon_groups')->emptyTable();
         $db->table('taxon_ranks')->emptyTable();
         $db->table('recording_schemes')->emptyTable();
+        $db->table('geographic_regions_occurrences')->emptyTable();
+        $db->table('geographic_regions')->emptyTable();
+
+        $db->query('PRAGMA foreign_keys = OFF');
+
+        $db->table('data_sources')->whereIn('id', [1, 2])->delete();
+        $db->table('data_sources')->insertBatch([
+            [
+                'id' => 1,
+                'abbr' => 'NBN',
+                'title' => 'NBN Atlas',
+                'url' => 'https://species.nbnatlas.org',
+            ],
+            [
+                'id' => 2,
+                'abbr' => 'IREC',
+                'title' => 'iRecord',
+                'url' => 'https://irecord.org.uk',
+            ],
+        ]);
+
+        $db->table('geographic_regions')->insertBatch([
+            [
+                'id' => 1,
+                'higher_geography_identifier' => 'VC58',
+                'higher_geography' => 'Cheshire',
+                'location_type' => 'Vice County',
+                'footprint_geometry' => null,
+                'data_source_id' => 1,
+            ],
+            [
+                'id' => 2,
+                'higher_geography_identifier' => 'VC59',
+                'higher_geography' => 'South Lancashire',
+                'location_type' => 'Vice County',
+                'footprint_geometry' => null,
+                'data_source_id' => 2,
+            ],
+        ]);
+
+        $db->table('geographic_regions_occurrences')->insertBatch([
+            ['geographic_region_id' => 1, 'occurrence_id' => 1],
+            ['geographic_region_id' => 1, 'occurrence_id' => 2],
+            ['geographic_region_id' => 2, 'occurrence_id' => 3],
+        ]);
+
+        $db->query('PRAGMA foreign_keys = ON');
 
         $db->table('taxon_groups')->insert([
             'id' => 1,

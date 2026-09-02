@@ -59,6 +59,8 @@ final class TaxaPagesTest extends CIUnitTestCase
         $result->assertStatus(200);
         $result->assertSee('Taxa');
         $result->assertSee('Taxon identifier');
+        $result->assertSee('Taxon group');
+        $result->assertSee('Bees');
         $result->assertSee('Blocked');
     }
 
@@ -71,6 +73,16 @@ final class TaxaPagesTest extends CIUnitTestCase
         $result->assertStatus(200);
         $result->assertSee('Bombus lucorum');
         $result->assertDontSee('Bombus terrestris');
+    }
+
+    public function testListSearchFiltersByTaxonGroupTitle(): void
+    {
+        $this->authenticateAs('taxa-manager-group-search@example.com', 'manager');
+
+        $result = $this->get('taxa?q=Bees');
+
+        $result->assertStatus(200);
+        $result->assertSee('Bombus terrestris');
     }
 
     public function testDetailsShowsAssociatedTaxonNamesTable(): void
@@ -162,6 +174,38 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->assertSame('Manager note', $taxon['taxon_remarks']);
         $this->assertSame(0, (int) $taxon['blocked']);
         $this->assertNull($taxon['blocked_reason']);
+    }
+
+    /**
+     * Verify staff can reach the bulk media import page.
+     */
+    public function testStaffCanOpenBulkMediaImportPage(): void
+    {
+        $this->authenticateAs('taxa-media-import-manager@example.com', 'manager');
+
+        $result = $this->get('taxon-media-imports');
+
+        $result->assertStatus(200);
+        $result->assertSee('Bulk taxon media import');
+        $result->assertSee('Bulk media import');
+        $this->assertStringContainsString('data-csrf-name="' . csrf_token() . '"', $result->getBody());
+        $result->assertSee('photo-dropzone-selection');
+        $result->assertSee('Upload files');
+        $result->assertSee('Start import');
+        $result->assertDontSee('Preflight and queue');
+    }
+
+    /**
+     * Verify the bulk media import navigation link is staff-only.
+     */
+    public function testBulkMediaImportNavigationIsStaffOnly(): void
+    {
+        $this->authenticateAs('taxa-media-import-user@example.com', 'user');
+
+        $result = $this->get('/');
+
+        $result->assertStatus(200);
+        $result->assertDontSee('Bulk media import');
     }
 
     public function testAdminCanUpdateBlockedFields(): void

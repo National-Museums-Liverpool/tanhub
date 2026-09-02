@@ -62,6 +62,7 @@
                     <th scope="col"><a href="<?= esc($sortUrl('scientific_name')) ?>">Scientific name<?= esc($sortIndicator('scientific_name')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('vernacular_name')) ?>">Vernacular name<?= esc($sortIndicator('vernacular_name')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('conservation_status')) ?>">Conservation status<?= esc($sortIndicator('conservation_status')) ?></a></th>
+                    <th scope="col"><a href="<?= esc($sortUrl('taxon_group_title')) ?>">Taxon group<?= esc($sortIndicator('taxon_group_title')) ?></a></th>
                     <th scope="col"><a href="<?= esc($sortUrl('blocked')) ?>">Blocked<?= esc($sortIndicator('blocked')) ?></a></th>
                     <th scope="col">Links</th>
                 </tr>
@@ -69,7 +70,7 @@
                 <tbody>
                 <?php if ($page['taxa'] === []): ?>
                     <tr>
-                        <td colspan="7" class="text-muted">No taxa found.</td>
+                        <td colspan="8" class="text-muted">No taxa found.</td>
                     </tr>
                 <?php else: ?>
                     <?php foreach ($page['taxa'] as $taxon): ?>
@@ -79,6 +80,7 @@
                             <td><?= esc((string) $taxon['scientific_name']) ?></td>
                             <td><?= esc((string) ($taxon['vernacular_name'] ?? '')) ?></td>
                             <td><?= esc((string) ($taxon['conservation_status'] ?? '')) ?></td>
+                            <td><?= esc((string) ($taxon['taxon_group_title'] ?? '')) ?></td>
                             <td><?= ! empty($taxon['blocked']) ? 'Yes' : 'No' ?></td>
                             <td><a class="btn btn-sm btn-outline-brand" href="<?= esc(site_url('taxa/' . $taxon['id'])) ?>">Details</a></td>
                         </tr>

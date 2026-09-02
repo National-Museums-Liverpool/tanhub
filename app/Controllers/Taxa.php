@@ -21,6 +21,8 @@ class Taxa extends BaseController
 {
     /**
      * Display a paginated, sortable list of taxa.
+        *
+        * @return string Rendered HTML for the taxa index view.
      */
     public function index(): string
     {
@@ -34,6 +36,7 @@ class Taxa extends BaseController
             'scientific_name',
             'vernacular_name',
             'conservation_status',
+            'taxon_group_title',
             'blocked',
         ];
 
@@ -54,10 +57,15 @@ class Taxa extends BaseController
                 ->orLike('scientific_name', $q)
                 ->orLike('vernacular_name', $q)
                 ->orLike('conservation_status', $q)
+                ->orLike('taxon_groups.title', $q)
                 ->groupEnd();
         }
 
-        $taxa = $model->orderBy($sort, $direction)->paginate(20);
+        $taxa = $model
+            ->select('taxa.*, taxon_groups.title AS taxon_group_title')
+            ->join('taxon_groups', 'taxon_groups.id = taxa.taxon_group_id', 'left')
+            ->orderBy($sort, $direction)
+            ->paginate(20);
 
         return $this->renderPage('taxa/index', [
             'pageTitle' => 'Taxa',

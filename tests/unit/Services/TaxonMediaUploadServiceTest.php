@@ -16,6 +16,9 @@ use RuntimeException;
  */
 final class TaxonMediaUploadServiceTest extends CIUnitTestCase
 {
+    /**
+     * Prepare the database fixtures used by each media test.
+     */
     protected function setUp(): void
     {
         parent::setUp();
@@ -27,6 +30,9 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         $this->seedTaxonFixture();
     }
 
+    /**
+     * Verify an upload creates its media and configured variant rows.
+     */
     public function testUploadCreatesMediaAndVariantRows(): void
     {
         $service = $this->makeService();
@@ -77,6 +83,9 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         $this->assertLessThan(1400, (int) $variantsByKey['large']['height']);
     }
 
+    /**
+     * Verify uploads with unsupported MIME types are rejected.
+     */
     public function testUploadRejectsInvalidMimeType(): void
     {
         $service = $this->makeService();
@@ -89,6 +98,39 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         $service->uploadForTaxon(1, $upload);
     }
 
+    /**
+     * Verify uploads with a failed PHP upload status are rejected before storage.
+     */
+    public function testUploadRejectsFailedUpload(): void
+    {
+        $service = $this->makeService();
+        $sourcePath = $this->createPngSourceFile();
+        $upload = $this->makeUploadedFileMock($sourcePath, 'failed.png', 'image/png', false);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Uploaded file is not valid.');
+
+        $service->uploadForTaxon(1, $upload);
+    }
+
+    /**
+     * Verify uploads cannot be attached to a non-positive taxon ID.
+     */
+    public function testUploadRejectsNonPositiveTaxonId(): void
+    {
+        $service = $this->makeService();
+        $sourcePath = $this->createPngSourceFile();
+        $upload = $this->makeUploadedFileMock($sourcePath, 'invalid-taxon.png', 'image/png', true);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('taxonId must be a positive integer.');
+
+        $service->uploadForTaxon(0, $upload);
+    }
+
+    /**
+     * Verify uploads above the configured byte limit are rejected.
+     */
     public function testUploadRejectsFileAboveConfiguredLimit(): void
     {
         $config = config(TaxonMedia::class);
@@ -104,6 +146,9 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         $service->uploadForTaxon(1, $upload);
     }
 
+    /**
+     * Verify oversized originals are downscaled before persistence.
+     */
     public function testUploadDownscalesOriginalWhenMaxDimensionsConfigured(): void
     {
         $config = config(TaxonMedia::class);
@@ -133,6 +178,9 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         $this->assertSame(50, (int) $savedSize[1]);
     }
 
+    /**
+     * Verify metadata updates are persisted for an existing media row.
+     */
     public function testUpdateMetadataForExistingMediaRow(): void
     {
         $service = $this->makeService();
@@ -179,6 +227,9 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         $this->assertSame(1, (int) $row['is_primary']);
     }
 
+    /**
+     * Verify variant persistence failures remove all uploaded files and rows.
+     */
     public function testUploadFailureRemovesOrphanedFilesAndDirectory(): void
     {
         $config = config(TaxonMedia::class);
@@ -197,6 +248,13 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         }
 
         $variantModel = new class extends TaxonMediaVariantModel {
+            /**
+             * Force variant persistence to fail.
+             *
+             * @param array<string, mixed>|null $row Variant row data.
+             * @param bool                     $returnID Whether to return an ID.
+             * @return never
+             */
             public function insert($row = null, bool $returnID = true)
             {
                 throw new RuntimeException('Forced variant persistence failure.');
@@ -233,6 +291,72 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         $this->assertSame(0, $variantCount);
     }
 
+    /**
+     * Verify media persistence failures roll back and remove the moved original.
+     */
+    public function testMediaPersistenceFailureRemovesOrphanedFilesAndDirectory(): void
+    {
+        $config = config(TaxonMedia::class);
+        $baseDirectory = rtrim((string) WRITEPATH, DIRECTORY_SEPARATOR)
+            . DIRECTORY_SEPARATOR . 'uploads'
+            . DIRECTORY_SEPARATOR . trim($config->uploadSubdirectory, '/\\');
+        $taxonDirectory = $baseDirectory . DIRECTORY_SEPARATOR . '1';
+
+        if (! is_dir($taxonDirectory) && ! mkdir($taxonDirectory, 0775, true) && ! is_dir($taxonDirectory)) {
+            $this->fail('Unable to create taxon media fixture directory.');
+        }
+
+        $beforeDirectories = glob($taxonDirectory . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR);
+        if ($beforeDirectories === false) {
+            $beforeDirectories = [];
+        }
+
+        $mediaModel = new class extends TaxonMediaModel {
+            /**
+             * Force media persistence to fail.
+             *
+             * @param array<string, mixed>|null $row Media row data.
+             * @param bool                     $returnID Whether to return an ID.
+             * @return never
+             */
+            public function insert($row = null, bool $returnID = true)
+            {
+                throw new RuntimeException('Forced media persistence failure.');
+            }
+        };
+
+        $service = new TaxonMediaUploadService(
+            $mediaModel,
+            model(TaxonMediaVariantModel::class),
+            $config
+        );
+
+        $sourcePath = $this->createPngSourceFile();
+        $upload = $this->makeUploadedFileMock($sourcePath, 'media-failure.png', 'image/png', true);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Forced media persistence failure.');
+
+        try {
+            $service->uploadForTaxon(1, $upload);
+        } finally {
+            $afterDirectories = glob($taxonDirectory . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR);
+            if ($afterDirectories === false) {
+                $afterDirectories = [];
+            }
+
+            $this->assertCount(count($beforeDirectories), $afterDirectories);
+            $this->assertSame(0, db_connect()->table('taxon_media')->countAllResults());
+            $this->assertSame(0, db_connect()->table('taxon_media_variants')->countAllResults());
+        }
+    }
+
+    /**
+     * Build the upload service with the test database models.
+     *
+     * @param TaxonMedia|null $config Media configuration override.
+     * @return TaxonMediaUploadService Upload service under test.
+     */
     private function makeService(?TaxonMedia $config = null): TaxonMediaUploadService
     {
         if ($config === null) {
@@ -246,6 +370,9 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         );
     }
 
+    /**
+     * Seed the taxon and related lookup rows required by media tests.
+     */
     private function seedTaxonFixture(): void
     {
         $db = db_connect();
@@ -334,6 +461,13 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         $db->table($table)->insert($filteredData);
     }
 
+    /**
+     * Create a temporary PNG fixture.
+     *
+     * @param int $width Image width.
+     * @param int $height Image height.
+     * @return string Temporary PNG path.
+     */
     private function createPngSourceFile(int $width = 48, int $height = 32): string
     {
         if (! function_exists('imagecreatetruecolor')) {
@@ -360,6 +494,12 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         return $path;
     }
 
+    /**
+     * Create a temporary text fixture.
+     *
+     * @param string $contents Text contents.
+     * @return string Temporary text path.
+     */
     private function createTextSourceFile(string $contents): string
     {
         $path = tempnam(sys_get_temp_dir(), 'taxon_media_txt_');
@@ -373,6 +513,15 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         return $path;
     }
 
+    /**
+     * Build an uploaded-file test double.
+     *
+     * @param string $sourcePath Source fixture path.
+     * @param string $filename Client filename.
+     * @param string $mimeType Reported MIME type.
+     * @param bool $isValid Whether the upload should report success.
+     * @return UploadedFile Uploaded-file double.
+     */
     private function makeUploadedFileMock(string $sourcePath, string $filename, string $mimeType, bool $isValid): UploadedFile
     {
         $error = $isValid ? UPLOAD_ERR_OK : UPLOAD_ERR_NO_FILE;
@@ -386,10 +535,25 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
  */
 final class TestUploadedFile extends UploadedFile
 {
+    /** @var string Source fixture path. */
     private string $sourcePath;
+
+    /** @var string MIME type reported by the test double. */
     private string $forcedMimeType;
+
+    /** @var bool Whether the file has been moved. */
     private bool $moved = false;
 
+    /**
+     * Create an uploaded-file test double.
+     *
+     * @param string      $path         Source file path.
+     * @param string      $originalName Client filename.
+     * @param string|null $mimeType     Reported MIME type.
+     * @param int|null    $size         File size.
+     * @param int|null    $error        Upload error code.
+     * @param string|null $clientPath   Client-side path.
+     */
     public function __construct(
         string $path,
         string $originalName,
@@ -405,21 +569,44 @@ final class TestUploadedFile extends UploadedFile
         $this->forcedMimeType = $mimeType ?? 'application/octet-stream';
     }
 
+    /**
+     * Return whether the upload status is successful.
+     *
+     * @return bool Whether the upload is valid.
+     */
     public function isValid(): bool
     {
         return $this->getError() === UPLOAD_ERR_OK;
     }
 
+    /**
+     * Return whether the fixture has been moved.
+     *
+     * @return bool Whether the fixture was moved.
+     */
     public function hasMoved(): bool
     {
         return $this->moved;
     }
 
+    /**
+     * Return the configured fixture MIME type.
+     *
+     * @return string Fixture MIME type.
+     */
     public function getMimeType(): string
     {
         return $this->forcedMimeType;
     }
 
+    /**
+     * Copy the fixture into the requested upload directory.
+     *
+     * @param string      $targetPath Destination directory.
+     * @param string|null $name       Destination filename.
+     * @param bool        $overwrite  Whether an existing file may be replaced.
+     * @return bool Whether the copy succeeded.
+     */
     public function move(string $targetPath, ?string $name = null, bool $overwrite = false)
     {
         $destinationName = $name ?? basename($this->sourcePath);

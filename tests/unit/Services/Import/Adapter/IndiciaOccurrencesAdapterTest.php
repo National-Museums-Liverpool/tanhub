@@ -3,7 +3,10 @@
 namespace Tests;
 
 use App\Services\Import\Adapter\IndiciaOccurrencesAdapter;
+use CodeIgniter\HTTP\CURLRequest;
+use CodeIgniter\HTTP\ResponseInterface;
 use CodeIgniter\Test\CIUnitTestCase;
+use RuntimeException;
 use ReflectionMethod;
 
 /**
@@ -11,21 +14,33 @@ use ReflectionMethod;
  */
 final class IndiciaOccurrencesAdapterTest extends CIUnitTestCase
 {
+    /**
+     * Verify coarse grid references cannot be converted to tetrads.
+     */
     public function testCalculateTetradReturnsNullForTooCoarseGridReference(): void
     {
         $this->assertNull($this->calculateTetrad('SU12'));
     }
 
+    /**
+     * Verify one-kilometre grid references are converted to tetrads.
+     */
     public function testCalculateTetradConvertsOneKilometreGridReference(): void
     {
         $this->assertSame('SU13L', $this->calculateTetrad('SU1234'));
     }
 
+    /**
+     * Verify finer grid references are converted to tetrads.
+     */
     public function testCalculateTetradConvertsFinerGridReference(): void
     {
         $this->assertSame('SU14L', $this->calculateTetrad('SU123456'));
     }
 
+    /**
+     * Verify normalized records retain grid metadata and coordinate uncertainty.
+     */
     public function testNormalizeRecordIncludesGridSystemAndUncertainty(): void
     {
         $record = [
@@ -50,6 +65,133 @@ final class IndiciaOccurrencesAdapterTest extends CIUnitTestCase
         $this->assertSame('-2.2426', $normalized['longitude']);
     }
 
+    /**
+     * Verify an unconfigured Indicia endpoint is rejected.
+     */
+    public function testFetchPageThrowsWhenEndpointMissing(): void
+    {
+        $adapter = new IndiciaOccurrencesAdapter(
+            $this->createMock(CURLRequest::class),
+            [],
+            1,
+        );
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Indicia endpoint is not configured');
+
+        $adapter->fetchPage(null, 10);
+    }
+
+    /**
+     * Verify request construction, checkpoint filtering, and record normalization.
+     */
+    public function testFetchPagePostsFiltersAndNormalizesRecords(): void
+    {
+        $response = $this->createMock(ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn(200);
+        $response->method('getBody')->willReturn((string) json_encode([
+            'meta' => ['count' => 1, 'total' => 2, 'offset' => 0],
+            'records' => [[
+                '_id' => 'remote-1',
+                'metadata' => ['tracking' => 'track-1'],
+                'taxon' => ['accepted_taxon_id' => 'TVK-1', 'taxon_id' => 'GIVEN-1'],
+                'location' => [
+                    'output_sref' => 'SU1234',
+                    'output_sref_system' => 'OSGB',
+                    'coordinate_uncertainty_in_meters' => 100,
+                ],
+            ]],
+        ], JSON_THROW_ON_ERROR));
+
+        $client = $this->createMock(CURLRequest::class);
+        $client->expects($this->once())
+            ->method('post')
+            ->with(
+                'https://warehouse.test/index.php/services/rest/es/_search/',
+                $this->callback(function (array $options): bool {
+                    $body = json_decode((string) $options['body'], true);
+
+                    return $options['headers']['X-Project-Id'] === 'project-1'
+                        && $options['headers']['Authorization'] === 'USER:user-1:SECRET:secret-1'
+                        && $body['size'] === 10
+                        && $body['query']['bool']['filter'][5]['range']['metadata.tracking']['gt'] === 'old-checkpoint';
+                }),
+            )
+            ->willReturn($response);
+
+        $adapter = new IndiciaOccurrencesAdapter($client, [
+            'warehouse_url' => 'https://warehouse.test',
+            'es_endpoint' => 'es',
+            'project_id' => 'project-1',
+            'username' => 'user-1',
+            'secret' => 'secret-1',
+            'taxon_groups' => [],
+            'geographic_regions' => [],
+            'geographic_region_location_type' => 'Vice County',
+            'maximum_coordinate_uncertainty_in_meters' => 10000,
+        ], 10);
+
+        $page = $adapter->fetchPage('old-checkpoint', 10);
+
+        $this->assertCount(1, $page->records);
+        $this->assertTrue($page->hasMore);
+        $this->assertSame('track-1', $page->nextCheckpoint);
+        $this->assertSame('remote-1', $page->records[0]['remote_id']);
+        $this->assertSame('TVK-1', $page->records[0]['scientific_name_identifier']);
+    }
+
+    /**
+     * Verify HTTP failures are reported to the caller.
+     */
+    public function testFetchPageThrowsForHttpErrors(): void
+    {
+        $response = $this->createMock(ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn(503);
+        $response->method('getBody')->willReturn('service unavailable');
+
+        $client = $this->createMock(CURLRequest::class);
+        $client->method('post')->willReturn($response);
+
+        $adapter = new IndiciaOccurrencesAdapter($client, [
+            'endpoint' => 'https://warehouse.test/search',
+            'maximum_coordinate_uncertainty_in_meters' => 10000,
+        ], 1);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Indicia request failed with status 503. Response: service unavailable');
+
+        $adapter->fetchPage(null, 10);
+    }
+
+    /**
+     * Verify malformed responses are rejected.
+     */
+    public function testFetchPageThrowsForInvalidJson(): void
+    {
+        $response = $this->createMock(ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn(200);
+        $response->method('getBody')->willReturn('not-json');
+
+        $client = $this->createMock(CURLRequest::class);
+        $client->method('post')->willReturn($response);
+
+        $adapter = new IndiciaOccurrencesAdapter($client, [
+            'endpoint' => 'https://warehouse.test/search',
+            'maximum_coordinate_uncertainty_in_meters' => 10000,
+        ], 1);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Indicia response was not valid JSON');
+
+        $adapter->fetchPage(null, 10);
+    }
+
+    /**
+     * Invoke the adapter's tetrad conversion helper.
+     *
+     * @param string $gridRef Grid reference to convert.
+     * @return string|null Converted tetrad, or null when conversion is not possible.
+     */
     private function calculateTetrad(string $gridRef): ?string
     {
         $method = new ReflectionMethod(IndiciaOccurrencesAdapter::class, 'calculateTetrad');
@@ -65,6 +207,12 @@ final class IndiciaOccurrencesAdapterTest extends CIUnitTestCase
      * @param array<string, mixed> $record
      * @return array<string, mixed>
      */
+    /**
+     * Invoke the adapter's record normalization helper.
+     *
+     * @param array<string, mixed> $record Raw occurrence record.
+     * @return array<string, mixed> Normalized occurrence record.
+     */
     private function normalizeRecord(array $record): array
     {
         $method = new ReflectionMethod(IndiciaOccurrencesAdapter::class, 'normalizeRecord');
@@ -76,6 +224,11 @@ final class IndiciaOccurrencesAdapterTest extends CIUnitTestCase
         return $result;
     }
 
+    /**
+     * Build an adapter with a mocked HTTP client.
+     *
+     * @return IndiciaOccurrencesAdapter Adapter under test.
+     */
     private function newAdapter(): IndiciaOccurrencesAdapter
     {
         return new IndiciaOccurrencesAdapter(

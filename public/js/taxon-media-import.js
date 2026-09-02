@@ -25,11 +25,22 @@
     const retryButton = form.querySelector('#retry-import');
     const state = { uuid: null, importStatus: null, files: [], serverFiles: [], csrfName: root.dataset.csrfName, csrfHash: root.dataset.csrfHash, polling: null, processing: false, uploading: null, previewUrls: [] };
 
+    /**
+     * Display a feedback message to the user.
+     * @param {string} message Message text to display.
+     * @param {string} type Bootstrap alert type.
+     * @returns {void}
+     */
     function showFeedback(message, type) {
         feedback.textContent = message;
         feedback.className = 'alert mt-4 alert-' + type;
     }
 
+    /**
+     * Update the stored CSRF credentials from a server response.
+     * @param {Object} payload Response payload containing optional CSRF data.
+     * @returns {void}
+     */
     function updateCsrf(payload) {
         if (payload && payload.csrf && payload.csrf.name && payload.csrf.hash) {
             state.csrfName = payload.csrf.name;
@@ -41,6 +52,12 @@
         }
     }
 
+    /**
+     * Make an authenticated JSON request and return its data payload.
+     * @param {string} url Request URL.
+     * @param {Object} [options] Fetch options.
+     * @returns {Promise<Object>} Response data.
+     */
     async function request(url, options) {
         const requestOptions = options || {};
         requestOptions.headers = Object.assign({}, requestOptions.headers || {}, { 'X-CSRF-TOKEN': state.csrfHash });
@@ -56,26 +73,49 @@
         return payload.data || {};
     }
 
+    /**
+     * Extract a file name from a File object.
+     * @param {File} file File whose name should be normalized.
+     * @returns {string} File name without directory components.
+     */
     function basename(file) {
         return file.name.replace(/^[\\/]+/, '').split(/[\\/]/).pop();
     }
 
+    /**
+     * Filter a file collection to supported image files.
+     * @param {FileList|File[]} files Files to filter.
+     * @returns {File[]} Supported image files.
+     */
     function photoFiles(files) {
         return Array.from(files).filter(function (file) {
             return /^image\/(jpeg|png|gif|webp)$/i.test(file.type) || /\.(jpe?g|png|gif|webp)$/i.test(file.name);
         });
     }
 
+    /**
+     * Store selected files and refresh the related UI.
+     * @param {FileList|File[]} files Files selected by the user.
+     * @returns {void}
+     */
     function setFiles(files) {
         state.files = photoFiles(files);
         renderSelectedFiles();
         renderMatching();
     }
 
+    /**
+     * Determine whether every server-side import file is ready.
+     * @returns {boolean} Whether all import files are staged or published.
+     */
     function allFilesStaged() {
         return state.serverFiles.length > 0 && state.serverFiles.every(function (file) { return file.staged || file.status === 'published'; });
     }
 
+    /**
+     * Render selected file previews in the dropzone.
+     * @returns {void}
+     */
     function renderSelectedFiles() {
         state.previewUrls.forEach(function (url) { URL.revokeObjectURL(url); });
         state.previewUrls = [];
@@ -113,6 +153,11 @@
         }
     }
 
+    /**
+     * Recursively read a dropped directory entry into files.
+     * @param {FileSystemEntry} entry File or directory entry to read.
+     * @returns {Promise<File|File[]>} Files found in the entry.
+     */
     async function readDirectory(entry) {
         if (entry.isFile) {
             return new Promise(function (resolve) { entry.file(resolve); });
@@ -131,6 +176,11 @@
         return children.flat();
     }
 
+    /**
+     * Resolve files from a drop event, including files inside directories.
+     * @param {DragEvent} event Drop event containing transferred items.
+     * @returns {Promise<File[]>} Files supplied by the drop operation.
+     */
     async function droppedFiles(event) {
         const items = Array.from(event.dataTransfer.items || []);
         if (!items.some(function (item) { return item.webkitGetAsEntry; })) {
@@ -141,6 +191,10 @@
         return files.flat();
     }
 
+    /**
+     * Render server file status and update import action availability.
+     * @returns {void}
+     */
     function renderMatching() {
         progress.classList.toggle('d-none', !state.uuid);
         fileList.replaceChildren();
@@ -172,6 +226,11 @@
         retryButton.disabled = !state.uuid || state.importStatus !== 'failed';
     }
 
+    /**
+     * Create an import draft from the selected CSV and begin uploads.
+     * @param {SubmitEvent} event Form submission event.
+     * @returns {Promise<void>}
+     */
     async function createDraft(event) {
         event.preventDefault();
         if (!csvInput.files.length) {
@@ -202,6 +261,10 @@
         }
     }
 
+    /**
+     * Fetch and render the current import status.
+     * @returns {Promise<void>}
+     */
     async function refreshStatus() {
         if (!state.uuid) {
             return;
@@ -210,6 +273,11 @@
         updateImportStatus(data);
     }
 
+    /**
+     * Apply an import status response to local state and the UI.
+     * @param {Object} data Import status response.
+     * @returns {void}
+     */
     function updateImportStatus(data) {
         state.importStatus = data.status;
         state.serverFiles = data.files || [];
@@ -227,6 +295,10 @@
         }
     }
 
+    /**
+     * Ask the worker to process the next queued photo.
+     * @returns {Promise<void>}
+     */
     async function processNextPhoto() {
         if (!state.uuid || state.processing || !['queued', 'processing'].includes(state.importStatus)) {
             return;
@@ -245,6 +317,11 @@
         }
     }
 
+    /**
+     * Upload one photo to the current import.
+     * @param {File} file Photo file to upload.
+     * @returns {Promise<Object>} Upload response data.
+     */
     async function uploadOne(file) {
         const body = new FormData();
         body.append('photo', file, basename(file));
@@ -252,6 +329,10 @@
         return request(root.dataset.importBase + '/' + encodeURIComponent(state.uuid) + '/files', { method: 'POST', body: body });
     }
 
+    /**
+     * Upload pending photos, sharing an in-progress upload operation.
+     * @returns {Promise<void>}
+     */
     async function uploadPending() {
         if (!state.uuid) {
             return;
@@ -268,6 +349,10 @@
         }
     }
 
+    /**
+     * Upload selected photos that have not already been staged.
+     * @returns {Promise<void>}
+     */
     async function uploadPendingFiles() {
         const staged = new Set(state.serverFiles.filter(function (file) { return file.staged; }).map(function (file) { return file.photo_filename; }));
         const pending = state.files.filter(function (file) { return !staged.has(basename(file)); });
@@ -281,6 +366,10 @@
         await refreshStatus();
     }
 
+    /**
+     * Upload the current selection and report whether it is complete.
+     * @returns {Promise<void>}
+     */
     async function uploadSelectedFiles() {
         showFeedback('Uploading selected photos...', 'info');
         await uploadPending();
@@ -289,6 +378,11 @@
         }
     }
 
+    /**
+     * Load an existing import and display its current file status.
+     * @param {HTMLElement} button Resume control containing the import UUID.
+     * @returns {Promise<void>}
+     */
     async function resumeImport(button) {
         state.uuid = button.dataset.uuid;
         state.importStatus = null;
@@ -304,6 +398,10 @@
         }
     }
 
+    /**
+     * Finalize the current import and start processing it.
+     * @returns {Promise<void>}
+     */
     async function queueImport() {
         try {
             const data = await request(root.dataset.importBase + '/' + encodeURIComponent(state.uuid) + '/finalize', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: state.csrfName + '=' + encodeURIComponent(state.csrfHash) });
@@ -317,6 +415,10 @@
         }
     }
 
+    /**
+     * Cancel the current import after user confirmation.
+     * @returns {Promise<void>}
+     */
     async function cancelImport() {
         if (!state.uuid || !window.confirm('Cancel this import and remove its staged files?')) {
             return;
@@ -330,6 +432,10 @@
         }
     }
 
+    /**
+     * Upload any missing files and retry a failed import.
+     * @returns {Promise<Object|void>} Retry response data when successful.
+     */
     async function retryImport() {
         try {
             await uploadPending();
@@ -343,6 +449,10 @@
         }
     }
 
+    /**
+     * Start polling the import worker for progress updates.
+     * @returns {void}
+     */
     function beginPolling() {
         if (state.polling) {
             return;

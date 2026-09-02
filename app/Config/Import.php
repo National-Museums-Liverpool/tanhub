@@ -21,6 +21,13 @@ class Import extends BaseConfig
     public int $defaultPageSize = 200;
 
     /**
+     * Number of successful occurrence runs allowed between derived runs.
+     *
+     * @var int
+     */
+    public int $occurrenceRunsPerDerivedRun = 2;
+
+    /**
      * @var int
      */
     public int $httpTimeout = 30;
@@ -218,6 +225,10 @@ class Import extends BaseConfig
     public function __construct()
     {
         parent::__construct();
+        $configuredOccurrenceRunsPerDerivedRun = $this->validateInt(env('import.occurrenceRunsPerDerivedRun'));
+        if ($configuredOccurrenceRunsPerDerivedRun !== null) {
+            $this->occurrenceRunsPerDerivedRun = max(1, $configuredOccurrenceRunsPerDerivedRun);
+        }
         $configuredRanks = env('import.taxonRanks');
         if (is_string($configuredRanks) && $configuredRanks !== '') {
             // Cleanup stray characters or whitespace.

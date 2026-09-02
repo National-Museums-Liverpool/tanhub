@@ -6,7 +6,6 @@ use App\Models\ImportOffsetModel;
 use App\Models\ImportRunModel;
 use App\Services\Stats\StatsDirtyScopeService;
 use Config\Import as ImportConfig;
-use DateTimeImmutable;
 use DateTimeInterface;
 use RuntimeException;
 
@@ -17,7 +16,8 @@ use RuntimeException;
  * {@see \App\Commands\ImportAuto}) to decide, without an operator picking a
  * task manually, which single import to run next: first any incomplete
  * taxonomy bootstrap task, then the least-recently-successful report/derived
- * task if it is stale, otherwise the least-recently-run occurrence source.
+ * task after the configured number of occurrence runs, otherwise the
+ * least-recently-run occurrence source.
  * Delegates execution to {@see \App\Services\Import\EntityImportOrchestrator}
  * (via the `importOrchestrator` service), {@see \App\Services\Import\ImportOrchestrator}
  * (via `occurrenceImportOrchestrator`), or {@see DerivedImportRunner} depending
@@ -98,15 +98,10 @@ class AutoImportService
      *
      * Priority order: (1) the first not-yet-complete taxonomy bootstrap task,
      * in the fixed order of {@see self::BOOTSTRAP_TASKS}; (2) a report/derived
-     * task, if the least-recently-successful one has not succeeded within the
-     * last two hours (a "stale" threshold); (3) otherwise, whichever occurrence
-     * source (`indicia` or `nbn`) was least recently run successfully. This
-     * ordering ensures taxonomy lookups are always populated before occurrence
-     * data is imported, and keeps report statistics reasonably fresh without
-     * starving occurrence imports.
-     *
-     * @param DateTimeInterface|null $now Time used for stale-task comparison;
-     *                                    defaults to the current time.
+    * task after the configured number of successful occurrence runs since the
+    * last successful derived run; (3) otherwise, whichever occurrence source
+    * (`indicia` or `nbn`) was least recently run successfully. A derived task
+    * that has never succeeded is selected immediately for initial population.
      *
      * @return array<string, mixed> Selected task metadata. Always includes
      *                              `source_key`, `kind` (`entity`|`derived`|`occurrence`),
@@ -133,29 +128,7 @@ class AutoImportService
             }
         }
 
-        $now = $now ?? new DateTimeImmutable();
-        $staleBefore = $now->modify('-2 hours');
         $dirtyScopeService = $this->statsDirtyScopeService ?? service('statsDirtyScopeService');
-        $taxonYearStatsKey = 'derived-stats:taxon_year_stats';
-        if ($this->statsTaskHasWork($offsetModel, $dirtyScopeService, $taxonYearStatsKey, StatsDirtyScopeService::TAXON_YEAR)) {
-            return [
-                'source_key' => $taxonYearStatsKey,
-                'kind' => 'derived',
-                'service' => 'taxonYearStatsService',
-                'reason' => 'yearly statistics task has dirty scopes',
-                'last_run' => null,
-            ];
-        }
-        $taxonStatsKey = 'derived-stats:taxon_stats';
-        if ($this->statsTaskHasWork($offsetModel, $dirtyScopeService, $taxonStatsKey, StatsDirtyScopeService::TAXON)) {
-            return [
-                'source_key' => $taxonStatsKey,
-                'kind' => 'derived',
-                'service' => 'taxonStatsService',
-                'reason' => 'report statistics task has dirty scopes',
-                'last_run' => null,
-            ];
-        }
         $reportTasks = array_values(array_filter(self::REPORT_TASKS, function (array $task) use ($offsetModel, $dirtyScopeService): bool {
             if ($task['source_key'] === 'derived-stats:taxon_year_stats') {
                 return $this->statsTaskHasWork($offsetModel, $dirtyScopeService, $task['source_key'], StatsDirtyScopeService::TAXON_YEAR);
@@ -167,13 +140,18 @@ class AutoImportService
             return true;
         }));
         $reportSelection = $this->leastRecentlySuccessful($reportTasks);
+        $config = config(ImportConfig::class);
+        $occurrenceRunsPerDerivedRun = max(1, (int) $config->occurrenceRunsPerDerivedRun);
+        $successfulOccurrenceRuns = $this->successfulOccurrenceRunsSinceLastDerived();
 
-        if ($reportSelection['last_run'] === null || $this->isBefore($reportSelection['last_run'], $staleBefore)) {
+        if ($reportSelection['last_run'] === null || $successfulOccurrenceRuns >= $occurrenceRunsPerDerivedRun) {
             return [
                 'source_key' => $reportSelection['task']['source_key'],
                 'kind' => 'derived',
                 'service' => $reportSelection['task']['service'],
-                'reason' => 'report statistics task has not run successfully within two hours',
+                'reason' => $reportSelection['last_run'] === null
+                    ? 'report statistics task has never run successfully'
+                    : 'configured number of occurrence runs since the last derived run',
                 'last_run' => $reportSelection['last_run'],
             ];
         }
@@ -328,16 +306,27 @@ class AutoImportService
     }
 
     /**
-     * Compare a stored database timestamp with a threshold.
+     * Count successful occurrence runs since the most recent successful derived run.
      *
-     * @param string             $value     Stored timestamp (e.g. `finished_at` from
-     *                                      {@see ImportRunModel}).
-     * @param DateTimeInterface $threshold Stale threshold.
-     *
-     * @return bool True when the timestamp is before the threshold.
+     * @return int Number of successful occurrence runs in the current fairness window.
      */
-    private function isBefore(string $value, DateTimeInterface $threshold): bool
+    private function successfulOccurrenceRunsSinceLastDerived(): int
     {
-        return new DateTimeImmutable($value) < $threshold;
+        $runModel = $this->importRunModel ?? model(ImportRunModel::class);
+        $lastDerivedRun = $runModel
+            ->whereIn('source_key', array_column(self::REPORT_TASKS, 'source_key'))
+            ->where('status', 'success')
+            ->orderBy('finished_at', 'desc')
+            ->first();
+
+        if (! is_array($lastDerivedRun) || ! is_scalar($lastDerivedRun['finished_at'] ?? null)) {
+            return 0;
+        }
+
+        return (int) $runModel
+            ->whereIn('source_key', self::OCCURRENCE_TASKS)
+            ->where('status', 'success')
+            ->where('finished_at >', (string) $lastDerivedRun['finished_at'])
+            ->countAllResults();
     }
 }

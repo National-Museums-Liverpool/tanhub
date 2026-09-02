@@ -50,8 +50,17 @@ final class AutoImportRunModelDouble extends ImportRunModel
     /** @var array<string, string|null> */
     public array $finishedAt = [];
 
+    /** @var int */
+    public int $occurrenceRunsSinceDerived = 0;
+
+    /** @var string|null */
+    public ?string $latestDerivedRun = null;
+
     /** @var string */
     private string $sourceKey = '';
+
+    /** @var string|null */
+    private ?string $sourceKeyQuery = null;
 
     /**
      * Capture a query filter for the test double.
@@ -65,6 +74,27 @@ final class AutoImportRunModelDouble extends ImportRunModel
     {
         if ($key === 'source_key') {
             $this->sourceKey = (string) $value;
+            $this->sourceKeyQuery = null;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Capture a source-key list query for the test double.
+     *
+     * @param string $key Query field.
+     * @param array<int, string> $values Query values.
+     * @return self
+     */
+    public function whereIn($key = null, $values = null): self
+    {
+        if ($key === 'source_key') {
+            $this->sourceKeyQuery = in_array(
+                'indicia-occurrences:occurrences',
+                (array) $values,
+                true,
+            ) ? 'occurrence' : 'derived';
         }
 
         return $this;
@@ -90,9 +120,27 @@ final class AutoImportRunModelDouble extends ImportRunModel
      */
     public function first($unused = null): ?array
     {
+        if ($this->sourceKeyQuery === 'derived') {
+            $this->sourceKeyQuery = null;
+
+            return $this->latestDerivedRun === null ? null : ['finished_at' => $this->latestDerivedRun];
+        }
+
         $finishedAt = $this->finishedAt[$this->sourceKey] ?? null;
 
         return $finishedAt === null ? null : ['finished_at' => $finishedAt];
+    }
+
+    /**
+     * Return the configured occurrence run count.
+     *
+     * @return int Successful occurrence runs since the latest derived run.
+     */
+    public function countAllResults(bool $reset = true, bool $test = false): int
+    {
+        $this->sourceKeyQuery = null;
+
+        return $this->occurrenceRunsSinceDerived;
     }
 }
 
@@ -152,6 +200,8 @@ final class AutoImportServiceTest extends CIUnitTestCase
             'derived-stats:taxon_stats' => '2026-07-31 10:00:00',
             'derived-stats:taxon_year_stats' => '2026-07-31 09:00:00',
         ];
+        $runModel->latestDerivedRun = '2026-07-31 09:00:00';
+        $runModel->occurrenceRunsSinceDerived = 2;
 
         $service = new AutoImportService($offsetModel, $runModel, null, null, new AutoImportDependencyServiceDouble());
         $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
@@ -194,12 +244,49 @@ final class AutoImportServiceTest extends CIUnitTestCase
             'indicia-occurrences:occurrences' => '2026-07-31 09:00:00',
             'nbn-occurrences:occurrences' => '2026-07-31 10:00:00',
         ];
+        $runModel->latestDerivedRun = '2026-07-31 11:00:00';
+        $runModel->occurrenceRunsSinceDerived = 0;
 
         $service = new AutoImportService($offsetModel, $runModel, null, null, new AutoImportDependencyServiceDouble());
         $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
 
         $this->assertSame('indicia-occurrences:occurrences', $task['source_key']);
         $this->assertSame('indicia', $task['source']);
+    }
+
+    /**
+     * Verify the configured occurrence-run ratio controls derived selection.
+     */
+    public function testDerivedTaskWaitsForConfiguredOccurrenceRuns(): void
+    {
+        $offsetModel = $this->completeOffsetModel();
+        $runModel = new AutoImportRunModelDouble();
+        $runModel->finishedAt = [
+            'derived-stats:grid_square_stats_counts' => '2026-07-31 11:00:00',
+            'derived-stats:taxon_rarity' => '2026-07-31 11:00:00',
+            'derived-stats:taxon_stats' => '2026-07-31 11:00:00',
+            'derived-stats:taxon_year_stats' => '2026-07-31 11:00:00',
+            'indicia-occurrences:occurrences' => '2026-07-31 12:00:00',
+            'nbn-occurrences:occurrences' => '2026-07-31 12:00:00',
+        ];
+        $runModel->latestDerivedRun = '2026-07-31 11:00:00';
+
+        $config = config(\Config\Import::class);
+        $originalRatio = $config->occurrenceRunsPerDerivedRun;
+        $config->occurrenceRunsPerDerivedRun = 2;
+
+        try {
+            $runModel->occurrenceRunsSinceDerived = 1;
+            $service = new AutoImportService($offsetModel, $runModel, null, null, new AutoImportDependencyServiceDouble());
+            $task = $service->select();
+            $this->assertSame('occurrence', $task['kind']);
+
+            $runModel->occurrenceRunsSinceDerived = 2;
+            $task = $service->select();
+            $this->assertSame('derived', $task['kind']);
+        } finally {
+            $config->occurrenceRunsPerDerivedRun = $originalRatio;
+        }
     }
 
     /**

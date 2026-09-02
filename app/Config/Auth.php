@@ -27,6 +27,9 @@ use CodeIgniter\Shield\Authentication\Passwords\PwnedValidator;
 use CodeIgniter\Shield\Authentication\Passwords\ValidatorInterface;
 use CodeIgniter\Shield\Models\UserModel;
 
+/**
+ * Application authentication configuration.
+ */
 class Auth extends ShieldAuth
 {
     /**
@@ -442,6 +445,10 @@ class Auth extends ShieldAuth
      */
     public function loginRedirect(): string
     {
+        if (session()->getTempdata('magicLogin') === true) {
+            return $this->getUrl('account');
+        }
+
         $session = session();
         $url     = $session->getTempdata('beforeLoginUrl') ?? setting('Auth.redirects')['login'];
 

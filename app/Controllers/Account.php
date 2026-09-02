@@ -23,6 +23,7 @@ class Account extends BaseController
             'metaDescription' => 'Manage your account details and password.',
             'bodyClass' => 'app-shell auth-page',
             'user' => $this->currentUser(),
+            'magicLogin' => session()->getTempdata('magicLogin') === true,
         ]);
     }
 
@@ -52,8 +53,12 @@ class Account extends BaseController
 
         $currentPassword = (string) $this->request->getPost('current_password');
         $emailChanged = strtolower((string) $user->getEmail()) !== $email;
+        $magicLogin = session()->getTempdata('magicLogin') === true;
+        $canSetPasswordWithoutCurrent = $magicLogin && ! $emailChanged && $newPassword !== '';
 
-        if (($emailChanged || $newPassword !== '') && ! $this->passwordIsValid($user, $currentPassword)) {
+        if (($emailChanged || $newPassword !== '')
+            && ! $canSetPasswordWithoutCurrent
+            && ! $this->passwordIsValid($user, $currentPassword)) {
             return redirect()->back()->withInput()->with('errors', [
                 'current_password' => 'Enter your current password to change your email or password.',
             ]);
@@ -68,6 +73,10 @@ class Account extends BaseController
         }
 
         $this->userModel()->save($user);
+
+        if ($canSetPasswordWithoutCurrent) {
+            session()->removeTempdata('magicLogin');
+        }
 
         return redirect()->to(site_url('account'))->with('message', 'Account updated.');
     }

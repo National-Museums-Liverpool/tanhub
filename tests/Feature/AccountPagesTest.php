@@ -17,6 +17,11 @@ final class AccountPagesTest extends CIUnitTestCase
     use FeatureTestTrait;
     use AuthenticationTesting;
 
+    /**
+     * Prepare the database and authentication state for each test.
+     *
+     * @return void
+     */
     protected function setUp(): void
     {
         parent::setUp();
@@ -32,6 +37,11 @@ final class AccountPagesTest extends CIUnitTestCase
         $migrate->latest();
     }
 
+    /**
+     * Verify that unauthenticated users cannot access the account page.
+     *
+     * @return void
+     */
     public function testAccountRequiresLogin(): void
     {
         $result = $this->get('account');
@@ -40,6 +50,11 @@ final class AccountPagesTest extends CIUnitTestCase
         $result->assertRedirect();
     }
 
+    /**
+     * Verify that a user can update their profile without changing password.
+     *
+     * @return void
+     */
     public function testUserCanUpdateProfileWithoutChangingPassword(): void
     {
         $user = $this->makeUser('account-profile@example.com');
@@ -60,6 +75,11 @@ final class AccountPagesTest extends CIUnitTestCase
         $this->assertSame('Lovelace', $saved->last_name);
     }
 
+    /**
+     * Verify that a password change requires the current password.
+     *
+     * @return void
+     */
     public function testPasswordChangeRequiresCurrentPassword(): void
     {
         $this->makeUser('account-password@example.com');
@@ -77,6 +97,11 @@ final class AccountPagesTest extends CIUnitTestCase
         $this->assertSame('Enter your current password to change your email or password.', session('errors.current_password'));
     }
 
+    /**
+     * Verify that a user can change password with the current password.
+     *
+     * @return void
+     */
     public function testUserCanChangePasswordWithCurrentPassword(): void
     {
         $user = $this->makeUser('account-change@example.com');
@@ -96,6 +121,40 @@ final class AccountPagesTest extends CIUnitTestCase
         $this->assertTrue(service('passwords')->verify('NewPassword123!', (string) $saved->password_hash));
     }
 
+    /**
+     * Verify that a magic-link user can set a password without the old one.
+     *
+     * @return void
+     */
+    public function testUserCanSetPasswordAfterMagicLinkLogin(): void
+    {
+        $user = $this->makeUser('account-magic-link@example.com');
+        session()->setTempdata('magicLogin', true);
+        $this->withSession($_SESSION);
+        $this->assertSame(site_url('account'), config(Auth::class)->loginRedirect());
+
+        $result = $this->post('account', [
+            'first_name' => 'Test',
+            'last_name' => 'User',
+            'email' => 'account-magic-link@example.com',
+            'current_password' => '',
+            'new_password' => 'NewPassword123!',
+            'new_password_confirm' => 'NewPassword123!',
+        ]);
+
+        $result->assertRedirectTo(site_url('account'));
+        $saved = $this->userModel()->findById((int) $user->id);
+        $this->assertNotNull($saved);
+        $this->assertTrue(service('passwords')->verify('NewPassword123!', (string) $saved->password_hash));
+        $this->assertNull(session()->getTempdata('magicLogin'));
+    }
+
+    /**
+     * Create and authenticate an active test user.
+     *
+     * @param string $email User email address.
+     * @return User
+     */
     private function makeUser(string $email): User
     {
         $users = $this->userModel();
@@ -118,6 +177,11 @@ final class AccountPagesTest extends CIUnitTestCase
         return $saved;
     }
 
+    /**
+     * Return the configured user model.
+     *
+     * @return UserModel
+     */
     private function userModel(): UserModel
     {
         /** @var UserModel $users */

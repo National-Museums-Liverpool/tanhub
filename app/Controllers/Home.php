@@ -38,6 +38,10 @@ class Home extends BaseController
             return redirect()->to(site_url('update'));
         }
 
+        if (session()->getTempdata('magicLogin') === true) {
+            return redirect()->to(site_url('account'));
+        }
+
         $isLoggedIn = false;
 
         try {

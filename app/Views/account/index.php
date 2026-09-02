@@ -15,6 +15,9 @@
                 <?php if (session()->getFlashdata('message')): ?>
                     <div class="alert alert-success" role="alert"><?= esc(session()->getFlashdata('message')) ?></div>
                 <?php endif; ?>
+                <?php if ($page['magicLogin'] ?? false): ?>
+                    <div class="alert alert-info" role="status">You signed in with an email link. Set a new password below.</div>
+                <?php endif; ?>
                 <?php $errors = session('errors') ?? []; ?>
                 <form action="<?= esc(site_url('account')) ?>" method="post" novalidate>
                     <?= csrf_field() ?>
@@ -35,7 +38,7 @@
                         <?php foreach (['current_password' => 'Current password', 'new_password' => 'New password', 'new_password_confirm' => 'Confirm new password'] as $field => $label): ?>
                             <div class="col-md-4">
                                 <label class="form-label" for="<?= esc($field) ?>"><?= esc($label) ?></label>
-                                <input class="form-control<?= isset($errors[$field]) ? ' is-invalid' : '' ?>" id="<?= esc($field) ?>" name="<?= esc($field) ?>" type="password" autocomplete="<?= $field === 'current_password' ? 'current-password' : 'new-password' ?>">
+                                <input class="form-control<?= isset($errors[$field]) ? ' is-invalid' : '' ?>" id="<?= esc($field) ?>" name="<?= esc($field) ?>" type="password" autocomplete="<?= $field === 'current_password' ? 'current-password' : 'new-password' ?>"<?= $field === 'current_password' && ($page['magicLogin'] ?? false) ? ' disabled' : '' ?>>
                                 <?php if (isset($errors[$field])): ?><div class="invalid-feedback d-block"><?= esc($errors[$field]) ?></div><?php endif; ?>
                             </div>
                         <?php endforeach; ?>

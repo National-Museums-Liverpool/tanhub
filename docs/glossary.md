@@ -2,14 +2,15 @@
 
 ## <a name="reporting-taxon"></a>Reporting taxon
 
-A reporting taxon is a taxon whose [rank](#taxon-rank) is listed in the `import.taxonRanks`
-configuration setting. Reporting ranks provide a controlled set of levels, such as species, genus
-and family, at which occurrences can be grouped consistently. For example, a subspecies can be
-grouped so that it appears in reports for the associated species, or all ranks below family can be
-grouped into a report for that family. An exact taxon is the accepted taxon concept attached to an
-occurrence as it was recorded and it may be any taxon rank supported the source database from which
-taxonomy is obtained, such as a species, subspecies, hybrid or species aggregate. The exact taxon
-is retained; the mapping to reporting taxa does not replace it.
+A reporting taxon has a [rank](#taxon-rank) listed in `import.taxonRanks`. These ranks provide
+consistent grouping levels such as species, genus, and family.
+
+An exact taxon is the accepted taxon concept attached to an occurrence as it was recorded. It can
+be any rank supplied by the source, including a species, subspecies, hybrid, or species aggregate.
+Tanhub keeps that exact identity and also maps the occurrence to configured reporting taxa.
+
+For example, a subspecies can appear in the species report for its parent species. A taxon below
+family can also contribute to a family report.
 
 Without projections to reporting ranks, reports can become fragmented across subspecies, hybrids,
 aggregates and other source-specific ranks. Configured ranks provide predictable aggregation levels
@@ -20,9 +21,9 @@ Reporting taxa are represented by rows in the `taxa` table where the `taxon_rank
 
 ## <a name="reporting-taxon-rank"></a>Reporting taxon rank
 
-See [Reporting taxon](#reporting-taxon). A row in the `taxon_ranks` table with `is_reporting` = 1.
+See [Reporting taxon](#reporting-taxon). It is a row in `taxon_ranks` where `is_reporting` = 1.
 
 ## <a name="taxon-rank"></a>Taxon rank
 
-Any level in the taxonomic hierarchy, e.g. Kingdom, Class, Order, Family, Genus, Species,
-Subspecies, represented by a row in the `taxon-ranks` table.
+Any level in the taxonomic hierarchy, such as Kingdom, Class, Order, Family, Genus, Species, or
+Subspecies. Each rank is represented by a row in the `taxon_ranks` table.

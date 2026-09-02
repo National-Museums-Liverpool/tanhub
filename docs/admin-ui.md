@@ -2,8 +2,8 @@
 
 ## Purpose
 
-The admin user interface allows authenticated staff to manage tanhub reference
-data and moderate imported biological records safely.
+The admin user interface gives authenticated staff a place to manage reference data, moderate
+imported records, and monitor imports.
 
 This document defines the intended UI behaviour and access rules for the first
 release.
@@ -18,8 +18,8 @@ The admin UI supports two staff roles:
 General rules:
 
 - All admin UI pages require login.
-- Pages that can change data must be protected by CSRF and server-side
-  validation.
+- Pages that can change data must be protected by CSRF (a browser request-forgery defence) and
+  server-side validation.
 - Destructive actions require explicit confirmation.
 
 ## Navigation
@@ -96,7 +96,7 @@ lookups, taxonomy, occurrences and report stats:
   - taxon_names (Indicia)
 - occurrences
   - occurrences (Indicia)
-  - occurrences (NBN, not implemented)
+  - occurrences (NBN)
 - report stats:
   - grid_square_stats_counts
   - taxon_rarity
@@ -108,10 +108,10 @@ offset or checkpoint, is complete and has a "Go" button allowing the task to be 
 the import task is blocked because it depends on another task which is not yet complete it shows
 "Blocked by ..." with a list of the blocking tasks instead of a Go button.
 
-When a task is run by clicking Go, it is added to a queue of tasks to process. The first task
-starts processing immediately and its Go button is replaced with a "running" badge. When it
-finishes, the Go button is restored and any other tasks blocked by this task are unblocked, only
-if the task is complete. Any other tasks in the queue then proceed in the order they were added.
+When you click Go, Tanhub adds the task to a queue and starts the first queued task immediately.
+The button becomes a `running` badge while work is in progress. On success, the task reports its
+new checkpoint, the button returns, and dependent tasks become eligible. A failed task remains in
+the run history and does not unblock its dependants.
 
 The current queue is shown on the page and only includes active items (`queued` or `running`).
 Completed and failed rows are removed from the queue table once processed.
@@ -273,8 +273,8 @@ Detail/edit page:
 
 ### Data sources
 
-For info only, data sources are created as part of the installation and each data source has
-associated import code so they cannot be edited via the UI.
+Data sources are created during installation and are tied to import code, so the UI does not allow
+staff to edit them.
 
 Access:
 
@@ -297,6 +297,9 @@ Details page:
 - Audit metadata (created_at, updated_at, deleted_at) is never manually edited.
 
 ## URL structure
+
+Use the following paths when linking to an admin page or troubleshooting a request. List pages use
+the plural resource name; detail and edit pages add the record ID.
 
 Use consistent plural nouns and id-based edit/view paths:
 

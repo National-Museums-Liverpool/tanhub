@@ -1,15 +1,15 @@
 # Database schema
 
-The Tanhub database is an intentionally simplified representation of species and observation data
-optimised for reporting outputs rather than accurate storage of raw data.
+Tanhub stores a normalized copy of taxonomy and occurrence data for fast, consistent reporting. It
+keeps the source identity of each record, but the schema is not a raw archive of every source field.
 
-The data schema is designed to use Darwin Core standards where possible, with consideration for
-importing data from the UKSI species database. Fields that map directly to a property in the Darwin
-Core specification are indicated by DwC followed by the Darwin Core property name.
+The schema follows [Darwin Core](https://dwc.tdwg.org/) where that makes sense and supports imports
+from the UKSI species database. Fields that map directly to Darwin Core are marked with `DwC` and
+the relevant property name.
 
-Each data entity that is exposed to the API has a unique field associated with it that is exposed
-via the API - this will be a Darwin Core field where possible, or a uuid field is added where using
-an existing Darwin Core field is not feasible.
+Each API resource has a stable unique field. Tanhub uses a Darwin Core field where possible and a
+UUID where no suitable source field exists. Use that field in API URLs; do not use the internal
+auto-incrementing `id`.
 
 ## Entity Relationship Diagram
 
@@ -84,17 +84,16 @@ erDiagram
 
 ```
 
-## Dynamic taxon rank foreign keys
+## Why taxon rank columns are dynamic
 
 Taxonomic hierarchy is stored using dynamic foreign-key columns on both the `taxa` and
-`occurrences` tables. During installation, a column is added for each configured taxon rank using
-the pattern `<rank>_id` (for example `kingdom_id`, `class_id`, `family_id`, `order_id`).
+`occurrences` tables. During installation, Tanhub adds one column for each configured reporting
+rank, using the pattern `<rank>_id` (for example `kingdom_id`, `class_id`, `family_id`, `order_id`).
 
-Each of these columns is a foreign key to `taxa.id`, so rank relationships are modelled as
-self-references to the `taxa` table rather than separate `orders`, `superfamilies`, or `families`
-tables. The `taxa.parent_taxon_id` column stores the immediate accepted parent independently of
-the configured reporting projections. Occurrences retain their exact `taxon_id`; their copied
-rank columns are reporting projections and do not replace that exact identity.
+Each column points to `taxa.id`. This self-referencing design avoids a separate table for every
+possible rank. `taxa.parent_taxon_id` stores the immediate accepted parent, while the rank columns
+store projections to the reporting levels chosen by the installation. Occurrences retain their
+exact `taxon_id` and copy those projections so exact lookup and fast reporting can coexist.
 
 ## Imported data table details
 

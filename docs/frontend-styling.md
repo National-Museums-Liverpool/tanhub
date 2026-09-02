@@ -1,7 +1,7 @@
 # Frontend styling (SCSS)
 
-This project keeps a single browser-facing stylesheet at `public/css/site.css`.
-That file is generated from SCSS sources and should not be edited directly.
+The browser loads one compiled stylesheet, `public/css/site.css`. Edit the SCSS sources instead of
+editing the generated file; otherwise the next build will overwrite your changes.
 
 ## Goals
 
@@ -66,7 +66,7 @@ Build CSS once:
 npm run css:build
 ```
 
-Watch SCSS and rebuild on change:
+Watch SCSS and rebuild whenever a source file changes:
 
 ```bash
 npm run css:watch
@@ -94,4 +94,4 @@ npm run css:build:prod
 1. Edit or add SCSS partials in `assets/scss`.
 2. Run `npm run css:build`.
 3. Review generated changes in `public/css/site.css`.
-4. Commit both SCSS source updates and the generated CSS output.
+4. Check the affected page in a browser, then commit both the SCSS source and generated CSS.

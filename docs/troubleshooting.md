@@ -1,7 +1,7 @@
 # Troubleshooting
 
-This guide covers known configuration and operational checks. It does not
-describe fixes for unresolved import defects.
+Use this page to diagnose common setup, import, media, and API problems. Start with the symptom
+that matches what you see, then follow the linked setup or configuration reference.
 
 ## The application exposes detailed errors
 
@@ -12,7 +12,7 @@ CI_ENVIRONMENT = production
 ```
 
 Development error pages can reveal configuration and stack details. See
-[Installation](installation.md#2-application-setup) for the full production
+[Installation](installation.md#application-setup) for the full production
 setup sequence.
 
 ## The database has not been created or updated
@@ -24,7 +24,7 @@ administrator through `/setup-admin-user` after the database setup is complete.
 If setup is incomplete and migrations are pending, the home route (`/`) redirects
 to `/update` automatically.
 
-See [Installation](installation.md#2-application-setup) for the prerequisites
+See [Installation](installation.md#application-setup) for the prerequisites
 and required database permissions.
 
 ## The home page shows a pending migration warning
@@ -68,7 +68,7 @@ the corresponding REST API client, connection, and permitted reports exist in
 the Indicia warehouse.
 
 The full warehouse-side setup is documented in
-[Installation](installation.md#4-link-tanhub-to-an-indicia-warehouse).
+[Installation](installation.md#6-link-tanhub-to-an-indicia-warehouse).
 
 ## A browser API request is blocked by CORS
 
@@ -77,7 +77,7 @@ carefully scoped expression to `CORS_ALLOWED_ORIGINS_PATTERNS`. Confirm that
 `CORS_ALLOWED_HEADERS` includes `Authorization` for Bearer-token requests.
 
 See [Configuration reference](configuration-reference.md#cross-origin-requests)
-and [Installation](installation.md#3-api-configuration).
+and [Installation](installation.md#api-configuration).
 
 ## An API request is rejected or throttled
 

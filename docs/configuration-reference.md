@@ -1,9 +1,8 @@
 # Configuration reference
 
-This page lists Tanhub-specific environment settings. Copy `env` to `.env` and
-uncomment only the settings you need to override. See [Installation](installation.md)
-for the first-run sequence and [Administration](administration.md) for media
-maintenance settings.
+Copy `env` to `.env`, then uncomment only the settings you need to change. Use this page to check
+the available values and defaults. Start with [Installation](installation.md) for first-run setup;
+see [Administration](administration.md) for media maintenance.
 
 ## Application and database
 
@@ -61,7 +60,7 @@ refresh planning.
   exceptions, for example `{"Species aggregate":"Species"}` which causes species aggregates to be
   available for reporting in the same way that species are. Mapping targets must be configured
   reporting ranks; automatic nearest-ancestor mapping is used for ranks not listed here when
-  calculating the [reporting taxon](glossary#reporting-taxon), but a link to the exact taxon as
+  calculating the [reporting taxon](glossary.md#reporting-taxon), but a link to the exact taxon as
   recorded is also preserved.
 - `import.taxonGroups`: CSV list of taxon groups to import. Use CSV quoting for
   a group name that contains a comma.
@@ -69,7 +68,8 @@ refresh planning.
 - `import.geographicRegionLocationType`: Indicia location type used to identify
   the configured regions; the default is `Vice County`.
 
-These scope values are also applied to NBN Atlas occurrence imports:
+These scope values are also applied to NBN Atlas occurrence imports. A change affects which records
+are eligible, so refresh the relevant occurrence data and derived statistics afterwards:
 
 - `import.geographicRegions` builds a `cl254` filter
 - `import.taxonRanks` builds a `taxonRank` filter
@@ -184,5 +184,5 @@ default. See [API reference](api.md#3-rate-limiting) for client-visible behaviou
 - `CORS_ALLOWED_HEADERS`: comma-separated request headers allowed by CORS. The
   default is `Origin,Content-Type,Accept,Authorization`.
 
-Use exact origins where possible. See [Installation](installation.md#3-api-configuration)
+Use exact origins where possible. See [Installation](installation.md#api-configuration)
 for examples.

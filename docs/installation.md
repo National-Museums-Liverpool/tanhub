@@ -1,45 +1,43 @@
-## Installation Guide
+# Installation
 
-This guide is intended for a first-time tanhub setup. It covers:
+Use this guide to install Tanhub locally or on a server. By the end, you will have a working
+database, an administrator account, and the configuration needed to import data.
+
+The setup has four parts:
 
 - local application setup
 - first-run database setup
 - optional API throttling configuration
 - linking tanhub to an Indicia warehouse
 
-## 1. Prerequisites
+## Prerequisites
 
 Before installing, ensure you have:
 
 - Composer (https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos)
-- Git (optional) - (https://git-scm.com/install/)
-- a web server (or local dev stack) with PHP 8.2 or higher and MySQL 5.7 or a compatible
-   equivalent
-- PHP extensions `intl`, `mbstring`, `mysqlnd`, `libcurl`, and `json` enabled. `json` is enabled
-   by default in supported PHP versions.
-- PHP GD extension enabled for image resizing and variant generation
-- access to an Indicia warehouse with rights to configure REST API connections. The warehouse
+- Git (optional): [install Git](https://git-scm.com/install/).
+- A web server or local development stack with PHP 8.2 or higher and MySQL 5.7 or a compatible
+  equivalent.
+- PHP extensions `intl`, `mbstring`, `mysqlnd`, `libcurl`, and `json`. PHP 8 includes `json`.
+- PHP GD extension enabled for image resizing and variant generation.
+- Access to an Indicia warehouse with rights to configure REST API connections. The warehouse
   should have a taxon list populated with the contents of the UKSI species list as well as
   occurrence data that you will import into tanhub.
 
-If you are planning to develop the tanhub code, then you may additionally require:
+For frontend development, also install:
 - Node.js 18 or higher (required for local SCSS compilation)
 
-## 2. Application Setup
+## Application setup
 
-1. Obtain a copy of the code by visiting
-   [Github](https://github.com/National-Museums-Liverpool/tanhub/tree/master)
-   and clicking Code, then Download Zip. Save the file, then unzip it and copy the
-   `tanhub-master` contents to a folder where you want the installation to run from and rename it
-   to `tanhub`.
-
-   Alternatively if you are planning to develop the tanhub code and have Git installed you can
-   clone the code to your local machine:
+1. Obtain the source. For development, clone the repository:
 
    ```bash
    git clone https://github.com/National-Museums-Liverpool/tanhub.git
    cd tanhub
    ```
+
+   You can also download and unpack the latest archive from
+   [GitHub](https://github.com/National-Museums-Liverpool/tanhub).
 
 2. Install dependencies:
 
@@ -54,18 +52,19 @@ If you are planning to develop the tanhub code, then you may additionally requir
    npm run css:build
    ```
 
-3. Configure your web server to use `tanhub/public` as the document root.
+3. Configure your web server to use `tanhub/public` as its document root. This keeps application
+   files outside the public web root.
 
 4. Create a MySQL database (for example, `tanhub`) and a database username and password which has
    full access to the database you created.
 
-5. Copy the supplied local environment configuration:
+5. Copy the supplied environment template:
 
 ```bash
 cp env .env
 ```
 
-6. Edit `.env` and set at least:
+6. Edit `.env` and set these required values:
 
    - `database.default.database` to the name of the MySQL database you created.
    - `database.default.username` to the name of the MySQL user you created.
@@ -75,9 +74,8 @@ cp env .env
    - `Config\Email.fromName` to the name emails (such as lost password reset emails) will be sent
       from.
 
-   Make sure you remove the # from the start of any line you edit so that it is not commented out.
-   You may have to also alter other settings for the `database.default` configuration if not using
-   a default local MySQL database server setup.
+   Remove the `#` from each setting you enable. If MySQL is not running with its local defaults,
+   also set the remaining `database.default` connection values.
 
 7. Set up import-related configuration in `.env`:
 
@@ -125,9 +123,8 @@ cp env .env
    application and do not require an NBN credential. See [Import](import.md) for source-specific
    behaviour and command options.
 
-8. Visit the site you have just installed in your browser. As you have not yet installed the
-   database schema you will be redirected to the `/update` page. Click the button to run the
-   migration scripts which set up the database.
+8. Visit the site in a browser. Because the schema is not installed yet, Tanhub redirects you to
+   `/update`. Run the migrations there.
 
     - On a fresh install, visiting `/` redirects to `/update` when setup is incomplete and
       migrations are pending.
@@ -135,9 +132,8 @@ cp env .env
     - After updates complete, if no administrator exists yet, you are redirected to
        `/setup-admin-user`.
 
-9. After setting up the database, you will be redirected to the page for configuring the
-   administrator account (`/setup-admin-user`). Follow the instructions to create the first admin
-   account.
+9. After the migrations finish, Tanhub redirects you to `/setup-admin-user`. Create the first
+   administrator account there.
 
    - This is the only self-service account creation step.
     - After setup, open the Users page from the menu (`/users`) when logged in as an admin to
@@ -152,8 +148,8 @@ cp env .env
    When setup is complete, future homepage visits by logged-in users show a warning and link to
    `/update` whenever new migrations are pending.
 
-10. For production environments, enable production mode in `.env`. Note that this step is important
-    as without it, full stack dumps are shown on errors which may contain credentials:
+10. On a production server, enable production mode. Otherwise error pages can expose stack traces
+   and configuration details:
 
 ```dotenv
 CI_ENVIRONMENT = production
@@ -189,7 +185,7 @@ taxonMedia.variants.large.mode = contain
 taxonMedia.variants.large.quality = 90
 ```
 
-## 3. Schedule automatic imports
+## Schedule automatic imports
 
 The `import:auto` Spark task selects and runs the next import batch or report-stat task. Schedule
 it to run repeatedly rather than scheduling each import command separately. It first completes the
@@ -219,7 +215,7 @@ The `\%F` format produces filenames such as `import-2026-08-03.log`. The backsla
 because cron treats an unescaped `%` as a special character. These are Spark command logs and
 are separate from CodeIgniter's application logs in `writable/logs`.
 
-## 4. Use Cron to tidy old log files
+## Tidy old log files with cron
 
 To remove import logs older than 30 days, add a separate scheduled cleanup command for both import
 and CodeIgniter logs; change `+30` to a different number of days if required:
@@ -229,7 +225,7 @@ and CodeIgniter logs; change `+30` to a different number of days if required:
 15 3 * * * find /var/www/tanhub/writable/import-logs -type f -name 'import-*.log' -mtime +30 -delete
 ```
 
-## 5. API Configuration
+## API configuration
 
 If tanhub is configured to serve only publicly viewable data, API access can be allowed without
 authentication, in which case rate limits are applied to prevent misuse or denial-of-service
@@ -248,8 +244,7 @@ api.rateLimitAuthenticatedSeconds = 20
 - `api.rateLimitAuthenticatedCapacity`: authenticated requests allowed per window
 - `api.rateLimitAuthenticatedSeconds`: authenticated window duration in seconds
 
-In order to allow access from JavaScript running in a browser, you need to configure the allowed
-origins by adding the following to .env, with a list of allowed domains:
+To allow JavaScript running in a browser to call the API, configure the allowed origins in `.env`:
 
 ```dotenv
 CORS_ALLOWED_ORIGINS=http://localhost:3000,https://app.example.com

@@ -1,4 +1,4 @@
-# Tanhub REST API Specification (v1)
+# Tanhub REST API (v1)
 
 This document is the canonical human-readable reference for API behaviour.
 Keep the machine-readable [OpenAPI v1 specification](openapi.v1.yaml) consistent
@@ -6,7 +6,8 @@ with it.
 
 ## 1. Overview
 
-Tanhub provides a read-only REST API for reporting and discovery use cases.
+Tanhub exposes a read-only REST API for reporting and discovery. You can start with anonymous
+requests and add a Bearer token when you need authentication or a separate rate-limit bucket.
 
 For new integrators, the most common flow is:
 
@@ -21,8 +22,8 @@ For new integrators, the most common flow is:
 - Access: unauthenticated and authenticated
 - Primary behavior: `GET` endpoints for list and single-resource retrieval
 
-The API is designed around stable, resource-level unique identifiers rather than internal database
-primary keys.
+The API uses stable resource identifiers rather than internal database primary keys. This means
+clients can keep links to records even when the database is rebuilt.
 
 ## 2. Authentication and Authorization
 
@@ -107,7 +108,8 @@ default to reporting taxa only which belong to one of the configured taxon ranks
 `reporting_only=false` (or `0`) to return all exact taxon ranks; `true` and `1` explicitly
 enable the default. This option applies only to list endpoints. Single-resource lookups by their
 natural key return the requested record regardless of its reporting status. Occurrences are always
-exact and are not filtered by this option.
+exact and are not filtered by this option. See the [glossary](glossary.md) for the difference
+between an exact taxon and a reporting taxon.
 
 The `parent-taxon` include returns the immediate accepted parent through `parent_taxon_id`, with
 `parent_taxon__taxon_identifier`, `parent_taxon__scientific_name`,

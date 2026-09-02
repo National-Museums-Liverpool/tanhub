@@ -1,7 +1,7 @@
 # Testing guide
 
-This guide explains how to run tests safely before and after refactoring API endpoints, with a
-focus on `taxon-stats` and `taxon-year-stats`.
+Use focused tests while changing API, taxonomy, or media code, then run the full suite before you
+commit. The commands below start with the quickest checks and include project-specific regressions.
 
 ## Prerequisites
 
@@ -21,7 +21,7 @@ composer install
 - Coverage/log output directory: `build/logs`
 - Composer shortcut: `composer test`
 
-## Run all unit/feature tests
+## Run the full suite
 
 From the project root:
 
@@ -93,13 +93,13 @@ Run both in one command:
 vendor/bin/phpunit -c phpunit.dist.xml tests/Feature/ApiV1LookupResourcesTest.php --filter 'testTaxon(Year)?Stats'
 ```
 
-## Suggested safe refactor loop
+## Recommended refactor loop
 
-1. Run the focused tests for taxon stats before making changes.
-2. Refactor endpoint code.
-3. Re-run the focused tests.
-4. Run the full lookup test file.
-5. Run the full suite (`composer test`) before committing.
+1. Run the focused tests for the code you will change.
+2. Make the smallest coherent change.
+3. Re-run the same focused tests; a passing result confirms the local behavior.
+4. Run the full lookup test file if the API contract is involved.
+5. Run `composer test` before committing.
 
 Example sequence:
 

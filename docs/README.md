@@ -1,34 +1,32 @@
 # Tanhub documentation
 
-Use this page to find the documentation relevant to your task.
+Start here if you are new to Tanhub. Choose the path that matches what you are doing, then use
+the linked reference pages for detail.
 
-## Set up and run a server
+## Set up and run Tanhub
 
-1. [Installation](installation.md) explains prerequisites, application setup, and Indicia warehouse
-   configuration.
-2. [Import](import.md) explains initial data loading, recurring imports, and derived statistics.
-3. [Admin user interface](admin-ui.md) describes staff access rules and expected administration
-   screens.
-4. [Administration](administration.md) covers ongoing server maintenance, including taxon media
-   variant rebuilds.
+1. Follow [Installation](installation.md) to prepare the application, database, and Indicia
+   connection.
+2. Follow [Import](import.md) to load taxonomy and occurrences, then build report statistics.
+3. Use the [Admin user interface](admin-ui.md) to understand staff roles and operational pages.
+4. Use [Administration](administration.md) for recurring maintenance, such as rebuilding media.
 
 ## Integrate with the API
 
-1. [Architecture](architecture.md) introduces the application components and external data
-   sources.
-2. [Database schema](database.md) describes stored data, relationships, and API identifiers.
-3. [API reference](api.md) is the canonical human-readable description of API behaviour.
-4. [OpenAPI v1 specification](openapi.v1.yaml) is the machine-readable API specification and must
-   be kept consistent with the API reference.
+1. Read [Architecture](architecture.md) to see how requests, imports, and external systems fit
+   together.
+2. Read [Database schema](database.md) for stored entities, relationships, and identifiers.
+3. Use the [API reference](api.md) as the canonical description of API behaviour.
+4. Keep [OpenAPI v1 specification](openapi.v1.yaml) consistent with the API reference when the
+   API changes.
 
 ## Contribute to the project
 
-1. [Architecture](architecture.md) explains the application's main components.
-2. [Testing](testing.md) explains the PHPUnit test suite and focused test commands.
-3. [Frontend styling](frontend-styling.md) explains the SCSS file structure, Bootstrap overrides,
-   and build commands.
-4. Read the repository's `.github/copilot-instructions.md` for coding and documentation
-   conventions.
+1. Use [Testing](testing.md) to choose a focused PHPUnit check before running the full suite.
+2. Use [Frontend styling](frontend-styling.md) for SCSS structure, Bootstrap overrides, and CSS
+   build commands.
+3. Read `.github/copilot-instructions.md` for project coding conventions.
+4. Return to [Architecture](architecture.md) when a change crosses application layers.
 
 ## Reference
 
@@ -45,4 +43,4 @@ Use this page to find the documentation relevant to your task.
 - [OpenAPI v1 specification](openapi.v1.yaml)
 - [Testing](testing.md)
 - [Troubleshooting](troubleshooting.md)
-- [Working notes](todo.md)
+- [Open work](todo.md) for known follow-up work and open questions.

@@ -4,14 +4,21 @@
 
 ### iRecord
 
+Tanhub imports iRecord records through the NBN Atlas records service. The NBN copy is used only
+until the direct iRecord import claims the same record, which avoids reporting duplicates. See the
+ownership rule below for the matching key.
+
 ### NBN Atlas
+
+The NBN Atlas adapter imports occurrence records from the public records web service. It does not
+require an NBN credential, but the service must be reachable from the Tanhub server.
 
 Occurrence imports from NBN Atlas use the records web service search endpoint:
 
 - `https://records-ws.nbnatlas.org/occurrences/search`
 
-Requests use `q=*:*`, paged by `start` and `pageSize`, with filters built from import
-configuration:
+When importing, Tanhub sends `q=*:*` and pages results with `start` and `pageSize`. It adds filters
+from the import configuration:
 
 - geographic regions are applied as a `cl254` filter from `import.geographicRegions`
 - the minimum NBN rank is applied as `taxonRankID:[<minimum> TO *]` from
@@ -30,7 +37,7 @@ or an API-style repeated fq fragment such as:
 
 - `fq=kingdom:Animalia&fq=-phylum:Chordata&fq=-order:Lepidoptera`
 
-NBN records with unresolved assertions are excluded server-side using:
+The adapter excludes records with unresolved assertions server-side using:
 
 - `-(user_assertions:"50005" OR user_assertions:"50006" OR user_assertions:"50001")`
 
@@ -167,6 +174,10 @@ the next task from the current progress state:
 ```bash
 $ php spark import:auto
 ```
+
+Repeat the command until the initial lookup and taxonomy tasks report completion. Then keep it on
+a schedule to import new occurrences and refresh derived statistics. Each successful run reports
+its task and whether more work remains, which helps identify a stalled task.
 
 The automatic task uses this order until the initial imports are complete:
 

@@ -39,9 +39,10 @@ when importing Indicia taxonomy or occurrence data.
   task is recovered as failed. The default is `3600` seconds (one hour). Set
   this above the longest expected legitimate UI run, with enough margin for the
   web-server timeout.
-- `import.occurrenceRunsPerDerivedRun`: successful occurrence import runs allowed between automated
-  derived statistics runs. The default is `2`. A lower number ensures stats data is kept updated
-  more frequently, a higher number allows more rapid population or update of occurrence raw data.
+- `import.occurrenceRunsPerDerivedRun`: successful occurrence import runs allowed between
+  automated derived statistics runs. The default is `2`. A lower number ensures stats data is
+  kept updated more frequently, a higher number allows more rapid population or update of
+  occurrence raw data.
 - `import.importLockFile`: local file used to prevent overlapping import processes on
   one host. It defaults to `writable/import.lock`; web-server and CLI users that run
   imports must be able to create and write it.

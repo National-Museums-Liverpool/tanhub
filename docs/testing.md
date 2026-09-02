@@ -1,6 +1,7 @@
 # Testing guide
 
-This guide explains how to run tests safely before and after refactoring API endpoints, with a focus on `taxon-stats` and `taxon-year-stats`.
+This guide explains how to run tests safely before and after refactoring API endpoints, with a
+focus on `taxon-stats` and `taxon-year-stats`.
 
 ## Prerequisites
 
@@ -147,8 +148,10 @@ composer test
 
 ## Notes for endpoint refactors
 
-- Keep response envelope shape stable (`data`, `meta`, `links`) to avoid breaking existing API tests.
-- If you add new filterable or sortable fields, add matching feature tests in `tests/Feature/ApiV1LookupResourcesTest.php`.
+- Keep response envelope shape stable (`data`, `meta`, `links`) to avoid breaking existing API
+    tests.
+- If you add new filterable or sortable fields, add matching feature tests in
+    `tests/Feature/ApiV1LookupResourcesTest.php`.
 - If response fields change intentionally, update both tests and API documentation together.
 - Taxonomy changes must keep `docs/database.md`, `docs/import.md`, `docs/api.md`,
   `docs/admin-ui.md`, and `docs/openapi.v1.yaml` consistent with the migration and feature tests.

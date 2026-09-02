@@ -21,7 +21,8 @@ For new integrators, the most common flow is:
 - Access: unauthenticated and authenticated
 - Primary behavior: `GET` endpoints for list and single-resource retrieval
 
-The API is designed around stable, resource-level unique identifiers rather than internal database primary keys.
+The API is designed around stable, resource-level unique identifiers rather than internal database
+primary keys.
 
 ## 2. Authentication and Authorization
 
@@ -34,7 +35,8 @@ Practical guidance:
 - Endpoint behavior is otherwise consistent between anonymous and authenticated usage.
 
 - Unauthenticated requests are rate limited by IP address.
-- Authenticated requests use Bearer JWT tokens and have separate (configurable) rate-limiting behavior.
+- Authenticated requests use Bearer JWT tokens and have separate (configurable) rate-limiting
+	behavior.
 
 ### 2.1 JWT endpoints
 
@@ -198,7 +200,8 @@ All exposed resource fields are filterable except:
 
 Join tables are not exposed as standalone API resources.
 
-For example, when querying `occurrences`, clients can filter by geographic region via `higher_geography_identifier` without directly querying `geographic_regions_occurrences`.
+For example, when querying `occurrences`, clients can filter by geographic region via
+`higher_geography_identifier` without directly querying `geographic_regions_occurrences`.
 
 This keeps the public API resource-focused, while still exposing useful relationship filters.
 
@@ -469,7 +472,8 @@ Examples:
 
 	  `higher_geography_identifier` returns a semi-colon separated list if an occurrence spans
 		multiple regions.
-	- dynamic taxon rank fields by configured rank identifier (for example `kingdom__taxon_identifier`, `family__taxon_identifier`)
+	- dynamic taxon rank fields by configured rank identifier (for example
+  `kingdom__taxon_identifier`, `family__taxon_identifier`)
 - Filterable fields:
 	- all exposed occurrence fields above
 	- excludes: `blocked`, `blocked_reason`, `created_at`, `updated_at`, `deleted_at`
@@ -1005,8 +1009,10 @@ Examples:
 - Path: `GET /api/v1/taxon-names`
 - Item path: `GET /api/v1/taxon-names/{uuid}`
 - Unique identifier: `uuid`
-- Exposed fields: `uuid`, `taxon_identifier`, `given_name_identifier`, `name`,  `accepted`, `scientific`
-- Filterable fields: `uuid`, `taxon_identifier`, `given_name_identifier`, `name`, `accepted`, `scientific`
+- Exposed fields: `uuid`, `taxon_identifier`, `given_name_identifier`, `name`, `accepted`,
+  `scientific`
+- Filterable fields: `uuid`, `taxon_identifier`, `given_name_identifier`, `name`, `accepted`,
+  `scientific`
 - Include:
 	- query parameter: `include`
 	- supported values and added fields:
@@ -1452,9 +1458,11 @@ Examples:
 - Path: `GET /api/v1/taxon-year-stats`
 - Item path: `GET /api/v1/taxon-year-stats/{uuid}`
 - Unique identifier: `uuid`
-- Exposed fields: `uuid`, `taxon_identifier`, `higher_geography_identifier`, `year`, `occurrences_count`, `grid_square_count`
+- Exposed fields: `uuid`, `taxon_identifier`, `higher_geography_identifier`, `year`,
+  `occurrences_count`, `grid_square_count`
 - Filterable fields:
-	- `uuid`, `taxon_identifier`, `higher_geography_identifier`, `year`, `occurrences_count`, `grid_square_count`
+	- `uuid`, `taxon_identifier`, `higher_geography_identifier`, `year`, `occurrences_count`,
+  `grid_square_count`
 	- rows for blocked taxa are always excluded
 - Include:
 	- query parameter: `include`
@@ -1596,7 +1604,8 @@ Examples:
 
 ## 14. Implementation Notes for Developers
 
-- Prefer exposing relationship identifiers that are stable API keys (for example `taxon_identifier`, `external_key`, `abbr`) rather than internal numeric IDs.
+- Prefer exposing relationship identifiers that are stable API keys (for example
+	`taxon_identifier`, `external_key`, `abbr`) rather than internal numeric IDs.
 - Validate filter fields per resource and return RFC 9457 problem responses for unsupported filters.
 - Apply case-insensitive behavior for all `contains` filters.
 - Ensure blocked-record exclusion is applied consistently before pagination totals are calculated.

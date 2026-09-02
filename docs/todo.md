@@ -3,7 +3,8 @@
 ## Priority 1
 [] Might need to document that the NBN import only supports Watsonian Vice County filtering.
 [] Document that NBN import filtering excludes queried records.
-[] Ensure that rank Species sensu lato are treated as species, other taxa above species roll up to genus.
+[] Ensure that rank Species sensu lato are treated as species, other taxa above species roll up
+to genus.
 [] Roll up intermediate taxon ranks to the one above on both occurrences imports.
 [] Add taxon rank to occurrence table, imports and views
 [x] the filter on raw_speciesGroup for NBN Atlas import is probably wrong and needs amending
@@ -65,6 +66,7 @@ DONE
 [x] warehouse reports into tanhub GitHub
 [x] Indicia import - drop low-resolution occurrence data?
 [x] Force occurrences fetch to blurred, non-confidential released data only.
-[x] populating occurrences - might need to calculate grid ref from lat long if the output sref system<>'OSGB'
+[x] populating occurrences - might need to calculate grid ref from lat long if the output sref
+system<>'OSGB'
 [x] NBN Atlas import
 [x] NBN Atlas import - consider how this works with Indicia location filtering. fq=cl254:Dorset.

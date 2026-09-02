@@ -10,6 +10,9 @@ use CodeIgniter\Test\CIUnitTestCase;
  */
 final class OsgbGridReferenceBuilderTest extends CIUnitTestCase
 {
+    /**
+     * Verify uncertainty values map to the smallest supported square size.
+     */
     public function testSelectSquareSizeMapsToSmallestSupportedSize(): void
     {
         $builder = new OsgbGridReferenceBuilder();
@@ -23,6 +26,9 @@ final class OsgbGridReferenceBuilderTest extends CIUnitTestCase
         $this->assertSame(100000, $builder->selectSquareSize(50000));
     }
 
+    /**
+     * Verify invalid uncertainty values use the default square size.
+     */
     public function testSelectSquareSizeFallsBackTo2000ForInvalidValues(): void
     {
         $builder = new OsgbGridReferenceBuilder();
@@ -34,6 +40,9 @@ final class OsgbGridReferenceBuilderTest extends CIUnitTestCase
         $this->assertSame(2000, $builder->selectSquareSize(-10));
     }
 
+    /**
+     * Verify WGS84 coordinates generate a DINTY reference for 2km precision.
+     */
     public function testBuildFromWgs84GeneratesDintyFor2000Size(): void
     {
         $builder = new OsgbGridReferenceBuilder();
@@ -45,6 +54,31 @@ final class OsgbGridReferenceBuilderTest extends CIUnitTestCase
         $this->assertSame($result['grid_ref'], $builder->calculateDintyTetrad($result['grid_ref']));
     }
 
+    /**
+     * Verify DINTY letters increase northwards within each easting column.
+     */
+    public function testCalculateDintyTetradUsesEastingAsTheTetradColumn(): void
+    {
+        $builder = new OsgbGridReferenceBuilder();
+
+        $this->assertSame('SU12A', $builder->calculateDintyTetrad('SU1020'));
+        $this->assertSame('SU12E', $builder->calculateDintyTetrad('SU1028'));
+        $this->assertSame('SU12V', $builder->calculateDintyTetrad('SU1820'));
+    }
+
+    /**
+     * Verify an 8-digit grid reference is converted using its easting and northing axes.
+     */
+    public function testCalculateDintyTetradConvertsSuppliedGridReference(): void
+    {
+        $builder = new OsgbGridReferenceBuilder();
+
+        $this->assertSame('SD21V', $builder->calculateDintyTetrad('SD29081025'));
+    }
+
+    /**
+     * Verify WGS84 coordinates generate a hectad when uncertainty requires it.
+     */
     public function testBuildFromWgs84GeneratesTenKilometrePrecisionWhenNeeded(): void
     {
         $builder = new OsgbGridReferenceBuilder();
@@ -56,6 +90,9 @@ final class OsgbGridReferenceBuilderTest extends CIUnitTestCase
         $this->assertNull($builder->calculateDintyTetrad($result['grid_ref']));
     }
 
+    /**
+     * Verify invalid or out-of-bounds coordinates return null.
+     */
     public function testBuildFromWgs84ReturnsNullForOutOfBoundsOrInvalidCoordinates(): void
     {
         $builder = new OsgbGridReferenceBuilder();

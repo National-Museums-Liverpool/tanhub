@@ -19,7 +19,7 @@ class OsgbGridReferenceBuilder
     private const SUPPORTED_SQUARE_SIZES = [1, 10, 100, 1000, 2000, 10000, 100000];
 
     /**
-     * DINTY tetrad alphabet omits I.
+     * DINTY tetrad alphabet omits O.
      *
      * @var string
      */
@@ -162,7 +162,7 @@ class OsgbGridReferenceBuilder
             return null;
         }
 
-        $tetradIndex = ($tetradY * 5) + $tetradX;
+        $tetradIndex = ($tetradX * 5) + $tetradY;
 
         return $letters . $eastingHectad . $northingHectad . self::DINTY_TETRAD_LETTERS[$tetradIndex];
     }
@@ -298,7 +298,7 @@ class OsgbGridReferenceBuilder
 
         $tetradX = intdiv($eastingWithin % 10000, 2000);
         $tetradY = intdiv($northingWithin % 10000, 2000);
-        $tetradIndex = ($tetradY * 5) + $tetradX;
+        $tetradIndex = ($tetradX * 5) + $tetradY;
 
         return $letters . $eastingHectad . $northingHectad . self::DINTY_TETRAD_LETTERS[$tetradIndex];
     }

@@ -99,6 +99,7 @@ class TaxonMediaReadService
         $mediaRows = $this->mediaModel
             ->whereIn('taxon_id', $ids)
             ->where('deleted_at', null)
+            ->where('bulk_import_id', null)
             ->orderBy('taxon_id', 'ASC')
             ->orderBy('is_primary', 'DESC')
             ->orderBy('sort_order', 'ASC')
@@ -182,6 +183,7 @@ class TaxonMediaReadService
         $mediaRow = $this->mediaModel
             ->where('uuid', $uuid)
             ->where('deleted_at', null)
+            ->where('bulk_import_id', null)
             ->first();
 
         if (! is_array($mediaRow)) {

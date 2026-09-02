@@ -91,8 +91,117 @@ class TaxonMediaUploadService
 
         $mimeType = $this->assertUploadIsValid($file);
 
+        return $this->persistForTaxon(
+            $taxonId,
+            (string) $file->getTempName(),
+            (string) $file->getClientName(),
+            $mimeType,
+            $metadata,
+            null,
+            $file,
+        );
+    }
+
+    /**
+     * Persist a previously staged image for a taxon.
+     *
+     * The staged source is copied into the normal taxon media storage layout,
+     * then the same original-dimension and configured-variant pipeline as an
+     * HTTP upload is applied. A non-null import ID keeps the media row hidden
+     * from normal reads until the bulk import is published.
+     *
+     * @param int                  $taxonId           Taxon to attach the media to.
+     * @param string               $sourceAbsolutePath Absolute path to the staged image.
+     * @param string               $originalFilename   Filename retained in the media row.
+    * @param array<string, mixed> $metadata            Media metadata.
+    * @param int|null             $bulkImportId        Pending bulk import owner, if applicable.
+    * @param string|null           $mimeType            Validated MIME type, or null to validate it.
+     *
+     * @return array<string, mixed> Persisted media summary.
+     *
+     * @throws InvalidArgumentException When an argument or staged image is invalid.
+     * @throws RuntimeException          When storage cannot be created or copied.
+     * @throws \Throwable                When persistence or variant generation fails.
+     */
+    public function uploadStagedForTaxon(
+        int $taxonId,
+        string $sourceAbsolutePath,
+        string $originalFilename,
+        array $metadata = [],
+        ?int $bulkImportId = null,
+        ?string $mimeType = null
+    ): array {
+        if ($taxonId <= 0) {
+            throw new InvalidArgumentException('taxonId must be a positive integer.');
+        }
+
+        if ($bulkImportId !== null && $bulkImportId <= 0) {
+            throw new InvalidArgumentException('bulkImportId must be a positive integer.');
+        }
+
+        $mimeType ??= $this->validateSourcePath($sourceAbsolutePath);
+
+        return $this->persistForTaxon(
+            $taxonId,
+            $sourceAbsolutePath,
+            $originalFilename,
+            $mimeType,
+            $metadata,
+            $bulkImportId,
+        );
+    }
+
+    /**
+     * Remove hidden media rows and their storage for a failed or cancelled import.
+     *
+     * @param int $bulkImportId Import ID used as the hidden-media owner.
+     * @return void
+     * @throws InvalidArgumentException When the import ID is invalid.
+     */
+    public function discardBulkImport(int $bulkImportId): void
+    {
+        if ($bulkImportId <= 0) {
+            throw new InvalidArgumentException('bulkImportId must be a positive integer.');
+        }
+
+        $mediaRows = $this->mediaModel->where('bulk_import_id', $bulkImportId)->findAll();
+        foreach ($mediaRows as $mediaRow) {
+            $directory = dirname($this->storageAbsolutePath((string) ($mediaRow['storage_path'] ?? '')));
+            $this->cleanupUploadDirectory($directory);
+        }
+        if ($mediaRows !== []) {
+            $this->variantModel->whereIn('taxon_media_id', array_column($mediaRows, 'id'))->delete();
+        }
+        $this->mediaModel->where('bulk_import_id', $bulkImportId)->delete();
+    }
+
+    /**
+     * Persist an image and its configured variants in one database transaction.
+     *
+     * @param int                  $taxonId           Taxon ID.
+     * @param string               $sourceAbsolutePath Source file path.
+     * @param string               $originalFilename   Original filename.
+     * @param string               $mimeType            Validated MIME type.
+     * @param array<string, mixed> $metadata            Media metadata.
+     * @param int|null              $bulkImportId       Pending import owner.
+     * @param UploadedFile|null     $upload              HTTP upload to move instead of copying.
+     *
+     * @return array<string, mixed> Persisted media summary.
+     *
+     * @throws RuntimeException When storage cannot be created or copied.
+     * @throws \Throwable       When persistence or variant generation fails.
+     */
+    private function persistForTaxon(
+        int $taxonId,
+        string $sourceAbsolutePath,
+        string $originalFilename,
+        string $mimeType,
+        array $metadata,
+        ?int $bulkImportId,
+        ?UploadedFile $upload = null
+    ): array {
         $uuid = $this->createUuidV4();
-        $extension = strtolower((string) $file->getExtension());
+        $extension = strtolower((string) pathinfo($originalFilename, PATHINFO_EXTENSION));
         $extension = $extension === '' ? 'bin' : $extension;
         $root = $this->baseDirectory();
         $relativeDirectory = $taxonId . DIRECTORY_SEPARATOR . $uuid;
@@ -103,17 +212,21 @@ class TaxonMediaUploadService
         }
 
         $originalBasename = 'original.' . $extension;
-        $file->move($absoluteDirectory, $originalBasename, true);
-
         $originalAbsolutePath = $absoluteDirectory . DIRECTORY_SEPARATOR . $originalBasename;
         $relativeOriginalPath = $relativeDirectory . DIRECTORY_SEPARATOR . $originalBasename;
-        $this->enforceOriginalDimensionLimits($originalAbsolutePath, $mimeType);
-        $imageSize = $this->readImageSize($originalAbsolutePath);
         $db = null;
         $transactionStarted = false;
         $variantSourcePath = $originalAbsolutePath;
 
         try {
+            if ($upload !== null) {
+                $upload->move($absoluteDirectory, $originalBasename, true);
+            } elseif (! copy($sourceAbsolutePath, $originalAbsolutePath)) {
+                throw new RuntimeException('Unable to copy staged media file.');
+            }
+
+            $this->enforceOriginalDimensionLimits($originalAbsolutePath, $mimeType);
+            $imageSize = $this->readImageSize($originalAbsolutePath);
             $db = db_connect();
             $db->transException(true)->transStart();
             $transactionStarted = true;
@@ -121,7 +234,7 @@ class TaxonMediaUploadService
             $mediaData = [
                 'uuid' => $uuid,
                 'taxon_id' => $taxonId,
-                'original_filename' => (string) $file->getClientName(),
+                'original_filename' => $originalFilename,
                 'storage_path' => $relativeOriginalPath,
                 'mime_type' => $mimeType,
                 'bytes' => max(0, (int) filesize($originalAbsolutePath)),
@@ -134,6 +247,10 @@ class TaxonMediaUploadService
                 'sort_order' => max(0, (int) ($metadata['sort_order'] ?? 0)),
                 'is_primary' => (int) (! empty($metadata['is_primary'])),
             ];
+
+            if ($bulkImportId !== null) {
+                $mediaData['bulk_import_id'] = $bulkImportId;
+            }
 
             $this->mediaModel->insert($mediaData);
             $mediaId = (int) $this->mediaModel->getInsertID();
@@ -332,6 +449,44 @@ class TaxonMediaUploadService
         }
 
         $size = (int) $file->getSize();
+        if ($size <= 0 || $size > $this->config->maxUploadBytes) {
+            throw new InvalidArgumentException('Uploaded file size exceeds configured limits.');
+        }
+
+        return $mimeType;
+    }
+
+    /**
+     * Validate an image that has already been staged on disk.
+     *
+     * Uses the same configured MIME type and byte-size rules as an HTTP upload
+     * without requiring the file to be represented by an UploadedFile object.
+     * This is the validation boundary used by resumable bulk media imports.
+     *
+     * @param string $sourceAbsolutePath Absolute path to the staged image.
+     *
+     * @return string The validated MIME type.
+     *
+     * @throws InvalidArgumentException When the file is missing, unreadable,
+     *                                  unsupported, or exceeds the size limit.
+     */
+    public function validateSourcePath(string $sourceAbsolutePath): string
+    {
+        if (! is_file($sourceAbsolutePath) || ! is_readable($sourceAbsolutePath)) {
+            throw new InvalidArgumentException('Staged image file is not readable.');
+        }
+
+        $fileInfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mimeType = $fileInfo === false ? '' : (string) (finfo_file($fileInfo, $sourceAbsolutePath) ?: '');
+        if ($fileInfo !== false) {
+            finfo_close($fileInfo);
+        }
+
+        if (! in_array($mimeType, $this->config->allowedMimeTypes, true)) {
+            throw new InvalidArgumentException('Uploaded file type is not allowed.');
+        }
+
+        $size = (int) filesize($sourceAbsolutePath);
         if ($size <= 0 || $size > $this->config->maxUploadBytes) {
             throw new InvalidArgumentException('Uploaded file size exceeds configured limits.');
         }

@@ -61,6 +61,18 @@ erDiagram
     BIGINT taxon_media_id FK
   }
 
+  taxon_media_bulk_imports {
+    BIGINT id PK
+    BIGINT owner_user_id FK
+  }
+
+  taxon_media_bulk_import_rows {
+    BIGINT id PK
+    BIGINT import_id FK
+    BIGINT taxon_id FK
+    BIGINT media_id FK
+  }
+
   taxon_groups {
     BIGINT id PK
   }
@@ -74,6 +86,8 @@ erDiagram
   taxa ||--|{ taxon_names: has
   taxa ||--o{ taxon_media: has
   taxon_media ||--o{ taxon_media_variants: has
+  taxon_media_bulk_imports ||--o{ taxon_media_bulk_import_rows: contains
+  taxa ||--o{ taxon_media_bulk_import_rows: resolves
   taxa }o--o| taxa: "immediate parent"
   taxa }o--|| taxon_ranks: "has rank"
   taxa }o--|| taxon_groups: "belongs to"
@@ -252,6 +266,7 @@ Uploaded media assets attached to a taxon. The `storage_path` is relative to
 | created_at        | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                    |
 | updated_at        | DATETIME     | YES  |     |                   | Update date                                      |
 | deleted_at        | DATETIME     | YES  |     |                   | Soft delete date                                 |
+| bulk_import_id    | BIGINT       | YES  | FK  |                   | Pending bulk import; null after publication     |
 
 Indexes and constraints:
 
@@ -259,6 +274,10 @@ Indexes and constraints:
 - Index on `taxon_id`.
 - Composite index on `taxon_id, sort_order`.
 - FK `taxon_id` references `taxa.id` with cascade delete.
+- Index and FK on `bulk_import_id`; references `taxon_media_bulk_imports.id` with `SET NULL` on
+  delete.
+- Rows with a non-null `bulk_import_id` are pending bulk-import publication and are excluded from
+  normal media reads until publication clears the value.
 
 ### taxon_media_variants
 
@@ -282,6 +301,71 @@ Additional constraints:
 
 - Index on `taxon_media_id`.
 - FK `taxon_media_id` references `taxon_media.id` with cascade delete.
+
+### taxon_media_bulk_imports
+
+Tracks a user-created bulk taxon media import from CSV upload through validation, background
+processing, publication, or cancellation. The CSV is retained in staging while its rows are
+resolved to taxa and paired with uploaded image files. The worker uses `next_row_id` and the row
+statuses to resume after a time-limited run.
+
+| Column             | Type         | Null | Key       | Default           | Description                                  |
+| ------------------ | ------------ | ---- | --------- | ----------------- | -------------------------------------------- |
+| id                 | BIGINT       | NO   | PK        | AUTO_INCREMENT    | Internal import identifier                   |
+| uuid               | CHAR(36)     | NO   | UQ        |                   | Public identifier for import status requests |
+| owner_user_id      | INT          | YES  | FK        |                   | Shield user who created the import           |
+| csv_filename       | VARCHAR(255) | NO   |           |                   | Original CSV filename                        |
+| csv_path           | VARCHAR(500) | NO   |           |                   | Server-side staging path for the CSV         |
+| status             | VARCHAR(20)  | NO   |           | queued            | Import lifecycle status                      |
+| total_rows         | INT          | NO   |           | 0                 | Number of validated CSV rows                 |
+| processed_rows     | INT          | NO   |           | 0                 | Number of rows processed by the worker       |
+| next_row_id        | BIGINT       | YES  |           |                   | Next staged row checkpoint                   |
+| error_message      | TEXT         | YES  |           |                   | Batch-level error message                    |
+| validation_report  | TEXT         | YES  |           |                   | Serialized validation or row error report    |
+| heartbeat_at       | DATETIME     | YES  |           |                   | Last worker heartbeat                        |
+| started_at         | DATETIME     | YES  |           |                   | Processing start time                        |
+| finished_at        | DATETIME     | YES  |           |                   | Completion, failure, or cancellation time    |
+| created_at         | DATETIME     | NO   |           | CURRENT_TIMESTAMP | Creation time                                |
+| updated_at         | DATETIME     | YES  |           |                   | Last update time                             |
+
+The main statuses are `draft`, `uploading`, `queued`, `processing`, `published`, `failed`, and
+`cancelled`. An index on `owner_user_id, status` supports the user's import list, while an index
+on `status, next_row_id` supports worker selection. `owner_user_id` references `users.id` with
+cascade delete.
+
+### taxon_media_bulk_import_rows
+
+Stores one validated CSV row and its staged photo for a bulk import. It keeps the resolved
+`taxon_id`, media metadata, file integrity details, and worker result separate from permanent
+`taxon_media` rows until the complete import is published.
+
+| Column             | Type         | Null | Key       | Default           | Description                                  |
+| ------------------ | ------------ | ---- | --------- | ----------------- | -------------------------------------------- |
+| id                 | BIGINT       | NO   | PK        | AUTO_INCREMENT    | Internal staged-row identifier               |
+| import_id          | BIGINT       | NO   | FK, UQ*   |                   | Parent bulk import                           |
+| row_number         | INT          | NO   | UQ*       |                   | One-based CSV row number                    |
+| taxon_id           | BIGINT       | NO   | FK        |                   | Resolved target taxon                        |
+| photo_filename     | VARCHAR(255) | NO   |           |                   | Case-sensitive uploaded basename             |
+| staged_path        | VARCHAR(500) | YES  |           |                   | Server-side staged image path                |
+| mime_type          | VARCHAR(100) | YES  |           |                   | Validated staged image MIME type             |
+| staged_bytes       | BIGINT       | NO   |           | 0                 | Staged image size in bytes                   |
+| checksum           | CHAR(64)     | YES  |           |                   | SHA-256 checksum of the staged image         |
+| alt_text           | VARCHAR(500) | YES  |           |                   | Accessibility alternative text               |
+| caption            | TEXT         | YES  |           |                   | Public caption                               |
+| attribution        | VARCHAR(255) | YES  |           |                   | Photographer or source credit                |
+| license            | VARCHAR(100) | YES  |           |                   | Media licence information                    |
+| sort_order         | INT          | NO   |           | 0                 | Display ordering within the taxon            |
+| is_primary         | TINYINT(1)   | NO   |           | 0                 | Whether this row requests primary status     |
+| status             | VARCHAR(20)  | NO   |           | pending           | Row staging and processing status            |
+| media_id           | BIGINT       | YES  |           |                   | Temporary or published `taxon_media.id`      |
+| error_message      | TEXT         | YES  |           |                   | Row-level validation or processing error     |
+| created_at         | DATETIME     | NO   |           | CURRENT_TIMESTAMP | Creation time                                |
+| updated_at         | DATETIME     | YES  |           |                   | Last update time                             |
+
+`UQ*` indicates a composite unique index across `import_id` and `row_number`. Additional indexes
+support selecting rows by `import_id`, `status`, and `id`. `import_id` references
+`taxon_media_bulk_imports.id` with cascade delete, and `taxon_id` references `taxa.id` with
+restrict delete.
 
 ### taxon_groups
 

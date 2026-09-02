@@ -53,6 +53,7 @@ class TaxonMediaModel extends Model
      * - `license`            License the media is made available under.
      * - `sort_order`         Manual ordering among a taxon's media (ascending).
      * - `is_primary`         1 marks the featured image shown first for the taxon.
+    * - `bulk_import_id`     Pending bulk import owner; null means published media.
      *
      * @var array<int, string>
      */
@@ -71,6 +72,7 @@ class TaxonMediaModel extends Model
         'license',
         'sort_order',
         'is_primary',
+        'bulk_import_id',
     ];
 
     /**

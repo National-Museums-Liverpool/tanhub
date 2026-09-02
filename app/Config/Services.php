@@ -90,6 +90,26 @@ class Services extends BaseService
     }
 
     /**
+     * Taxon media bulk import service.
+     *
+     * @param bool $getShared Whether to return a shared service instance.
+     * @return \App\Services\TaxonMediaBulkImportService Bulk import service.
+     */
+    public static function taxonMediaBulkImportService(bool $getShared = true): \App\Services\TaxonMediaBulkImportService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('taxonMediaBulkImportService');
+        }
+
+        return new \App\Services\TaxonMediaBulkImportService(
+            static::taxonMediaUploadService(false),
+            model(\App\Models\TaxonMediaBulkImportModel::class),
+            model(\App\Models\TaxonMediaBulkImportRowModel::class),
+            config(\Config\TaxonMediaImport::class),
+        );
+    }
+
+    /**
      * Grid square stats derived counts service.
      */
     public static function gridSquareStatsCountsService(bool $getShared = true): \App\Services\Stats\GridSquareStatsCountsService

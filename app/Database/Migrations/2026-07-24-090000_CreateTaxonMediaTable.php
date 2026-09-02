@@ -92,6 +92,12 @@ class CreateTaxonMediaTable extends Migration
                 'constraint' => 1,
                 'default'    => 0,
             ],
+            'bulk_import_id' => [
+                'type'       => 'BIGINT',
+                'constraint' => 20,
+                'unsigned'   => true,
+                'null'       => true,
+            ],
             'created_at' => [
                 'type'    => 'DATETIME',
                 'null'    => false,
@@ -112,8 +118,10 @@ class CreateTaxonMediaTable extends Migration
         $this->forge->addKey('taxon_id');
         $this->forge->addKey(['taxon_id', 'sort_order']);
         $this->forge->addKey(['taxon_id', 'is_primary']);
+        $this->forge->addKey('bulk_import_id');
 
         $this->forge->addForeignKey('taxon_id', 'taxa', 'id', 'CASCADE', 'CASCADE');
+        $this->forge->addForeignKey('bulk_import_id', 'taxon_media_bulk_imports', 'id', 'CASCADE', 'SET NULL');
         $this->forge->createTable('taxon_media', true);
     }
 

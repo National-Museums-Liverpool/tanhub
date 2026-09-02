@@ -9,6 +9,7 @@ applyTo: 'docs/**/*.md'
 - MUST: Keep Markdown tables, fenced code blocks, and long URLs intact when wrapping them would
   damage their syntax or make examples unusable.
 - MUST: Check the rendered Markdown remains readable after wrapping.
+- MUST: document all tables in the Markdown documentation with appropriate headings and descriptions.
 
 # Documentation style
 

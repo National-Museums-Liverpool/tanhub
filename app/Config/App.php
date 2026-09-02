@@ -7,6 +7,11 @@ use CodeIgniter\Config\BaseConfig;
 class App extends BaseConfig
 {
     /**
+     * Application release version.
+     */
+    public string $applicationVersion = '1.0.0';
+
+    /**
      * --------------------------------------------------------------------------
      * Base Site URL
      * --------------------------------------------------------------------------

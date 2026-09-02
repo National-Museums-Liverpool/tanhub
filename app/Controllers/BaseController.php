@@ -75,7 +75,7 @@ abstract class BaseController extends Controller
                 ['value' => 'Reporting API', 'label' => 'Combined data available via the Reporting API'],
             ],
             'footer' => [
-                'headline' => 'tanhub',
+                'headline' => 'tanhub v' . config('App')->applicationVersion,
                 'copy' => 'Built with CodeIgniter ' . \CodeIgniter\CodeIgniter::CI_VERSION . ' and Bootstrap 5.',
             ],
             'year' => date('Y'),
@@ -108,6 +108,7 @@ abstract class BaseController extends Controller
                 $this->navLink('Taxon groups', site_url('taxon-groups'), 'taxon-groups'),
                 $this->navLink('Taxon ranks', site_url('taxon-ranks'), 'taxon-ranks'),
                 $this->navLink('Taxa', site_url('taxa'), 'taxa'),
+                $this->navLink('Bulk media import', site_url('taxon-media-imports'), 'taxon-media-imports'),
             ]);
             $navItems[] = $this->navLink('Occurrences', site_url('occurrences'), 'occurrences', 'link');
             $navItems[] = $this->navLink('Imports', site_url('imports'), 'imports', 'link');

@@ -160,7 +160,6 @@ final class GridSquareStatsCountsServiceTest extends CIUnitTestCase
             ['id' => 5, 'unique_key' => 'TEST:5', 'taxon_id' => 2, 'taxon_name_id' => 2, 'grid_ref' => 'SU99A1234', 'grid_ref_2km' => 'SU99A', 'recorded_by' => 'Tester', 'identification_verification_status' => 'V', 'data_source_id' => 1, 'blocked' => 0, 'deleted_at' => '2026-07-01 00:00:00'],
             ['id' => 6, 'unique_key' => 'TEST:6', 'taxon_id' => 1, 'taxon_name_id' => 1, 'grid_ref' => 'SU10B1234', 'grid_ref_2km' => 'SU10B', 'recorded_by' => 'Tester', 'identification_verification_status' => 'V', 'data_source_id' => 1, 'blocked' => 0, 'deleted_at' => null],
         ]);
-
         $this->db->table('geographic_regions_occurrences')->insertBatch([
             ['geographic_region_id' => 11, 'occurrence_id' => 1],
             ['geographic_region_id' => 11, 'occurrence_id' => 2],

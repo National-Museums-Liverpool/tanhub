@@ -192,9 +192,13 @@ class TaxonYearStatsService
         $columns = $this->reportingColumns();
         $db = db_connect();
         $prefix = $db->getPrefix();
-        $yearExpression = strtoupper((string) ($db->DBDriver ?? '')) === 'SQLITE3'
-            ? "CAST(strftime('%Y', COALESCE(o.from_date, o.to_date)) AS INTEGER)"
-            : 'YEAR(COALESCE(o.from_date, o.to_date))';
+        $sqlite = strtoupper((string) ($db->DBDriver ?? '')) === 'SQLITE3';
+        $yearExpression = $sqlite
+            ? "CAST(strftime('%Y', o.from_date) AS INTEGER)"
+            : 'YEAR(o.from_date)';
+        $toYearExpression = $sqlite
+            ? "CAST(strftime('%Y', o.to_date) AS INTEGER)"
+            : 'YEAR(o.to_date)';
         $projectionExpression = $projection === 'exact' ? 'o.taxon_id' : 'o.' . ($columns[array_search($projection, $columns, true)] ?? 'taxon_id');
         $condition = $projection === 'exact' ? 'tr.is_reporting = 0' : 'o.' . $projection . ' IS NOT NULL';
         $regionJoin = $regionId === null ? '' : ' INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro ON gro.occurrence_id = o.id';
@@ -207,7 +211,8 @@ class TaxonYearStatsService
              INNER JOIN ' . $prefix . 'taxa t ON t.id = o.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0
              INNER JOIN ' . $prefix . 'taxon_ranks tr ON tr.id = t.taxon_rank_id' . $regionJoin . '
              WHERE o.deleted_at IS NULL AND o.blocked = 0
-                AND COALESCE(o.from_date, o.to_date) IS NOT NULL
+                     AND o.from_date IS NOT NULL AND o.to_date IS NOT NULL
+                     AND ' . $yearExpression . ' = ' . $toYearExpression . '
                 AND ' . $condition . ' AND ' . $projectionExpression . ' = ?
                 AND ' . $yearExpression . ' = ?' . $regionCondition,
             [$taxonId, $year],
@@ -274,11 +279,17 @@ class TaxonYearStatsService
         $prefix = $db->getPrefix();
         $column = $projection === 0 ? 'taxon_id' : $columns[$projection - 1];
         $condition = $projection === 0 ? 'tr.is_reporting = 0' : 'o.' . $column . ' IS NOT NULL';
-        $yearExpression = strtoupper((string) ($db->DBDriver ?? '')) === 'SQLITE3'
-            ? "CAST(strftime('%Y', COALESCE(o.from_date, o.to_date)) AS INTEGER)" : 'YEAR(COALESCE(o.from_date, o.to_date))';
+        $sqlite = strtoupper((string) ($db->DBDriver ?? '')) === 'SQLITE3';
+        $yearExpression = $sqlite
+            ? "CAST(strftime('%Y', o.from_date) AS INTEGER)"
+            : 'YEAR(o.from_date)';
+        $toYearExpression = $sqlite
+            ? "CAST(strftime('%Y', o.to_date) AS INTEGER)"
+            : 'YEAR(o.to_date)';
         $base = ' FROM ' . $prefix . 'occurrences o INNER JOIN ' . $prefix . 'taxa t ON t.id = o.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0
             INNER JOIN ' . $prefix . 'taxon_ranks tr ON tr.id = t.taxon_rank_id LEFT JOIN ' . $prefix . 'geographic_regions_occurrences gro ON gro.occurrence_id = o.id
-            WHERE o.deleted_at IS NULL AND o.blocked = 0 AND COALESCE(o.from_date, o.to_date) IS NOT NULL AND ' . $condition . ' AND ' . $yearExpression . ' BETWEEN ? AND ?';
+            WHERE o.deleted_at IS NULL AND o.blocked = 0 AND o.from_date IS NOT NULL AND o.to_date IS NOT NULL
+            AND ' . $yearExpression . ' = ' . $toYearExpression . ' AND ' . $condition . ' AND ' . $yearExpression . ' BETWEEN ? AND ?';
         $rows = $db->query('SELECT o.' . $column . ' AS taxon_id, gro.geographic_region_id, ' . $yearExpression . ' AS year, COUNT(*) AS occurrences_count, COUNT(DISTINCT NULLIF(UPPER(TRIM(o.grid_ref_2km)), "")) AS grid_square_count' . $base . ' GROUP BY o.' . $column . ', gro.geographic_region_id, ' . $yearExpression . ' UNION ALL SELECT o.' . $column . ' AS taxon_id, NULL AS geographic_region_id, ' . $yearExpression . ' AS year, COUNT(*) AS occurrences_count, COUNT(DISTINCT NULLIF(UPPER(TRIM(o.grid_ref_2km)), "")) AS grid_square_count' . $base . ' GROUP BY o.' . $column . ', ' . $yearExpression, [$startYear, $endYear, $startYear, $endYear])->getResultArray();
 
         return array_map(function (array $row) use ($buildId, $projection): array {
@@ -299,7 +310,12 @@ class TaxonYearStatsService
             return range($currentYear - $historyYears, $currentYear - 1);
         }
         $db = db_connect();
-        $row = $db->query('SELECT MIN(CAST(strftime("%Y", COALESCE(from_date, to_date)) AS INTEGER)) AS year FROM ' . $db->getPrefix() . 'occurrences WHERE deleted_at IS NULL AND blocked = 0 AND COALESCE(from_date, to_date) IS NOT NULL')->getRowArray();
+        $sqlite = strtoupper((string) ($db->DBDriver ?? '')) === 'SQLITE3';
+        $yearExpression = $sqlite ? 'CAST(strftime("%Y", from_date) AS INTEGER)' : 'YEAR(from_date)';
+        $toYearExpression = $sqlite ? 'CAST(strftime("%Y", to_date) AS INTEGER)' : 'YEAR(to_date)';
+        $row = $db->query('SELECT MIN(' . $yearExpression . ') AS year FROM ' . $db->getPrefix()
+            . 'occurrences WHERE deleted_at IS NULL AND blocked = 0 AND from_date IS NOT NULL AND to_date IS NOT NULL AND '
+            . $yearExpression . ' = ' . $toYearExpression)->getRowArray();
         $firstYear = (int) ($row['year'] ?? 0);
         return $firstYear > 0 && $firstYear < $currentYear ? range($firstYear, $currentYear - 1) : [];
     }

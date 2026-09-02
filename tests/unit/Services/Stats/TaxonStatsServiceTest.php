@@ -139,13 +139,15 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
     public function testRunBuildsGlobalAndRegionalRowsAndFiltersInactiveOccurrences(): void
     {
         $this->db->table('occurrences')->insertBatch([
-            ['id' => 1, 'taxon_id' => 1, 'from_date' => '2020-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU01A', 'recorded_by' => 'First', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 1, 'taxon_id' => 1, 'from_date' => '2020-01-01', 'to_date' => '2020-01-01', 'grid_ref_2km' => 'SU01A', 'recorded_by' => 'First', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
             ['id' => 2, 'taxon_id' => 1, 'from_date' => null, 'to_date' => '2020-02-01', 'grid_ref_2km' => 'SU01A', 'recorded_by' => 'Second', 'identification_verification_status' => 'C', 'blocked' => 0, 'deleted_at' => null],
-            ['id' => 3, 'taxon_id' => 1, 'from_date' => '2021-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU02B', 'recorded_by' => 'Third', 'identification_verification_status' => 'V2', 'blocked' => 0, 'deleted_at' => null],
-            ['id' => 4, 'taxon_id' => 2, 'from_date' => '2022-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU03C', 'recorded_by' => 'Other', 'identification_verification_status' => 'V1', 'blocked' => 0, 'deleted_at' => null],
-            ['id' => 5, 'taxon_id' => 1, 'from_date' => '2023-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU04D', 'recorded_by' => 'Blocked', 'identification_verification_status' => 'V', 'blocked' => 1, 'deleted_at' => null],
-            ['id' => 6, 'taxon_id' => 1, 'from_date' => '2023-02-01', 'to_date' => null, 'grid_ref_2km' => 'SU05E', 'recorded_by' => 'Deleted', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => '2026-07-01 00:00:00'],
-            ['id' => 7, 'taxon_id' => 3, 'from_date' => '2021-05-01', 'to_date' => null, 'grid_ref_2km' => 'SU06F', 'recorded_by' => 'Taxon blocked', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 3, 'taxon_id' => 1, 'from_date' => '2021-01-01', 'to_date' => '2021-01-01', 'grid_ref_2km' => 'SU02B', 'recorded_by' => 'Third', 'identification_verification_status' => 'V2', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 4, 'taxon_id' => 2, 'from_date' => '2022-01-01', 'to_date' => '2022-01-01', 'grid_ref_2km' => 'SU03C', 'recorded_by' => 'Other', 'identification_verification_status' => 'V1', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 5, 'taxon_id' => 1, 'from_date' => '2023-01-01', 'to_date' => '2023-01-01', 'grid_ref_2km' => 'SU04D', 'recorded_by' => 'Blocked', 'identification_verification_status' => 'V', 'blocked' => 1, 'deleted_at' => null],
+            ['id' => 6, 'taxon_id' => 1, 'from_date' => '2023-02-01', 'to_date' => '2023-02-01', 'grid_ref_2km' => 'SU05E', 'recorded_by' => 'Deleted', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => '2026-07-01 00:00:00'],
+            ['id' => 7, 'taxon_id' => 3, 'from_date' => '2021-05-01', 'to_date' => '2021-05-01', 'grid_ref_2km' => 'SU06F', 'recorded_by' => 'Taxon blocked', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 8, 'taxon_id' => 1, 'from_date' => '2019-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU07G', 'recorded_by' => 'Unbounded', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 9, 'taxon_id' => 1, 'from_date' => null, 'to_date' => null, 'grid_ref_2km' => 'SU08H', 'recorded_by' => 'Undated', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
         ]);
 
         $this->db->table('geographic_regions_occurrences')->insertBatch([
@@ -156,6 +158,8 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             ['geographic_region_id' => 11, 'occurrence_id' => 5],
             ['geographic_region_id' => 11, 'occurrence_id' => 6],
             ['geographic_region_id' => 11, 'occurrence_id' => 7],
+            ['geographic_region_id' => 11, 'occurrence_id' => 8],
+            ['geographic_region_id' => 11, 'occurrence_id' => 9],
         ]);
 
         $service = new TaxonStatsService();
@@ -171,21 +175,21 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $region11Taxon2 = $this->findTaxonStatRow(2, 11);
 
         $this->assertNotNull($globalTaxon1);
-        $this->assertSame(3, (int) $globalTaxon1['occurrences_count']);
-        $this->assertSame(2, (int) $globalTaxon1['grid_square_count']);
-        $this->assertSame('2020-01-01', (string) $globalTaxon1['first_record_date']);
+        $this->assertSame(5, (int) $globalTaxon1['occurrences_count']);
+        $this->assertSame(4, (int) $globalTaxon1['grid_square_count']);
+        $this->assertSame('2019-01-01', (string) $globalTaxon1['first_record_date']);
         $this->assertSame('2021-01-01', (string) $globalTaxon1['last_record_date']);
-        $this->assertSame('First', (string) $globalTaxon1['first_recorder']);
+        $this->assertSame('Unbounded', (string) $globalTaxon1['first_recorder']);
         $this->assertSame('Third', (string) $globalTaxon1['last_recorder']);
-        $this->assertSame('2020-01-01', (string) $globalTaxon1['first_verified_record_date']);
+        $this->assertSame('2019-01-01', (string) $globalTaxon1['first_verified_record_date']);
         $this->assertSame('2021-01-01', (string) $globalTaxon1['last_verified_record_date']);
 
         $this->assertNotNull($region11Taxon1);
-        $this->assertSame(2, (int) $region11Taxon1['occurrences_count']);
-        $this->assertSame(1, (int) $region11Taxon1['grid_square_count']);
-        $this->assertSame('2020-01-01', (string) $region11Taxon1['first_record_date']);
+        $this->assertSame(4, (int) $region11Taxon1['occurrences_count']);
+        $this->assertSame(3, (int) $region11Taxon1['grid_square_count']);
+        $this->assertSame('2019-01-01', (string) $region11Taxon1['first_record_date']);
         $this->assertSame('2020-02-01', (string) $region11Taxon1['last_record_date']);
-        $this->assertSame('2020-01-01', (string) $region11Taxon1['first_verified_record_date']);
+        $this->assertSame('2019-01-01', (string) $region11Taxon1['first_verified_record_date']);
         $this->assertSame('2020-01-01', (string) $region11Taxon1['last_verified_record_date']);
 
         $this->assertNotNull($region22Taxon1);
@@ -219,11 +223,11 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $this->db->table('taxa')->whereIn('id', [1, 2, 4, 5, 6])->update(['taxon_rank_id' => 2]);
 
         $this->db->table('occurrences')->insertBatch([
-            ['id' => 30, 'taxon_id' => 1, 'from_date' => ($currentYear - 1) . '-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU30A', 'recorded_by' => 'Increasing', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
-            ['id' => 31, 'taxon_id' => 2, 'from_date' => ($currentYear - 1) . '-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU31A', 'recorded_by' => 'Decreasing', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
-            ['id' => 32, 'taxon_id' => 4, 'from_date' => ($currentYear - 1) . '-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU32A', 'recorded_by' => 'Stable', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
-            ['id' => 33, 'taxon_id' => 5, 'from_date' => ($currentYear - 1) . '-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU33A', 'recorded_by' => 'Sparse', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
-            ['id' => 34, 'taxon_id' => 6, 'from_date' => ($currentYear - 1) . '-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU34A', 'recorded_by' => 'Noisy', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 30, 'taxon_id' => 1, 'from_date' => ($currentYear - 1) . '-01-01', 'to_date' => ($currentYear - 1) . '-01-01', 'grid_ref_2km' => 'SU30A', 'recorded_by' => 'Increasing', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 31, 'taxon_id' => 2, 'from_date' => ($currentYear - 1) . '-01-01', 'to_date' => ($currentYear - 1) . '-01-01', 'grid_ref_2km' => 'SU31A', 'recorded_by' => 'Decreasing', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 32, 'taxon_id' => 4, 'from_date' => ($currentYear - 1) . '-01-01', 'to_date' => ($currentYear - 1) . '-01-01', 'grid_ref_2km' => 'SU32A', 'recorded_by' => 'Stable', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 33, 'taxon_id' => 5, 'from_date' => ($currentYear - 1) . '-01-01', 'to_date' => ($currentYear - 1) . '-01-01', 'grid_ref_2km' => 'SU33A', 'recorded_by' => 'Sparse', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 34, 'taxon_id' => 6, 'from_date' => ($currentYear - 1) . '-01-01', 'to_date' => ($currentYear - 1) . '-01-01', 'grid_ref_2km' => 'SU34A', 'recorded_by' => 'Noisy', 'identification_verification_status' => 'V', 'blocked' => 0, 'deleted_at' => null],
         ]);
         $this->db->table('occurrences')->set('species_id', 'taxon_id', false)->where('id >=', 30)->update();
         $this->db->table('geographic_regions_occurrences')->insertBatch([
@@ -293,7 +297,7 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             'id' => 100,
             'taxon_id' => 1,
             'from_date' => '2020-01-01',
-            'to_date' => null,
+            'to_date' => '2020-01-01',
             'grid_ref_2km' => 'SU01A',
             'recorded_by' => 'Dry',
             'identification_verification_status' => 'V',
@@ -345,6 +349,7 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             'genus_id' => 13,
             'species_id' => 14,
             'from_date' => '2024-06-01',
+            'to_date' => '2024-06-01',
             'grid_ref_2km' => 'SU20A',
             'recorded_by' => 'Subspecies recorder',
             'identification_verification_status' => 'V',

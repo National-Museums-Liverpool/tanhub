@@ -135,13 +135,15 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $outsideWindowYear = $currentYear - 31;
 
         $this->db->table('occurrences')->insertBatch([
-            ['id' => 1, 'taxon_id' => 1, 'from_date' => $withinWindowYear . '-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU01A', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 1, 'taxon_id' => 1, 'from_date' => $withinWindowYear . '-01-01', 'to_date' => $withinWindowYear . '-01-01', 'grid_ref_2km' => 'SU01A', 'blocked' => 0, 'deleted_at' => null],
             ['id' => 2, 'taxon_id' => 1, 'from_date' => null, 'to_date' => $withinWindowYear . '-02-01', 'grid_ref_2km' => 'SU01A', 'blocked' => 0, 'deleted_at' => null],
-            ['id' => 3, 'taxon_id' => 1, 'from_date' => $withinWindowYear . '-05-01', 'to_date' => null, 'grid_ref_2km' => 'SU02B', 'blocked' => 0, 'deleted_at' => null],
-            ['id' => 4, 'taxon_id' => 2, 'from_date' => $withinWindowYear . '-03-15', 'to_date' => null, 'grid_ref_2km' => 'SU03C', 'blocked' => 0, 'deleted_at' => null],
-            ['id' => 5, 'taxon_id' => 1, 'from_date' => $outsideWindowYear . '-01-01', 'to_date' => null, 'grid_ref_2km' => 'SU09Z', 'blocked' => 0, 'deleted_at' => null],
-            ['id' => 6, 'taxon_id' => 1, 'from_date' => $withinWindowYear . '-06-01', 'to_date' => null, 'grid_ref_2km' => 'SU08Y', 'blocked' => 1, 'deleted_at' => null],
-            ['id' => 7, 'taxon_id' => 3, 'from_date' => $withinWindowYear . '-07-01', 'to_date' => null, 'grid_ref_2km' => 'SU07X', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 3, 'taxon_id' => 1, 'from_date' => $withinWindowYear . '-05-01', 'to_date' => $withinWindowYear . '-05-31', 'grid_ref_2km' => 'SU02B', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 4, 'taxon_id' => 2, 'from_date' => $withinWindowYear . '-03-15', 'to_date' => $withinWindowYear . '-03-15', 'grid_ref_2km' => 'SU03C', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 5, 'taxon_id' => 1, 'from_date' => $outsideWindowYear . '-01-01', 'to_date' => $outsideWindowYear . '-01-01', 'grid_ref_2km' => 'SU09Z', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 6, 'taxon_id' => 1, 'from_date' => $withinWindowYear . '-06-01', 'to_date' => $withinWindowYear . '-06-01', 'grid_ref_2km' => 'SU08Y', 'blocked' => 1, 'deleted_at' => null],
+            ['id' => 7, 'taxon_id' => 3, 'from_date' => $withinWindowYear . '-07-01', 'to_date' => $withinWindowYear . '-07-01', 'grid_ref_2km' => 'SU07X', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 8, 'taxon_id' => 1, 'from_date' => $withinWindowYear . '-08-01', 'to_date' => null, 'grid_ref_2km' => 'SU08A', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 9, 'taxon_id' => 1, 'from_date' => ($withinWindowYear - 1) . '-01-01', 'to_date' => $withinWindowYear . '-12-31', 'grid_ref_2km' => 'SU09A', 'blocked' => 0, 'deleted_at' => null],
         ]);
 
         $this->db->table('geographic_regions_occurrences')->insertBatch([
@@ -152,6 +154,8 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             ['geographic_region_id' => 11, 'occurrence_id' => 5],
             ['geographic_region_id' => 11, 'occurrence_id' => 6],
             ['geographic_region_id' => 11, 'occurrence_id' => 7],
+            ['geographic_region_id' => 11, 'occurrence_id' => 8],
+            ['geographic_region_id' => 11, 'occurrence_id' => 9],
         ]);
 
         $service = new TaxonYearStatsService();
@@ -167,14 +171,14 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $region11Taxon2 = $this->findTaxonYearStatRow(2, 11, $withinWindowYear);
 
         $this->assertNotNull($globalTaxon1);
-        $this->assertSame(3, (int) $globalTaxon1['occurrences_count']);
+        $this->assertSame(2, (int) $globalTaxon1['occurrences_count']);
         $this->assertSame(2, (int) $globalTaxon1['grid_square_count']);
 
         $globalTaxon1MissingYear = $this->findTaxonYearStatRow(1, null, $currentYear - 1);
         $this->assertNull($globalTaxon1MissingYear);
 
         $this->assertNotNull($region11Taxon1);
-        $this->assertSame(2, (int) $region11Taxon1['occurrences_count']);
+        $this->assertSame(1, (int) $region11Taxon1['occurrences_count']);
         $this->assertSame(1, (int) $region11Taxon1['grid_square_count']);
 
         $this->assertNotNull($region22Taxon1);
@@ -205,7 +209,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             'id' => 100,
             'taxon_id' => 1,
             'from_date' => $currentYear . '-01-01',
-            'to_date' => null,
+            'to_date' => $currentYear . '-01-01',
             'grid_ref_2km' => 'SU01A',
             'blocked' => 0,
             'deleted_at' => null,
@@ -251,6 +255,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             'genus_id' => 13,
             'species_id' => 14,
             'from_date' => $completedYear . '-06-01',
+            'to_date' => $completedYear . '-06-01',
             'grid_ref_2km' => 'SU20A',
             'blocked' => 0,
             'deleted_at' => null,
@@ -279,6 +284,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             'id' => 30,
             'taxon_id' => 1,
             'from_date' => $completedYear . '-01-01',
+            'to_date' => $completedYear . '-01-01',
             'grid_ref_2km' => 'SU30A',
             'blocked' => 0,
             'deleted_at' => null,
@@ -292,6 +298,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             'id' => 31,
             'taxon_id' => 1,
             'from_date' => $completedYear . '-02-01',
+            'to_date' => $completedYear . '-02-01',
             'grid_ref_2km' => 'SU31B',
             'blocked' => 0,
             'deleted_at' => null,
@@ -299,7 +306,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $dirty = new StatsDirtyScopeService(new StatsDirtyScopeModel());
         $queued = $dirty->enqueueOccurrenceChanges([[
             'old' => null,
-            'new' => ['taxon_id' => 1, 'from_date' => $completedYear . '-02-01', 'grid_ref_2km' => 'SU31B'],
+            'new' => ['taxon_id' => 1, 'from_date' => $completedYear . '-02-01', 'to_date' => $completedYear . '-02-01', 'grid_ref_2km' => 'SU31B'],
             'old_region_ids' => [],
         ]]);
 
@@ -310,6 +317,17 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $this->assertSame(2, (int) $this->findTaxonYearStatRow(1, null, $completedYear)['occurrences_count']);
         $this->assertNotSame((int) $before['occurrences_count'], (int) $this->findTaxonYearStatRow(1, null, $completedYear)['occurrences_count']);
         $this->assertFalse($dirty->hasDirtyScopes(StatsDirtyScopeService::TAXON_YEAR));
+
+        $this->db->table('occurrences')->where('id', 31)->update(['to_date' => null]);
+        $dirty->enqueueOccurrenceChanges([[
+            'old' => ['taxon_id' => 1, 'from_date' => $completedYear . '-02-01', 'to_date' => $completedYear . '-02-01'],
+            'new' => ['taxon_id' => 1, 'from_date' => $completedYear . '-02-01', 'to_date' => null],
+            'old_region_ids' => [],
+        ]]);
+
+        $service->run();
+
+        $this->assertSame(1, (int) $this->findTaxonYearStatRow(1, null, $completedYear)['occurrences_count']);
     }
 
     /**

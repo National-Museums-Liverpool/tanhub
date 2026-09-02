@@ -169,6 +169,9 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
             'year and month' => ['2024-02', '2024-02-01', '2024-02-29'],
             'year only' => ['1986', '1986-01-01', '1986-12-31'],
             'ISO interval' => ['2020-06/2021-02', '2020-06-01', '2021-02-28'],
+            'year interval' => ['1965/1968', '1965-01-01', '1968-12-31'],
+            'open-ended interval after year' => ['1965/', '1965-01-01', null],
+            'open-ended interval before year' => ['/1968', null, '1968-12-31'],
             'invalid date' => ['2024-02-31', null, null],
         ];
     }

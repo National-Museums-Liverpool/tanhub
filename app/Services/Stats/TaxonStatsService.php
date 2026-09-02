@@ -225,7 +225,8 @@ class TaxonStatsService
                     o.id AS occurrence_id,
                     o.taxon_id,
                     tr.is_reporting,
-                    COALESCE(o.from_date, o.to_date) AS record_date,
+                    COALESCE(o.from_date, o.to_date) AS first_record_date,
+                    COALESCE(o.to_date, o.from_date) AS last_record_date,
                     CASE
                         WHEN o.grid_ref_2km IS NULL OR TRIM(o.grid_ref_2km) = "" THEN NULL
                         ELSE UPPER(TRIM(o.grid_ref_2km))
@@ -241,7 +242,6 @@ class TaxonStatsService
                     ON tr.id = t.taxon_rank_id
                 WHERE o.deleted_at IS NULL
                     AND o.blocked = 0
-                    AND COALESCE(o.from_date, o.to_date) IS NOT NULL
             ),
             scoped_occurrences AS (' . $scopedOccurrences . ')' . $scopeCte . ',
             aggregates AS (
@@ -250,10 +250,10 @@ class TaxonStatsService
                     so.geographic_region_id,
                     COUNT(*) AS occurrences_count,
                     COUNT(DISTINCT so.grid_ref_2km) AS grid_square_count,
-                    MIN(so.record_date) AS first_record_date,
-                    MAX(so.record_date) AS last_record_date,
-                    MIN(CASE WHEN so.identification_verification_status LIKE "V%" THEN so.record_date END) AS first_verified_record_date,
-                    MAX(CASE WHEN so.identification_verification_status LIKE "V%" THEN so.record_date END) AS last_verified_record_date
+                    MIN(so.first_record_date) AS first_record_date,
+                    MAX(so.last_record_date) AS last_record_date,
+                    MIN(CASE WHEN so.identification_verification_status LIKE "V%" THEN so.first_record_date END) AS first_verified_record_date,
+                    MAX(CASE WHEN so.identification_verification_status LIKE "V%" THEN so.last_record_date END) AS last_verified_record_date
                 FROM ' . $scopedTable . ' so
                 GROUP BY so.taxon_id, so.geographic_region_id
             )
@@ -264,11 +264,11 @@ class TaxonStatsService
                 a.grid_square_count,
                 a.first_record_date,
                 a.last_record_date,
-                MIN(CASE WHEN so.record_date = a.first_record_date THEN so.occurrence_id END) AS first_occurrence_id,
-                MAX(CASE WHEN so.record_date = a.last_record_date THEN so.occurrence_id END) AS last_occurrence_id,
-                MIN(CASE WHEN so.record_date = a.first_verified_record_date
+                MIN(CASE WHEN so.first_record_date = a.first_record_date THEN so.occurrence_id END) AS first_occurrence_id,
+                MAX(CASE WHEN so.last_record_date = a.last_record_date THEN so.occurrence_id END) AS last_occurrence_id,
+                MIN(CASE WHEN so.first_record_date = a.first_verified_record_date
                     AND so.identification_verification_status LIKE "V%" THEN so.occurrence_id END) AS first_verified_occurrence_id,
-                MAX(CASE WHEN so.record_date = a.last_verified_record_date
+                MAX(CASE WHEN so.last_record_date = a.last_verified_record_date
                     AND so.identification_verification_status LIKE "V%" THEN so.occurrence_id END) AS last_verified_occurrence_id
             FROM aggregates a
             INNER JOIN ' . $scopedTable . ' so
@@ -334,7 +334,7 @@ class TaxonStatsService
         if ($occurrenceIds !== []) {
             $db = db_connect();
             $details = $db->table('occurrences')
-                ->select('id, COALESCE(from_date, to_date) AS record_date, COALESCE(TRIM(recorded_by), "") AS recorded_by')
+                ->select('id, COALESCE(from_date, to_date) AS first_record_date, COALESCE(to_date, from_date) AS last_record_date, COALESCE(TRIM(recorded_by), "") AS recorded_by')
                 ->whereIn('id', array_values($occurrenceIds))
                 ->get()
                 ->getResultArray();
@@ -349,8 +349,8 @@ class TaxonStatsService
 
             $row['first_recorder'] = (string) ($first['recorded_by'] ?? '');
             $row['last_recorder'] = (string) ($last['recorded_by'] ?? '');
-            $row['first_verified_record_date'] = $firstVerified['record_date'] ?? $row['first_record_date'];
-            $row['last_verified_record_date'] = $lastVerified['record_date'] ?? $row['last_record_date'];
+            $row['first_verified_record_date'] = $firstVerified['first_record_date'] ?? $row['first_record_date'];
+            $row['last_verified_record_date'] = $lastVerified['last_record_date'] ?? $row['last_record_date'];
             $row['first_verified_recorder'] = (string) ($firstVerified['recorded_by'] ?? $row['first_recorder']);
             $row['last_verified_recorder'] = (string) ($lastVerified['recorded_by'] ?? $row['last_recorder']);
 
@@ -701,14 +701,14 @@ class TaxonStatsService
         if ($includeExact) {
             $selects = [
                 'SELECT ao.occurrence_id, ao.taxon_id, gro.geographic_region_id,
-                    ao.record_date, ao.grid_ref_2km, ao.recorded_by,
+                    ao.first_record_date, ao.last_record_date, ao.grid_ref_2km, ao.recorded_by,
                     ao.identification_verification_status
                  FROM active_occurrences ao
                  INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
                     ON gro.occurrence_id = ao.occurrence_id
                  WHERE ao.is_reporting = 0',
                 'SELECT ao.occurrence_id, ao.taxon_id, NULL AS geographic_region_id,
-                    ao.record_date, ao.grid_ref_2km, ao.recorded_by,
+                    ao.first_record_date, ao.last_record_date, ao.grid_ref_2km, ao.recorded_by,
                     ao.identification_verification_status
                  FROM active_occurrences ao
                  WHERE ao.is_reporting = 0',
@@ -717,14 +717,14 @@ class TaxonStatsService
 
         foreach ($columns as $column) {
             $selects[] = 'SELECT ao.occurrence_id, ao.' . $column . ' AS taxon_id,
-                gro.geographic_region_id, ao.record_date, ao.grid_ref_2km,
+                gro.geographic_region_id, ao.first_record_date, ao.last_record_date, ao.grid_ref_2km,
                 ao.recorded_by, ao.identification_verification_status
              FROM active_occurrences ao
              INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro
                 ON gro.occurrence_id = ao.occurrence_id
              WHERE ao.' . $column . ' IS NOT NULL';
             $selects[] = 'SELECT ao.occurrence_id, ao.' . $column . ' AS taxon_id,
-                NULL AS geographic_region_id, ao.record_date, ao.grid_ref_2km,
+                NULL AS geographic_region_id, ao.first_record_date, ao.last_record_date, ao.grid_ref_2km,
                 ao.recorded_by, ao.identification_verification_status
              FROM active_occurrences ao
              WHERE ao.' . $column . ' IS NOT NULL';

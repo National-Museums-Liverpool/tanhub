@@ -328,8 +328,17 @@ class StatsDirtyScopeService
      */
     private function occurrenceYear(array $row): ?int
     {
-        $date = trim((string) ($row['from_date'] ?? $row['to_date'] ?? ''));
-        $year = (int) substr($date, 0, 4);
+        $fromDate = trim((string) ($row['from_date'] ?? ''));
+        $toDate = trim((string) ($row['to_date'] ?? ''));
+
+        if (preg_match('/^(\d{4})-\d{2}-\d{2}$/', $fromDate, $fromMatches) !== 1
+            || preg_match('/^(\d{4})-\d{2}-\d{2}$/', $toDate, $toMatches) !== 1
+            || $fromMatches[1] !== $toMatches[1]
+        ) {
+            return null;
+        }
+
+        $year = (int) $fromMatches[1];
 
         return $year > 0 ? $year : null;
     }

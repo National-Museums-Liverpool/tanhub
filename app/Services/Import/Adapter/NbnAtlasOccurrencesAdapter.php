@@ -405,9 +405,9 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
     /**
      * Convert a Darwin Core event date into an inclusive date range.
      *
-    * Supports Unix timestamps in milliseconds, ISO 8601 calendar dates at
-    * year, month, or day precision, ISO 8601 intervals, and the NBN
-    * compatibility format `DD/MM/YYYY`.
+        * Supports Unix timestamps in milliseconds, ISO 8601 calendar dates at
+        * year, month, or day precision, bounded or open-ended ISO 8601 intervals,
+        * and the NBN compatibility format `DD/MM/YYYY`.
      *
      * @param mixed $value Raw event date value.
      *
@@ -443,14 +443,20 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             return [null, null];
         }
 
-        $startExtent = $this->dateExtent(trim($interval[0]));
-        $endExtent = $this->dateExtent(trim($interval[1]));
+        $start = trim($interval[0]);
+        $end = trim($interval[1]);
+        $startExtent = $start === '' ? null : $this->dateExtent($start);
+        $endExtent = $end === '' ? null : $this->dateExtent($end);
 
-        if ($startExtent === null || $endExtent === null || $startExtent[0] > $endExtent[1]) {
+        if (($start !== '' && $startExtent === null) || ($end !== '' && $endExtent === null)) {
             return [null, null];
         }
 
-        return [$startExtent[0], $endExtent[1]];
+        if ($startExtent !== null && $endExtent !== null && $startExtent[0] > $endExtent[1]) {
+            return [null, null];
+        }
+
+        return [$startExtent[0] ?? null, $endExtent[1] ?? null];
     }
 
     /**

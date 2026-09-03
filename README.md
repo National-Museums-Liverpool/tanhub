@@ -2,14 +2,18 @@
 
 ## About
 
-Tanhub is a wildlife observation management platform that aggregates and organizes wildlife data
-from multiple sources into a centralized database. It provides a RESTful API that enables users to
-query, analyze, and visualize ecological observation data for research, reporting, and conservation
-purposes. Tanhub uses technology commonly found on shared web-servers so is easy to install and
-low-cost to run.
+Tanhub is a wildlife observation platform for bringing biodiversity data together and making it
+useful. It imports records from multiple sources into a centralised database, where they can be
+managed by staff and used to produce reports, species accounts, atlases, and other public-facing
+tools.
 
-[tanvis](https://github.com/National-Museums-Liverpool/tanvis) is the ideal companion for building
-visualisations from the data held on a [tanhub server](https://github.com/National-Museums-Liverpool/tanhub).
+If you work with ecological data, run a local or regional recording scheme, or build applications
+for research and conservation, tanhub gives you a practical foundation for storing and sharing
+observation data. Its read-only REST API makes it straightforward to query, analyse, and visualise
+that data, while its shared-server-friendly technology keeps installation and hosting costs low.
+
+[tanvis](https://github.com/National-Museums-Liverpool/tanvis) is a natural companion for building
+visualisations from data held on a [tanhub server](https://github.com/National-Museums-Liverpool/tanhub).
 
 ## Documentation
 

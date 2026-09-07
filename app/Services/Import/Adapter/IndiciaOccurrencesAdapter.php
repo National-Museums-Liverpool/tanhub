@@ -239,7 +239,7 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
 
         $query = [
             'bool' => [
-                'filter' => ['term' => ['_id' => 'iBRC11445164']],
+                'filter' => $mustFilters,
             ],
         ];
 

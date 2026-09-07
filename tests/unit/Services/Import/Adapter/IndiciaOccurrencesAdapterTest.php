@@ -3,6 +3,7 @@
 namespace Tests;
 
 use App\Services\Import\Adapter\IndiciaOccurrencesAdapter;
+use App\Services\Import\Support\OsgbGridReferenceBuilder;
 use CodeIgniter\HTTP\CURLRequest;
 use CodeIgniter\HTTP\ResponseInterface;
 use CodeIgniter\Test\CIUnitTestCase;
@@ -17,25 +18,25 @@ final class IndiciaOccurrencesAdapterTest extends CIUnitTestCase
     /**
      * Verify coarse grid references cannot be converted to tetrads.
      */
-    public function testCalculateTetradReturnsNullForTooCoarseGridReference(): void
+    public function testCalculateDintyTetradReturnsNullForTooCoarseGridReference(): void
     {
-        $this->assertNull($this->calculateTetrad('SU12'));
+        $this->assertNull((new OsgbGridReferenceBuilder())->calculateDintyTetrad('SU12'));
     }
 
     /**
      * Verify one-kilometre grid references are converted to tetrads.
      */
-    public function testCalculateTetradConvertsOneKilometreGridReference(): void
+    public function testCalculateDintyTetradConvertsOneKilometreGridReference(): void
     {
-        $this->assertSame('SU13L', $this->calculateTetrad('SU1234'));
+        $this->assertSame('SU13H', (new OsgbGridReferenceBuilder())->calculateDintyTetrad('SU1234'));
     }
 
     /**
      * Verify finer grid references are converted to tetrads.
      */
-    public function testCalculateTetradConvertsFinerGridReference(): void
+    public function testCalculateDintyTetradConvertsFinerGridReference(): void
     {
-        $this->assertSame('SU14L', $this->calculateTetrad('SU123456'));
+        $this->assertSame('SU14H', (new OsgbGridReferenceBuilder())->calculateDintyTetrad('SU123456'));
     }
 
     /**
@@ -63,6 +64,7 @@ final class IndiciaOccurrencesAdapterTest extends CIUnitTestCase
         $this->assertSame(1500, $normalized['coordinate_uncertainty_in_meters']);
         $this->assertSame('53.4808', $normalized['latitude']);
         $this->assertSame('-2.2426', $normalized['longitude']);
+        $this->assertSame('SU13H', $normalized['grid_ref_2km']);
     }
 
     /**
@@ -184,23 +186,6 @@ final class IndiciaOccurrencesAdapterTest extends CIUnitTestCase
         $this->expectExceptionMessage('Indicia response was not valid JSON');
 
         $adapter->fetchPage(null, 10);
-    }
-
-    /**
-     * Invoke the adapter's tetrad conversion helper.
-     *
-     * @param string $gridRef Grid reference to convert.
-     * @return string|null Converted tetrad, or null when conversion is not possible.
-     */
-    private function calculateTetrad(string $gridRef): ?string
-    {
-        $method = new ReflectionMethod(IndiciaOccurrencesAdapter::class, 'calculateTetrad');
-        $method->setAccessible(true);
-
-        /** @var ?string $result */
-        $result = $method->invoke($this->newAdapter(), $gridRef);
-
-        return $result;
     }
 
     /**

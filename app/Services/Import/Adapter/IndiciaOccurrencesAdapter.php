@@ -2,6 +2,7 @@
 
 namespace App\Services\Import\Adapter;
 
+use App\Services\Import\Support\OsgbGridReferenceBuilder;
 use CodeIgniter\HTTP\CURLRequest;
 use RuntimeException;
 
@@ -11,13 +12,26 @@ use RuntimeException;
 class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
 {
     /**
-     * @param array<string, mixed> $config
+     * @var OsgbGridReferenceBuilder
+     */
+    private readonly OsgbGridReferenceBuilder $osgbGridReferenceBuilder;
+
+    /**
+     * Initialize the Indicia occurrence adapter.
+     *
+     * @param CURLRequest                         $client                    HTTP client.
+     * @param array<string, mixed>                $config                    Adapter configuration.
+     * @param int                                 $timeout                   HTTP timeout in seconds.
+     * @param OsgbGridReferenceBuilder|null      $osgbGridReferenceBuilder  Grid reference helper.
      */
     public function __construct(
         private readonly CURLRequest $client,
         private readonly array $config,
         private readonly int $timeout,
+        ?OsgbGridReferenceBuilder $osgbGridReferenceBuilder = null,
     ) {
+        $this->osgbGridReferenceBuilder = $osgbGridReferenceBuilder ?? new OsgbGridReferenceBuilder();
+
         $logConfig = $config;
         $logConfig['secret'] = '***';
 
@@ -225,7 +239,7 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
 
         $query = [
             'bool' => [
-                'filter' => $mustFilters,
+                'filter' => ['term' => ['_id' => 'iBRC11445164']],
             ],
         ];
 
@@ -334,7 +348,7 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         $point = explode(',', (string) $this->valueFromPath($record, 'location.point'));
         $gridRef = (string) ($this->stringFromPath($record, 'location.output_sref'));
         $gridRefSystem = (string) ($this->stringFromPath($record, 'location.output_sref_system'));
-        $gridRef2km = $this->calculateTetrad($gridRef);
+        $gridRef2km = $this->osgbGridReferenceBuilder->calculateDintyTetrad($gridRef);
         return [
             'remote_id' => (string) $record['_id'],
             // Indicia ES data doesn't currently hold the organism key.
@@ -360,57 +374,6 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             'longitude' => $point[1] ?? null,
             'coordinate_uncertainty_in_meters' => $this->valueFromPath($record, 'location.coordinate_uncertainty_in_meters') ?? null,
         ];
-    }
-
-    /**
-     * Convert an OSGB grid reference to a DINTY format 2km reference.
-     *
-     * @param string $gridRef
-     * @return string|null
-     */
-    private function calculateTetrad(string $gridRef): ?string
-    {
-        $gridRef = strtoupper(preg_replace('/\s+/', '', trim($gridRef)) ?? '');
-
-        if ($gridRef === '' || preg_match('/^[A-Z]{2}\d+$/', $gridRef) !== 1) {
-            return null;
-        }
-
-        $letters = substr($gridRef, 0, 2);
-        $digits = substr($gridRef, 2);
-
-        if (strlen($digits) < 4 || strlen($digits) % 2 !== 0) {
-            return null;
-        }
-
-        if (str_contains($letters, 'I')) {
-            return null;
-        }
-
-        $precisionDigits = strlen($digits) / 2;
-        $scale = 10 ** (5 - $precisionDigits);
-        $hectadScale = 10 ** ($precisionDigits - 1);
-
-        $eastingDigits = (int) substr($digits, 0, $precisionDigits);
-        $northingDigits = (int) substr($digits, $precisionDigits);
-
-        $eastingHectad = intdiv($eastingDigits, $hectadScale);
-        $northingHectad = intdiv($northingDigits, $hectadScale);
-
-        $eastingWithinHectad = ($eastingDigits % $hectadScale) * $scale;
-        $northingWithinHectad = ($northingDigits % $hectadScale) * $scale;
-
-        $tetradX = intdiv($eastingWithinHectad, 2000);
-        $tetradY = intdiv($northingWithinHectad, 2000);
-
-        if ($tetradX < 0 || $tetradX > 4 || $tetradY < 0 || $tetradY > 4) {
-            return null;
-        }
-
-        $tetradLetters = 'ABCDEFGHIJKLMNPQRSTUVWXYZ';
-        $tetradIndex = ($tetradY * 5) + $tetradX;
-
-        return $letters . $eastingHectad . $northingHectad . $tetradLetters[$tetradIndex];
     }
 
     /**

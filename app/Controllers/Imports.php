@@ -318,6 +318,50 @@ class Imports extends BaseController
     }
 
     /**
+     * Reset the selected task's progress so its next run starts at the beginning.
+     *
+     * @return RedirectResponse Redirect back to the imports page with a status message.
+     */
+    public function reset(): RedirectResponse
+    {
+        $sourceKey = trim((string) $this->request->getPost('source_key'));
+
+        if (! isset(self::TASKS[$sourceKey])) {
+            return redirect()->to(site_url('imports'))->with('error', 'Unknown import task.');
+        }
+
+        $queueModel = model(ImportTaskQueueModel::class);
+        $this->recoverStaleTasks($queueModel);
+
+        if ($this->isTaskQueued($queueModel, $sourceKey)) {
+            return redirect()->to(site_url('imports'))->with(
+                'error',
+                'Cannot restart an import task while it is queued or running.',
+            );
+        }
+
+        $lock = service('importLock');
+
+        if (! $lock->acquire()) {
+            return redirect()->to(site_url('imports'))->with(
+                'message',
+                'The import could not be restarted because another import is currently running.',
+            );
+        }
+
+        try {
+            $this->resetTaskProgress($sourceKey, self::TASKS[$sourceKey]);
+        } finally {
+            $lock->release();
+        }
+
+        return redirect()->to(site_url('imports'))->with(
+            'message',
+            'Import task ' . self::TASKS[$sourceKey]['label'] . ' was restarted from the beginning.',
+        );
+    }
+
+    /**
      * Format a user-facing summary for a completed task run.
      *
      * @param array<string, mixed> $state  Task state as built by {@see self::buildTaskStates()}.
@@ -331,6 +375,29 @@ class Imports extends BaseController
             (string) ($state['label'] ?? 'unknown'),
             $result,
         );
+    }
+
+    /**
+     * Reset persisted progress for one registered task.
+     *
+     * Occurrence tasks use an explicit zero checkpoint so the occurrence
+     * orchestrator cannot fall back to historical run checkpoints.
+     *
+     * @param string               $sourceKey Task source key.
+     * @param array<string, mixed> $task      Registered task definition.
+     *
+     * @return void
+     */
+    private function resetTaskProgress(string $sourceKey, array $task): void
+    {
+        /** @var \App\Models\ImportOffsetModel $offsetModel */
+        $offsetModel = model(\App\Models\ImportOffsetModel::class);
+        $offsetModel->setOffset($sourceKey, 0);
+        $offsetModel->setCheckpoint(
+            $sourceKey,
+            ($task['kind'] ?? null) === 'occurrence' ? '0' : null,
+        );
+        $offsetModel->setCompletion($sourceKey, false);
     }
 
     /**

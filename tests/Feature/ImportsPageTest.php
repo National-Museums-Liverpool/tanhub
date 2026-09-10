@@ -64,6 +64,7 @@ final class ImportsPageTest extends CIUnitTestCase
         $result->assertStatus(200);
         $result->assertSee('Imports');
         $result->assertSee('Blocked by taxon_groups');
+        $result->assertSee('Restart');
         $result->assertSee('grid_square_stats_counts');
         $result->assertSee('taxon_rarity');
         $result->assertDontSee('Not implemented');
@@ -88,6 +89,66 @@ final class ImportsPageTest extends CIUnitTestCase
             ->getResultArray();
 
         $this->assertCount(0, $queueRows);
+    }
+
+    public function testResetOccurrenceTaskStartsFromBeginning(): void
+    {
+        $this->authenticateAs('imports-admin-reset@example.com', 'admin');
+
+        $db = db_connect();
+        $db->table('import_offsets')
+            ->where('source_key', 'indicia-occurrences:occurrences')
+            ->update([
+                'next_offset' => 123,
+                'next_checkpoint' => '405840078',
+                'is_complete' => 1,
+            ]);
+
+        $result = $this->post('imports/reset', [
+            'source_key' => 'indicia-occurrences:occurrences',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirectTo(site_url('imports'));
+        $result->assertSessionHas('message');
+
+        $row = $db->table('import_offsets')
+            ->where('source_key', 'indicia-occurrences:occurrences')
+            ->get()
+            ->getRowArray();
+
+        $this->assertIsArray($row);
+        $this->assertSame('0', (string) $row['next_checkpoint']);
+        $this->assertSame(0, (int) $row['next_offset']);
+        $this->assertSame(0, (int) $row['is_complete']);
+    }
+
+    public function testResetQueuedTaskShowsErrorWithoutChangingProgress(): void
+    {
+        $this->authenticateAs('imports-admin-reset-queued@example.com', 'admin');
+
+        $db = db_connect();
+        $db->table('import_task_queue')->insert([
+            'source_key' => 'indicia-occurrences:occurrences',
+            'status' => 'queued',
+            'queued_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        $result = $this->post('imports/reset', [
+            'source_key' => 'indicia-occurrences:occurrences',
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirectTo(site_url('imports'));
+        $result->assertSessionHas('error');
+
+        $row = $db->table('import_offsets')
+            ->where('source_key', 'indicia-occurrences:occurrences')
+            ->get()
+            ->getRowArray();
+
+        $this->assertIsArray($row);
+        $this->assertSame('abc123', (string) $row['next_checkpoint']);
     }
 
     public function testRunUnblockedTaskQueuesAndRuns(): void

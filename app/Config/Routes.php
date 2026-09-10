@@ -46,6 +46,7 @@ $routes->get('account', 'Account::index', ['filter' => 'session']);
 $routes->post('account', 'Account::update', ['filter' => 'session']);
 $routes->get('imports', 'Imports::index', ['filter' => ['session', 'group:admin,manager']]);
 $routes->post('imports/run', 'Imports::run', ['filter' => ['session', 'group:admin,manager']]);
+$routes->post('imports/reset', 'Imports::reset', ['filter' => ['session', 'group:admin,manager', 'csrf']]);
 
 $routes->get('taxon-media/(:segment)', 'TaxonMediaFiles::show/$1');
 $routes->get('taxon-media/(:segment)/(:segment)', 'TaxonMediaFiles::variant/$1/$2');

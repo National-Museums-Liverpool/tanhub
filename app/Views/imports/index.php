@@ -79,7 +79,16 @@
                                 <form method="post" action="<?= esc(site_url('imports/run')) ?>">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="source_key" value="<?= esc((string) $task['source_key']) ?>">
-                                    <button class="btn btn-sm btn-brand" type="submit">Go</button>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button class="btn btn-sm btn-brand" type="submit">Go</button>
+                                    </div>
+                                </form>
+                            <?php endif; ?>
+                            <?php if ($task['queue_status'] !== 'running' && $task['queue_status'] !== 'queued' && $task['supports_run']): ?>
+                                <form class="mt-2" method="post" action="<?= esc(site_url('imports/reset')) ?>">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="source_key" value="<?= esc((string) $task['source_key']) ?>">
+                                    <button class="btn btn-sm btn-outline-secondary" type="submit">Restart</button>
                                 </form>
                             <?php endif; ?>
                         </td>

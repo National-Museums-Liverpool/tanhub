@@ -106,7 +106,7 @@ final class ImportsPageTest extends CIUnitTestCase
 
         $result = $this->post('imports/reset', [
             'source_key' => 'indicia-occurrences:occurrences',
-        ]);
+        ] + $this->csrfFields());
 
         $result->assertStatus(302);
         $result->assertRedirectTo(site_url('imports'));
@@ -136,7 +136,7 @@ final class ImportsPageTest extends CIUnitTestCase
 
         $result = $this->post('imports/reset', [
             'source_key' => 'indicia-occurrences:occurrences',
-        ]);
+        ] + $this->csrfFields());
 
         $result->assertStatus(302);
         $result->assertRedirectTo(site_url('imports'));
@@ -657,6 +657,16 @@ final class ImportsPageTest extends CIUnitTestCase
     {
         $this->actingAs($this->makeUser($email, $group));
         $this->withSession($_SESSION);
+    }
+
+    /**
+     * Return CSRF fields required by protected POST routes.
+     *
+     * @return array<string, string> CSRF token name and hash.
+     */
+    private function csrfFields(): array
+    {
+        return [csrf_token() => csrf_hash()];
     }
 
     private function makeUser(string $email, string $group)

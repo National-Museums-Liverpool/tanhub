@@ -67,6 +67,7 @@
                             <?php endif; ?>
                         </td>
                         <td>
+                            <div class="d-flex flex-wrap align-items-center gap-2">
                             <?php if ($task['queue_status'] === 'running'): ?>
                                 <span class="badge text-bg-primary">Running</span>
                             <?php elseif ($task['queue_status'] === 'queued'): ?>
@@ -79,18 +80,17 @@
                                 <form method="post" action="<?= esc(site_url('imports/run')) ?>">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="source_key" value="<?= esc((string) $task['source_key']) ?>">
-                                    <div class="d-flex flex-wrap gap-2">
-                                        <button class="btn btn-sm btn-brand" type="submit">Go</button>
-                                    </div>
+                                    <button class="btn btn-sm btn-brand" type="submit">Go</button>
                                 </form>
                             <?php endif; ?>
                             <?php if ($task['queue_status'] !== 'running' && $task['queue_status'] !== 'queued' && $task['supports_run']): ?>
-                                <form class="mt-2" method="post" action="<?= esc(site_url('imports/reset')) ?>">
+                                <form method="post" action="<?= esc(site_url('imports/reset')) ?>">
                                     <?= csrf_field() ?>
                                     <input type="hidden" name="source_key" value="<?= esc((string) $task['source_key']) ?>">
                                     <button class="btn btn-sm btn-outline-secondary" type="submit">Restart</button>
                                 </form>
                             <?php endif; ?>
+                            </div>
                         </td>
                     </tr>
                 <?php endforeach; ?>

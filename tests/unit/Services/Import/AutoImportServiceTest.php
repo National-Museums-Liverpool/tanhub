@@ -230,6 +230,57 @@ final class AutoImportServiceTest extends CIUnitTestCase
     }
 
     /**
+     * Verify an incomplete occurrence source is prioritised over report tasks.
+     */
+    public function testIncompleteOccurrenceSourceIsPrioritisedOverReports(): void
+    {
+        $offsetModel = $this->completeOffsetModel();
+        $offsetModel->completion['indicia-occurrences:occurrences'] = false;
+        $runModel = new AutoImportRunModelDouble();
+        $runModel->finishedAt = [
+            'indicia-occurrences:occurrences' => '2026-07-31 11:00:00',
+            'nbn-occurrences:occurrences' => '2026-07-31 09:00:00',
+            'derived-stats:grid_square_stats_counts' => '2026-07-31 08:00:00',
+            'derived-stats:taxon_rarity' => '2026-07-31 07:00:00',
+            'derived-stats:taxon_year_stats' => '2026-07-31 08:00:00',
+            'derived-stats:taxon_stats' => '2026-07-31 08:00:00',
+        ];
+        $runModel->latestDerivedRun = '2026-07-31 08:00:00';
+        $runModel->occurrenceRunsSinceDerived = 1;
+
+        $service = new AutoImportService($offsetModel, $runModel, null, null, new AutoImportDependencyServiceDouble());
+        $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
+
+        $this->assertSame('indicia-occurrences:occurrences', $task['source_key']);
+        $this->assertSame('occurrence', $task['kind']);
+        $this->assertSame('occurrence source is incomplete', $task['reason']);
+    }
+
+    /**
+     * Verify derived work is still selected when its cadence is due.
+     */
+    public function testDerivedTaskIsSelectedWhenDueDespiteIncompleteOccurrence(): void
+    {
+        $offsetModel = $this->completeOffsetModel();
+        $offsetModel->completion['indicia-occurrences:occurrences'] = false;
+        $runModel = new AutoImportRunModelDouble();
+        $runModel->finishedAt = [
+            'derived-stats:grid_square_stats_counts' => '2026-07-31 08:00:00',
+            'derived-stats:taxon_rarity' => '2026-07-31 08:00:00',
+            'derived-stats:taxon_year_stats' => '2026-07-31 08:00:00',
+            'derived-stats:taxon_stats' => '2026-07-31 08:00:00',
+        ];
+        $runModel->latestDerivedRun = '2026-07-31 08:00:00';
+        $runModel->occurrenceRunsSinceDerived = 10;
+
+        $service = new AutoImportService($offsetModel, $runModel, null, null, new AutoImportDependencyServiceDouble());
+        $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
+
+        $this->assertSame('derived-stats:grid_square_stats_counts', $task['source_key']);
+        $this->assertSame('derived', $task['kind']);
+    }
+
+    /**
      * Verify occurrence selection uses the least recent successful source run.
      */
     public function testLeastRecentlyRunOccurrenceSourceIsSelectedWhenStatsAreCurrent(): void
@@ -309,6 +360,9 @@ final class AutoImportServiceTest extends CIUnitTestCase
         ] as $entity) {
             $model->completion['indicia-taxonomy:' . $entity] = true;
         }
+
+        $model->completion['indicia-occurrences:occurrences'] = true;
+        $model->completion['nbn-occurrences:occurrences'] = true;
 
         return $model;
     }

@@ -41,6 +41,17 @@ final class ImportConfigTest extends CIUnitTestCase
         $this->assertSame('Species', $config->taxonRankMappings['Species aggregate']);
     }
 
+    public function testConfiguresIncompleteOccurrenceCadence(): void
+    {
+        putenv('import.incompleteOccurrenceRunsPerDerivedRun=12');
+        $_ENV['import.incompleteOccurrenceRunsPerDerivedRun'] = '12';
+        $_SERVER['import.incompleteOccurrenceRunsPerDerivedRun'] = '12';
+
+        $config = new Import();
+
+        $this->assertSame(12, $config->incompleteOccurrenceRunsPerDerivedRun);
+    }
+
     public function testRejectsRankMappingToUnconfiguredRank(): void
     {
         putenv('import.taxonRankMappings={"Species aggregate":"Not configured"}');
@@ -59,6 +70,11 @@ final class ImportConfigTest extends CIUnitTestCase
         unset($_ENV['import.taxonRanks'], $_SERVER['import.taxonRanks']);
         putenv('import.taxonRankMappings');
         unset($_ENV['import.taxonRankMappings'], $_SERVER['import.taxonRankMappings']);
+        putenv('import.incompleteOccurrenceRunsPerDerivedRun');
+        unset(
+            $_ENV['import.incompleteOccurrenceRunsPerDerivedRun'],
+            $_SERVER['import.incompleteOccurrenceRunsPerDerivedRun'],
+        );
 
         parent::tearDown();
     }

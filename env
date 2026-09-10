@@ -87,6 +87,8 @@ Config\Import.nbnUrl = 'https://records-ws.nbnatlas.org'
 
 # Recover UI tasks that have remained running longer than this many seconds.
 # import.uiTaskStaleAfter = 3600
+# import.occurrenceRunsPerDerivedRun = 2
+# import.incompleteOccurrenceRunsPerDerivedRun = 10
 
 #--------------------------------------------------------------------
 # TAXON MEDIA

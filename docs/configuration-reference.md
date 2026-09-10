@@ -42,6 +42,10 @@ when importing Indicia taxonomy or occurrence data.
   automated derived statistics runs. The default is `2`. A lower number ensures stats data is
   kept updated more frequently, a higher number allows more rapid population or update of
   occurrence raw data.
+- `import.incompleteOccurrenceRunsPerDerivedRun`: successful occurrence import runs allowed
+  between automated derived statistics runs while either occurrence source is incomplete. The
+  default is `10`, allowing incomplete occurrence sources to make faster progress while still
+  refreshing derived statistics periodically.
 - `import.importLockFile`: local file used to prevent overlapping import processes on
   one host. It defaults to `writable/import.lock`; web-server and CLI users that run
   imports must be able to create and write it.

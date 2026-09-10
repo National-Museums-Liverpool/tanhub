@@ -28,6 +28,14 @@ class Import extends BaseConfig
     public int $occurrenceRunsPerDerivedRun = 2;
 
     /**
+     * Number of successful occurrence runs allowed between derived runs while
+     * at least one occurrence source is incomplete.
+     *
+     * @var int
+     */
+    public int $incompleteOccurrenceRunsPerDerivedRun = 10;
+
+    /**
      * @var int
      */
     public int $httpTimeout = 30;
@@ -228,6 +236,10 @@ class Import extends BaseConfig
         $configuredOccurrenceRunsPerDerivedRun = $this->validateInt(env('import.occurrenceRunsPerDerivedRun'));
         if ($configuredOccurrenceRunsPerDerivedRun !== null) {
             $this->occurrenceRunsPerDerivedRun = max(1, $configuredOccurrenceRunsPerDerivedRun);
+        }
+        $configuredIncompleteOccurrenceRunsPerDerivedRun = $this->validateInt(env('import.incompleteOccurrenceRunsPerDerivedRun'));
+        if ($configuredIncompleteOccurrenceRunsPerDerivedRun !== null) {
+            $this->incompleteOccurrenceRunsPerDerivedRun = max(1, $configuredIncompleteOccurrenceRunsPerDerivedRun);
         }
         $configuredRanks = env('import.taxonRanks');
         if (is_string($configuredRanks) && $configuredRanks !== '') {

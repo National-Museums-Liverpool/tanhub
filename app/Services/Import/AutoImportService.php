@@ -15,9 +15,10 @@ use RuntimeException;
  * Used by the scheduled/CLI "auto" import entry point (see
  * {@see \App\Commands\ImportAuto}) to decide, without an operator picking a
  * task manually, which single import to run next: first any incomplete
- * taxonomy bootstrap task, then the least-recently-successful report/derived
- * task after the configured number of occurrence runs, otherwise the
- * least-recently-run occurrence source.
+ * taxonomy bootstrap task, then an incomplete occurrence source between
+ * scheduled derived runs, then the least-recently-successful report/derived
+ * task when its cadence is due, otherwise the least-recently-run occurrence
+ * source.
  * Delegates execution to {@see \App\Services\Import\EntityImportOrchestrator}
  * (via the `importOrchestrator` service), {@see \App\Services\Import\ImportOrchestrator}
  * (via `occurrenceImportOrchestrator`), or {@see DerivedImportRunner} depending
@@ -97,11 +98,11 @@ class AutoImportService
      * Select the next task according to the automation rules.
      *
      * Priority order: (1) the first not-yet-complete taxonomy bootstrap task,
-     * in the fixed order of {@see self::BOOTSTRAP_TASKS}; (2) a report/derived
-    * task after the configured number of successful occurrence runs since the
-    * last successful derived run; (3) otherwise, whichever occurrence source
-    * (`indicia` or `nbn`) was least recently run successfully. A derived task
-    * that has never succeeded is selected immediately for initial population.
+    * in the fixed order of {@see self::BOOTSTRAP_TASKS}; (2) a due
+    * report/derived task; (3) an incomplete occurrence source, preferring the
+    * least recently successful source; (4) otherwise, whichever occurrence
+    * source (`indicia` or `nbn`) was least recently run successfully. A
+    * derived task that has never succeeded is considered due immediately.
      *
      * @return array<string, mixed> Selected task metadata. Always includes
      *                              `source_key`, `kind` (`entity`|`derived`|`occurrence`),
@@ -141,10 +142,32 @@ class AutoImportService
         }));
         $reportSelection = $this->leastRecentlySuccessful($reportTasks);
         $config = config(ImportConfig::class);
-        $occurrenceRunsPerDerivedRun = max(1, (int) $config->occurrenceRunsPerDerivedRun);
-        $successfulOccurrenceRuns = $this->successfulOccurrenceRunsSinceLastDerived();
+        $incompleteOccurrenceTasks = array_values(array_filter(
+            self::OCCURRENCE_TASKS,
+            static fn (string $sourceKey): bool => ! $offsetModel->isComplete($sourceKey),
+        ));
 
-        if ($reportSelection['last_run'] === null || $successfulOccurrenceRuns >= $occurrenceRunsPerDerivedRun) {
+        $occurrenceRunsPerDerivedRun = $incompleteOccurrenceTasks === []
+            ? (int) $config->occurrenceRunsPerDerivedRun
+            : (int) $config->incompleteOccurrenceRunsPerDerivedRun;
+        $occurrenceRunsPerDerivedRun = max(1, $occurrenceRunsPerDerivedRun);
+        $successfulOccurrenceRuns = $this->successfulOccurrenceRunsSinceLastDerived();
+        $derivedTaskDue = $reportSelection['last_run'] === null
+            || $successfulOccurrenceRuns >= $occurrenceRunsPerDerivedRun;
+
+        if ($incompleteOccurrenceTasks !== [] && ! $derivedTaskDue) {
+            $occurrenceSelection = $this->leastRecentlySuccessful($incompleteOccurrenceTasks);
+
+            return [
+                'source_key' => $occurrenceSelection['task'],
+                'kind' => 'occurrence',
+                'source' => str_starts_with($occurrenceSelection['task'], 'nbn-') ? 'nbn' : 'indicia',
+                'reason' => 'occurrence source is incomplete',
+                'last_run' => $occurrenceSelection['last_run'],
+            ];
+        }
+
+        if ($derivedTaskDue) {
             return [
                 'source_key' => $reportSelection['task']['source_key'],
                 'kind' => 'derived',

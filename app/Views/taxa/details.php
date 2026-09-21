@@ -291,7 +291,7 @@
                                         data-is-primary="<?= ! empty($media['is_primary']) ? '1' : '0' ?>"
                                         <?= $selectedMediaUuid === $mediaUuid ? 'selected' : '' ?>
                                     >
-                                        <?= esc($filename) ?> (<?= esc($mediaUuid) ?>)
+                                        <?= esc($filename) ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -302,7 +302,7 @@
                         <div class="col-12">
                             <?php if ($selectedMedia !== null): ?>
                                 <label class="form-label" for="selected_media_uuid">UUID</label>
-                                <input class="form-control" id="selected_media_uuid" type="text" value="<?= esc((string) $selectedMedia['uuid']) ?>" readonly aria-label="Selected media UUID">
+                                <input class="form-control bg-light text-muted" id="selected_media_uuid" type="text" value="<?= esc((string) $selectedMedia['uuid']) ?>" readonly aria-label="Selected media UUID">
                             <?php endif; ?>
                         </div>
                         <div class="col-md-6">

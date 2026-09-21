@@ -299,6 +299,12 @@
                                 <div class="invalid-feedback d-block"><?= esc($mediaEditErrors['media_uuid']) ?></div>
                             <?php endif; ?>
                         </div>
+                        <div class="col-12">
+                            <?php if ($selectedMedia !== null): ?>
+                                <label class="form-label" for="selected_media_uuid">UUID</label>
+                                <input class="form-control" id="selected_media_uuid" type="text" value="<?= esc((string) $selectedMedia['uuid']) ?>" readonly aria-label="Selected media UUID">
+                            <?php endif; ?>
+                        </div>
                         <div class="col-md-6">
                             <label class="form-label" for="edit_alt_text">Alt text</label>
                             <input class="form-control<?= isset($mediaEditErrors['edit_alt_text']) ? ' is-invalid' : '' ?>" id="edit_alt_text" name="edit_alt_text" type="text" maxlength="500" value="<?= esc(old('edit_alt_text', (string) ($selectedMedia['alt_text'] ?? ''))) ?>">
@@ -372,6 +378,7 @@
                                 return;
                             }
 
+                            setValue('selected_media_uuid', option.value || '');
                             setValue('edit_alt_text', option.dataset.altText || '');
                             setValue('edit_caption', option.dataset.caption || '');
                             setValue('edit_attribution', option.dataset.attribution || '');

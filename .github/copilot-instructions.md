@@ -14,6 +14,9 @@ applyTo: 'app/**'
 - NEVER: Leave newly introduced methods undocumented, even for private helpers.
 - Endeavour to make code that is clear and easy to read.
 - MUST: Use proper escaping of user input to prevent XSS and other security vulnerabilities.
+- MUST: When adding, removing, or changing a database table, column, index, constraint, or
+	relationship in app/Database/Migrations, update docs/database.md in the same change. Document
+	the field or constraint's purpose, lifecycle, and any database-driver-specific implementation.
 
 # Theme
 

@@ -10,6 +10,9 @@ applyTo: 'docs/**/*.md'
   damage their syntax or make examples unusable.
 - MUST: Check the rendered Markdown remains readable after wrapping.
 - MUST: document all tables in the Markdown documentation with appropriate headings and descriptions.
+- MUST: Keep docs/database.md synchronized with database migrations. When a migration adds, removes,
+  or changes a table, column, index, constraint, or relationship, document the schema change and
+  explain its purpose and lifecycle.
 
 # Documentation style
 

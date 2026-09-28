@@ -361,6 +361,13 @@ rarity.gridSquareWeight = 1.0
 rarity.occurrenceWeight = 1.0
 ```
 
+### Derived taxon year stats
+
+After occurrence imports complete, run:
+
+```bash
+$ php spark stats:taxon-year-stats
+
 ### Derived taxon stats
 
 After occurrence imports complete, run:
@@ -381,12 +388,6 @@ The task:
 - stores first and last verified record date and recorder where
   `identification_verification_status` starts with `V`
 
-### Derived taxon year stats
-
-After occurrence imports complete, run:
-
-```bash
-$ php spark stats:taxon-year-stats
 ```
 
 Optional parameters:

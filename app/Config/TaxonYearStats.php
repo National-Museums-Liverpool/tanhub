@@ -17,7 +17,7 @@ class TaxonYearStats extends BaseConfig
     public int $yearsPerRun = 5;
 
     /** @var int Maximum dirty scopes processed per incremental invocation. */
-    public int $maxScopes = 100;
+    public int $maxScopes = 2000;
 
     /** @var int Maximum runtime in seconds for an incremental invocation. */
     public int $maxRuntimeSeconds = 30;

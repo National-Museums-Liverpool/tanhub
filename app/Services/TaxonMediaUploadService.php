@@ -231,6 +231,10 @@ class TaxonMediaUploadService
             $db->transException(true)->transStart();
             $transactionStarted = true;
 
+            if (! empty($metadata['is_primary'])) {
+                $this->clearPrimaryForTaxon($taxonId);
+            }
+
             $mediaData = [
                 'uuid' => $uuid,
                 'taxon_id' => $taxonId,
@@ -355,9 +359,49 @@ class TaxonMediaUploadService
             'is_primary' => (int) (! empty($metadata['is_primary'])),
         ];
 
-        $this->mediaModel->update((int) $row['id'], $updateData);
+        $db = db_connect();
+        $db->transException(true)->transStart();
+        $transactionStarted = true;
+
+        try {
+            if ($updateData['is_primary'] === 1) {
+                $this->clearPrimaryForTaxon($taxonId, (int) $row['id']);
+            }
+
+            $this->mediaModel->update((int) $row['id'], $updateData);
+            $db->transComplete();
+            $transactionStarted = false;
+        } catch (\Throwable $exception) {
+            if ($transactionStarted) {
+                $db->transRollback();
+            }
+
+            throw $exception;
+        }
 
         return $updateData;
+    }
+
+    /**
+     * Clear the primary flag from other published media for a taxon.
+     *
+     * @param int $taxonId Taxon whose primary media should be cleared.
+     * @param int|null $exceptId Media ID to leave unchanged, if supplied.
+     * @return void
+     */
+    private function clearPrimaryForTaxon(int $taxonId, ?int $exceptId = null): void
+    {
+        $query = $this->mediaModel
+            ->where('taxon_id', $taxonId)
+            ->where('is_primary', 1)
+            ->where('deleted_at', null)
+            ->where('bulk_import_id', null);
+
+        if ($exceptId !== null) {
+            $query->where('id !=', $exceptId);
+        }
+
+        $query->set(['is_primary' => 0])->update();
     }
 
     /**

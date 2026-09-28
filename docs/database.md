@@ -276,6 +276,9 @@ Indexes and constraints:
 - FK `taxon_id` references `taxa.id` with cascade delete.
 - Index and FK on `bulk_import_id`; references `taxon_media_bulk_imports.id` with `SET NULL` on
   delete.
+- On MySQL, insert and update triggers reject a second published primary media item for a taxon.
+  Staged bulk-import media remains non-primary until publication.
+- On SQLite and PostgreSQL, an equivalent partial unique index is used without a generated column.
 - Rows with a non-null `bulk_import_id` are pending bulk-import publication and are excluded from
   normal media reads until publication clears the value.
 

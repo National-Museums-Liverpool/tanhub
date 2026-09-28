@@ -383,7 +383,7 @@ class TaxonMediaBulkImportService
                     [
                         'alt_text' => $row['alt_text'], 'caption' => $row['caption'],
                         'attribution' => $row['attribution'], 'license' => $row['license'],
-                        'sort_order' => $row['sort_order'], 'is_primary' => $row['is_primary'],
+                        'sort_order' => $row['sort_order'], 'is_primary' => 0,
                     ],
                     $importId,
                 );

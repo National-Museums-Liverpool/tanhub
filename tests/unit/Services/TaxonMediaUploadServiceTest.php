@@ -5,6 +5,7 @@ namespace Tests;
 use App\Models\TaxonMediaModel;
 use App\Models\TaxonMediaVariantModel;
 use App\Services\TaxonMediaUploadService;
+use CodeIgniter\Database\Exceptions\DatabaseException;
 use CodeIgniter\HTTP\Files\UploadedFile;
 use CodeIgniter\Test\CIUnitTestCase;
 use Config\TaxonMedia;
@@ -225,6 +226,118 @@ final class TaxonMediaUploadServiceTest extends CIUnitTestCase
         $this->assertSame('CC BY', (string) $row['license']);
         $this->assertSame(4, (int) $row['sort_order']);
         $this->assertSame(1, (int) $row['is_primary']);
+    }
+
+    /**
+     * Verify promoting media clears the previous primary media row.
+     */
+    public function testPromotingMediaClearsPreviousPrimary(): void
+    {
+        $service = $this->makeService();
+        $now = date('Y-m-d H:i:s');
+        $previousUuid = '77777777-7777-4777-8777-777777777777';
+        $newUuid = '66666666-6666-4666-8666-666666666666';
+
+        foreach ([
+            [$previousUuid, 'previous-primary.jpg', 1],
+            [$newUuid, 'new-primary.jpg', 0],
+        ] as [$uuid, $filename, $isPrimary]) {
+            db_connect()->table('taxon_media')->insert([
+                'uuid' => $uuid,
+                'taxon_id' => 1,
+                'original_filename' => $filename,
+                'storage_path' => '1/' . $uuid . '/original.jpg',
+                'mime_type' => 'image/jpeg',
+                'bytes' => 123,
+                'width' => 50,
+                'height' => 50,
+                'sort_order' => 0,
+                'is_primary' => $isPrimary,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+            ]);
+        }
+
+        $service->updateMetadataForTaxonMedia(1, $newUuid, ['is_primary' => 1]);
+
+        $rows = db_connect()->table('taxon_media')
+            ->where('taxon_id', 1)
+            ->orderBy('id', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        $this->assertCount(2, $rows);
+        $this->assertSame(0, (int) $rows[0]['is_primary']);
+        $this->assertSame(1, (int) $rows[1]['is_primary']);
+    }
+
+    /**
+     * Verify a primary upload replaces the previous primary media row.
+     */
+    public function testPrimaryUploadReplacesPreviousPrimary(): void
+    {
+        $service = $this->makeService();
+        $firstUpload = $this->makeUploadedFileMock(
+            $this->createPngSourceFile(),
+            'first-primary.png',
+            'image/png',
+            true
+        );
+        $secondUpload = $this->makeUploadedFileMock(
+            $this->createPngSourceFile(),
+            'second-primary.png',
+            'image/png',
+            true
+        );
+
+        $firstResult = $service->uploadForTaxon(1, $firstUpload, ['is_primary' => 1]);
+        $secondResult = $service->uploadForTaxon(1, $secondUpload, ['is_primary' => 1]);
+
+        $rows = db_connect()->table('taxon_media')
+            ->where('taxon_id', 1)
+            ->orderBy('id', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        $this->assertCount(2, $rows);
+        $this->assertSame((int) $firstResult['id'], (int) $rows[0]['id']);
+        $this->assertSame((int) $secondResult['id'], (int) $rows[1]['id']);
+        $this->assertSame(0, (int) $rows[0]['is_primary']);
+        $this->assertSame(1, (int) $rows[1]['is_primary']);
+    }
+
+    /**
+     * Verify the database rejects a second published primary media row.
+     */
+    public function testDatabaseRejectsSecondPublishedPrimary(): void
+    {
+        $now = date('Y-m-d H:i:s');
+        $media = [
+            'taxon_id' => 1,
+            'original_filename' => 'primary.jpg',
+            'storage_path' => '1/primary/original.jpg',
+            'mime_type' => 'image/jpeg',
+            'bytes' => 123,
+            'width' => 50,
+            'height' => 50,
+            'sort_order' => 0,
+            'is_primary' => 1,
+            'created_at' => $now,
+            'updated_at' => $now,
+            'deleted_at' => null,
+        ];
+
+        db_connect()->table('taxon_media')->insert([
+            ...$media,
+            'uuid' => '55555555-5555-4555-8555-555555555555',
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        db_connect()->table('taxon_media')->insert([
+            ...$media,
+            'uuid' => '44444444-4444-4444-8444-444444444444',
+        ]);
     }
 
     /**

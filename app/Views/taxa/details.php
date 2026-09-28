@@ -201,6 +201,13 @@
         $defaultMediaUuid = $page['taxonMedia'][0]['uuid'] ?? '';
         $selectedMediaUuid = old('media_uuid', (string) (session('mediaEditSelectedUuid') ?? $defaultMediaUuid));
         $selectedMedia = $mediaByUuid[$selectedMediaUuid] ?? null;
+        $hasPrimaryMedia = false;
+        foreach ($page['taxonMedia'] as $mediaItem) {
+            if (! empty($mediaItem['is_primary'])) {
+                $hasPrimaryMedia = true;
+                break;
+            }
+        }
         ?>
 
         <?php if ($page['canEditDetails']): ?>
@@ -244,7 +251,7 @@
                     </div>
                     <div class="col-md-3">
                         <label class="form-label" for="is_primary">Primary image</label>
-                        <select class="form-select<?= isset($mediaErrors['is_primary']) ? ' is-invalid' : '' ?>" id="is_primary" name="is_primary">
+                        <select class="form-select<?= isset($mediaErrors['is_primary']) ? ' is-invalid' : '' ?>" id="is_primary" name="is_primary" data-has-existing-primary="<?= $hasPrimaryMedia ? '1' : '0' ?>">
                             <option value="0" <?= old('is_primary', '0') === '0' ? 'selected' : '' ?>>No</option>
                             <option value="1" <?= old('is_primary', '0') === '1' ? 'selected' : '' ?>>Yes</option>
                         </select>
@@ -361,7 +368,9 @@
                 <script>
                     (() => {
                         const select = document.getElementById('media_uuid');
-                        if (!select) {
+                        const isPrimarySelect = document.getElementById('edit_is_primary');
+                        const uploadIsPrimarySelect = document.getElementById('is_primary');
+                        if (!select || !isPrimarySelect || !uploadIsPrimarySelect) {
                             return;
                         }
 
@@ -369,6 +378,35 @@
                             const field = document.getElementById(id);
                             if (field) {
                                 field.value = value;
+                            }
+                        };
+
+                        const confirmUploadPrimaryChange = () => {
+                            if (uploadIsPrimarySelect.value !== '1'
+                                || uploadIsPrimarySelect.dataset.hasExistingPrimary !== '1'
+                                || window.confirm('Another media file is already primary. Mark this upload as primary instead?')) {
+                                return;
+                            }
+
+                            uploadIsPrimarySelect.value = '0';
+                        };
+
+                        const confirmPrimaryChange = () => {
+                            if (isPrimarySelect.value !== '1') {
+                                return;
+                            }
+
+                            const selectedOption = select.options[select.selectedIndex];
+                            if (!selectedOption || selectedOption.dataset.isPrimary === '1') {
+                                return;
+                            }
+
+                            const anotherPrimaryExists = Array.from(select.options).some((option) => {
+                                return option !== selectedOption && option.dataset.isPrimary === '1';
+                            });
+
+                            if (anotherPrimaryExists && !window.confirm('Another media file is already primary. Mark this file as primary instead?')) {
+                                isPrimarySelect.value = '0';
                             }
                         };
 
@@ -386,6 +424,9 @@
                             setValue('edit_sort_order', option.dataset.sortOrder || '0');
                             setValue('edit_is_primary', option.dataset.isPrimary || '0');
                         });
+
+                        isPrimarySelect.addEventListener('change', confirmPrimaryChange);
+                        uploadIsPrimarySelect.addEventListener('change', confirmUploadPrimaryChange);
                     })();
                 </script>
             <?php endif; ?>

@@ -2,6 +2,7 @@
 
 namespace App\Services\Import\Adapter;
 
+use App\Services\Import\Support\OsgbGridReferenceBuilder;
 use CodeIgniter\HTTP\CURLRequest;
 use DateTimeImmutable;
 use RuntimeException;
@@ -12,13 +13,25 @@ use RuntimeException;
 class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
 {
     /**
-     * @param array<string, mixed> $config
+     * @var OsgbGridReferenceBuilder
+     */
+    private readonly OsgbGridReferenceBuilder $osgbGridReferenceBuilder;
+
+    /**
+     * Initialize the NBN Atlas occurrence adapter.
+     *
+     * @param CURLRequest                         $client                    HTTP client.
+     * @param array<string, mixed>                $config                    Adapter configuration.
+     * @param int                                 $timeout                   HTTP timeout in seconds.
+     * @param OsgbGridReferenceBuilder|null      $osgbGridReferenceBuilder  Grid reference helper.
      */
     public function __construct(
         private readonly CURLRequest $client,
         private readonly array $config,
         private readonly int $timeout,
+        ?OsgbGridReferenceBuilder $osgbGridReferenceBuilder = null,
     ) {
+        $this->osgbGridReferenceBuilder = $osgbGridReferenceBuilder ?? new OsgbGridReferenceBuilder();
     }
 
     /**
@@ -307,7 +320,7 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         ]);
 
         if ($gridRef2km === '' && $gridRef !== '') {
-            $gridRef2km = strtoupper(substr(str_replace(' ', '', $gridRef), 0, 5));
+            $gridRef2km = $this->osgbGridReferenceBuilder->calculateDintyTetrad($gridRef);
         }
 
         $remoteId = trim((string) ($record['uuid'] ?? ''));

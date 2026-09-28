@@ -330,6 +330,26 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $this->assertSame(1, (int) $this->findTaxonYearStatRow(1, null, $completedYear)['occurrences_count']);
     }
 
+    public function testOccurrenceChangesOutsideHistoryWindowDoNotQueueTaxonYearScopes(): void
+    {
+        $oldYear = (int) date('Y') - 31;
+        $dirty = new StatsDirtyScopeService(new StatsDirtyScopeModel());
+
+        $queued = $dirty->enqueueOccurrenceChanges([[
+            'old' => null,
+            'new' => [
+                'taxon_id' => 1,
+                'from_date' => $oldYear . '-01-01',
+                'to_date' => $oldYear . '-01-01',
+            ],
+            'old_region_ids' => [],
+        ]]);
+
+        $this->assertGreaterThan(0, $queued);
+        $this->assertFalse($dirty->hasDirtyScopes(StatsDirtyScopeService::TAXON_YEAR));
+        $this->assertTrue($dirty->hasDirtyScopes(StatsDirtyScopeService::TAXON));
+    }
+
     /**
      * @return array<string, mixed>|null
      */

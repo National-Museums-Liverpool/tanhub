@@ -4,6 +4,7 @@ namespace App\Services\Stats;
 
 use App\Models\StatsDirtyScopeModel;
 use Config\Import;
+use Config\TaxonYearStats;
 use Throwable;
 
 /**
@@ -268,6 +269,9 @@ class StatsDirtyScopeService
         }
         $regions = array_values(array_unique($regions, SORT_REGULAR));
         $year = $this->occurrenceYear($row);
+        if ($year !== null && ! $this->isTaxonYearInHistory($year)) {
+            $year = null;
+        }
         $scopes = [];
 
         foreach ($projections as $projection => $projectionTaxonId) {
@@ -292,6 +296,21 @@ class StatsDirtyScopeService
         }
 
         return $scopes;
+    }
+
+    /**
+     * Determine whether a completed occurrence year belongs in yearly stats.
+     *
+     * @param int $year Occurrence year.
+     * @return bool True when the year is retained by the yearly-statistics window.
+     */
+    private function isTaxonYearInHistory(int $year): bool
+    {
+        $currentYear = (int) date('Y');
+        $historyYears = config(TaxonYearStats::class)->historyYears;
+
+        return $year < $currentYear
+            && ($historyYears === 0 || $year >= $currentYear - $historyYears);
     }
 
     /**

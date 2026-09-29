@@ -30,11 +30,27 @@ class TaxonStatsService
     {
         $db = db_connect();
         $offsetModel = model(\App\Models\ImportOffsetModel::class);
-        if ($db->table('taxon_stats')->countAllResults() > 0
-            && $offsetModel->isComplete('derived-stats:taxon_stats')
-            && $this->dirtyScopeService !== null
-            && $this->dirtyScopeService->hasDirtyScopes(StatsDirtyScopeService::TAXON)) {
-            return $this->runIncremental($dryRun);
+        $hasRows = $db->table('taxon_stats')->countAllResults() > 0;
+        $isComplete = $offsetModel->isComplete('derived-stats:taxon_stats');
+        $hasDirtyScopes = $this->dirtyScopeService !== null
+            && $this->dirtyScopeService->hasDirtyScopes(StatsDirtyScopeService::TAXON);
+
+        if ($hasRows && $isComplete) {
+            if ($hasDirtyScopes) {
+                return $this->runIncremental($dryRun);
+            }
+
+            return [
+                'status' => 'success',
+                'fetched' => 0,
+                'processed' => 0,
+                'inserted' => 0,
+                'updated' => 0,
+                'not changed' => 0,
+                'skipped' => 0,
+                'errors' => 0,
+                'has_more' => false,
+            ];
         }
 
         $counts = [

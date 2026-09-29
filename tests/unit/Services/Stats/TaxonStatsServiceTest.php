@@ -435,6 +435,35 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
     }
 
     /**
+     * Ensure a completed rebuild does not restart when no dirty scopes exist.
+     *
+     * @return void
+     */
+    public function testCompletedRebuildDoesNotRestartWithoutDirtyScopes(): void
+    {
+        $this->db->table('taxon_stats')->insert([
+            'uuid' => '00000000-0000-4000-8000-000000000002',
+            'taxon_id' => 1,
+            'first_recorder' => '',
+            'last_recorder' => '',
+            'first_verified_recorder' => '',
+            'last_verified_recorder' => '',
+        ]);
+        $this->db->table('import_offsets')->insert([
+            'source_key' => 'derived-stats:taxon_stats',
+            'next_checkpoint' => null,
+            'is_complete' => 1,
+        ]);
+
+        $counts = (new TaxonStatsService(new \App\Services\Stats\StatsDirtyScopeService()))->run();
+
+        $this->assertSame('success', $counts['status']);
+        $this->assertSame(0, (int) $counts['fetched']);
+        $this->assertSame(0, (int) $counts['inserted']);
+        $this->assertFalse((bool) $counts['has_more']);
+    }
+
+    /**
      * Ensure non-reporting taxa contribute to each configured reporting projection.
      */
     public function testRunRollsUpNonReportingTaxonToConfiguredProjections(): void

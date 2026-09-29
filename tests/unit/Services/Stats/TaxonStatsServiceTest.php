@@ -10,8 +10,14 @@ use CodeIgniter\Test\CIUnitTestCase;
  */
 final class TaxonStatsServiceTest extends CIUnitTestCase
 {
+    /** @var \CodeIgniter\Database\BaseConnection Test database connection. */
     protected $db;
 
+    /**
+     * Recreate the statistics test schema and fixtures.
+     *
+     * @return void
+     */
     protected function setUp(): void
     {
         parent::setUp();
@@ -86,12 +92,12 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             grid_square_count INTEGER NOT NULL DEFAULT 0,
             frequency_trend INTEGER NULL DEFAULT NULL,
             frequency_trend_state VARCHAR(32) NULL DEFAULT NULL,
-            first_record_date DATE NOT NULL,
-            last_record_date DATE NOT NULL,
+            first_record_date DATE NULL,
+            last_record_date DATE NULL,
             first_recorder VARCHAR(255) NOT NULL,
             last_recorder VARCHAR(255) NOT NULL,
-            first_verified_record_date DATE NOT NULL,
-            last_verified_record_date DATE NOT NULL,
+            first_verified_record_date DATE NULL,
+            last_verified_record_date DATE NULL,
             first_verified_recorder VARCHAR(255) NOT NULL,
             last_verified_recorder VARCHAR(255) NOT NULL
         )');
@@ -136,6 +142,11 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         ]);
     }
 
+    /**
+     * Verify global and regional aggregates exclude inactive occurrences.
+     *
+     * @return void
+     */
     public function testRunBuildsGlobalAndRegionalRowsAndFiltersInactiveOccurrences(): void
     {
         $this->db->table('occurrences')->insertBatch([
@@ -209,6 +220,39 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         }
     }
 
+    /**
+     * Preserve null dates when all occurrences for a taxon are undated.
+     *
+     * @return void
+     */
+    public function testRunPreservesNullDatesForUndatedOccurrences(): void
+    {
+        $this->db->table('occurrences')->insert([
+            'id' => 101,
+            'taxon_id' => 1,
+            'from_date' => null,
+            'to_date' => null,
+            'grid_ref_2km' => 'SU101A',
+            'blocked' => 0,
+            'deleted_at' => null,
+        ]);
+
+        $counts = $this->runAllTaxonStatBatches(new TaxonStatsService());
+
+        $this->assertSame('success', $counts['status']);
+        $row = $this->findTaxonStatRow(1, null);
+        $this->assertNotNull($row);
+        $this->assertNull($row['first_record_date']);
+        $this->assertNull($row['last_record_date']);
+        $this->assertNull($row['first_verified_record_date']);
+        $this->assertNull($row['last_verified_record_date']);
+    }
+
+    /**
+     * Verify frequency trend direction and classification for aggregate rows.
+     *
+     * @return void
+     */
     public function testRunCalculatesIncreasingAndDecreasingFrequencyTrends(): void
     {
         $currentYear = (int) date('Y');
@@ -291,6 +335,11 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $this->assertGreaterThan($unweighted['slope'], $weighted['slope']);
     }
 
+    /**
+     * Verify dry runs calculate results without persisting rows.
+     *
+     * @return void
+     */
     public function testRunDryRunDoesNotPersistChanges(): void
     {
         $this->db->table('occurrences')->insert([

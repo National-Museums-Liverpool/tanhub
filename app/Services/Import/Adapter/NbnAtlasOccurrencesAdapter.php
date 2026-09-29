@@ -54,7 +54,11 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         ]);
 
         if ($response->getStatusCode() >= 400) {
-            throw new RuntimeException('NBN request failed with status ' . $response->getStatusCode());
+            throw new RuntimeException(sprintf(
+                'NBN request failed with status %d: %s',
+                $response->getStatusCode(),
+                trim($response->getBody()),
+            ));
         }
 
         $payload = json_decode($response->getBody(), true);
@@ -137,7 +141,7 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         }
 
         if ($cursor !== null) {
-            $filters[] = 'occurrenceID:[' . $this->escapeFilterValue($cursor) . ' TO *]';
+            $filters[] = 'occurrenceID:["' . $this->escapeFilterValue($cursor) . '" TO *]';
         }
 
         $filters[] = '-(user_assertions:"50005" OR user_assertions:"50006" OR user_assertions:"50001")';

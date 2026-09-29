@@ -53,6 +53,7 @@ class TaxonYearStats extends BaseCommand
      */
     protected $options = [
         '--dry-run' => 'Calculate taxon year stats without writing updates.',
+        '--restart' => 'Clear yearly stats and restart the full population.',
     ];
 
     /**
@@ -65,13 +66,18 @@ class TaxonYearStats extends BaseCommand
     public function run(array $params)
     {
         $dryRun = (bool) CLI::getOption('dry-run') || array_key_exists('dry-run', $params);
+        $restart = (bool) CLI::getOption('restart') || array_key_exists('restart', $params);
 
-        CLI::write('Starting taxon year stats recalculation' . ($dryRun ? ' (dry run)' : '') . '.', 'yellow');
+        CLI::write('Starting taxon year stats recalculation' . ($dryRun ? ' (dry run)' : '') . ($restart ? ' from a clean rebuild.' : '.'), 'yellow');
 
         try {
             /** @var \App\Services\Import\DerivedImportRunner $runner */
             $runner = service('derivedImportRunner');
-            $this->runWithImportLock(function () use ($runner, $dryRun): void {
+            $this->runWithImportLock(function () use ($runner, $dryRun, $restart): void {
+                if ($restart && ! $dryRun) {
+                    service('taxonYearStatsService')->resetFullRebuild();
+                }
+
                 $result = $runner->run('derived-stats:taxon_year_stats', 'taxonYearStatsService', $dryRun);
 
                 CLI::write('Task completed with status: ' . (string) ($result['status'] ?? 'unknown'), 'green');

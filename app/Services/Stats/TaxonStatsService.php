@@ -29,7 +29,9 @@ class TaxonStatsService
     public function run(bool $dryRun = false): array
     {
         $db = db_connect();
+        $offsetModel = model(\App\Models\ImportOffsetModel::class);
         if ($db->table('taxon_stats')->countAllResults() > 0
+            && $offsetModel->isComplete('derived-stats:taxon_stats')
             && $this->dirtyScopeService !== null
             && $this->dirtyScopeService->hasDirtyScopes(StatsDirtyScopeService::TAXON)) {
             return $this->runIncremental($dryRun);
@@ -48,7 +50,6 @@ class TaxonStatsService
 
         try {
             $db = db_connect();
-            $offsetModel = model(\App\Models\ImportOffsetModel::class);
             $batches = $this->statBatches();
             $batchIndex = (int) ($offsetModel->getCheckpoint('derived-stats:taxon_stats') ?? 0);
             $batchIndex = max(0, min($batchIndex, count($batches) - 1));
@@ -90,6 +91,24 @@ class TaxonStatsService
         }
 
         return $counts;
+    }
+
+    /**
+     * Clear taxon statistics and reset the full-rebuild state.
+     *
+     * @return void
+     */
+    public function resetFullRebuild(): void
+    {
+        $db = db_connect();
+        $db->table('taxon_stats')->emptyTable();
+
+        $offsetModel = model(\App\Models\ImportOffsetModel::class);
+        $offsetModel->setCheckpoint('derived-stats:taxon_stats', null);
+        $offsetModel->setCompletion('derived-stats:taxon_stats', false);
+
+        ($this->dirtyScopeService ?? service('statsDirtyScopeService'))
+            ->clear(StatsDirtyScopeService::TAXON);
     }
 
     /**

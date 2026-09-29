@@ -57,6 +57,22 @@ class TaxonYearStatsService
     }
 
     /**
+     * Clear live and staged yearly statistics and reset the rebuild state.
+     *
+     * @return void
+     */
+    public function resetFullRebuild(): void
+    {
+        $db = db_connect();
+        $db->table('taxon_year_stats')->emptyTable();
+        $db->table('taxon_year_stats_build')->emptyTable();
+
+        $offset = model(\App\Models\ImportOffsetModel::class);
+        $offset->setCheckpoint(self::SOURCE_KEY, null);
+        $offset->setCompletion(self::SOURCE_KEY, false);
+    }
+
+    /**
      * Execute one resumable staging rebuild batch.
      *
      * @param bool           $dryRun Whether persistence is disabled.

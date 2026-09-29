@@ -14,6 +14,24 @@ class GridSquareStatsCountsService
     private const RARITY_THRESHOLD = 100;
 
     /**
+     * Reset stored grid-square aggregates before a complete recalculation.
+     *
+     * @return void
+     */
+    public function resetFullRebuild(): void
+    {
+        db_connect()->table('grid_square_stats')->update([
+            'occurrences_count' => 0,
+            'species_count' => 0,
+            'rarity_score' => 0,
+        ]);
+
+        $offset = model(\App\Models\ImportOffsetModel::class);
+        $offset->setCheckpoint('derived-stats:grid_square_stats_counts', null);
+        $offset->setCompletion('derived-stats:grid_square_stats_counts', false);
+    }
+
+    /**
      * Recompute occurrences_count, species_count and rarity_score for all grid square stats rows.
      *
      * Counts are scoped to "active" occurrences (not soft-deleted, not

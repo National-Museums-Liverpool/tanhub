@@ -52,6 +52,7 @@ class TaxonStats extends BaseCommand
      */
     protected $options = [
         '--dry-run' => 'Calculate taxon stats without writing updates.',
+        '--restart' => 'Clear taxon_stats and restart the full population.',
     ];
 
     /**
@@ -64,13 +65,18 @@ class TaxonStats extends BaseCommand
     public function run(array $params)
     {
         $dryRun = (bool) CLI::getOption('dry-run') || array_key_exists('dry-run', $params);
+        $restart = (bool) CLI::getOption('restart') || array_key_exists('restart', $params);
 
-        CLI::write('Starting taxon stats recalculation' . ($dryRun ? ' (dry run)' : '') . '.', 'yellow');
+        CLI::write('Starting taxon stats recalculation' . ($dryRun ? ' (dry run)' : '') . ($restart ? ' from a clean rebuild.' : '.'), 'yellow');
 
         try {
             /** @var \App\Services\Import\DerivedImportRunner $runner */
             $runner = service('derivedImportRunner');
-            $this->runWithImportLock(function () use ($runner, $dryRun): void {
+            $this->runWithImportLock(function () use ($runner, $dryRun, $restart): void {
+                if ($restart && ! $dryRun) {
+                    service('taxonStatsService')->resetFullRebuild();
+                }
+
                 $result = $runner->run('derived-stats:taxon_stats', 'taxonStatsService', $dryRun);
 
                 CLI::write('Task completed with status: ' . (string) ($result['status'] ?? 'unknown'), 'green');

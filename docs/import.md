@@ -314,6 +314,7 @@ $ php spark stats:grid-square-stats
 Optional parameters:
 
 - `--dry-run` compute aggregates without writing updates.
+- `--restart` reset stored counts and restart the full population.
 
 The task:
 
@@ -348,6 +349,7 @@ The task:
 Optional parameters:
 
 - `--dry-run` compute rarity categories without writing updates.
+- `--restart` reset rarity categories and restart the full population.
 
 Configuration:
 
@@ -367,32 +369,12 @@ After occurrence imports complete, run:
 
 ```bash
 $ php spark stats:taxon-year-stats
-
-### Derived taxon stats
-
-After occurrence imports complete, run:
-
-```bash
-$ php spark stats:taxon-stats
 ```
 
 Optional parameters:
 
-- `--dry-run` compute results without writing updates.
-
-The task:
-
-- counts active occurrences per taxon globally and by geographic region
-- counts distinct active 2km grid squares per taxon globally and by region
-- stores first and last record date and recorder per scope
-- stores first and last verified record date and recorder where
-  `identification_verification_status` starts with `V`
-
-```
-
-Optional parameters:
-
-- `--dry-run` compute results without writing updates.
+- `--dry-run` compute taxon year stats without writing updates.
+- `--restart` clear live and staged yearly stats and restart the full population.
 
 The task:
 
@@ -405,6 +387,84 @@ The task:
   zero-fills missing years in its bounded analysis window
 - processes the rebuild in resumable year batches and publishes the staged
   result atomically
+
+### Derived taxon stats
+
+After occurrence imports complete, run:
+
+```bash
+$ php spark stats:taxon-stats
+```
+
+Optional parameters:
+
+- `--dry-run` compute results without writing updates.
+- `--restart` clear taxon stats and restart the full population.
+
+The task:
+
+- counts active occurrences per taxon globally and by geographic region
+- counts distinct active 2km grid squares per taxon globally and by region
+- stores first and last record date and recorder per scope
+- stores first and last verified record date and recorder where
+  `identification_verification_status` starts with `V`
+
+### Restarting derived statistics
+
+Each derived statistics command supports `--restart`. Run it once to clear the
+service's stored output and progress state, then keep running the command normally until it
+reports that no more work remains. Do not add `--restart` to a recurring cron command, because it
+would clear the output on every invocation.
+
+```bash
+$ php spark stats:grid-square-stats --restart
+$ php spark stats:taxon-rarity --restart
+$ php spark stats:taxon-year-stats --restart
+$ php spark stats:taxon-stats --restart
+```
+
+On a shared server without `php spark` access, run the equivalent SQL while imports are stopped.
+These statements assume the default, unprefixed table names. Add the configured database table
+prefix where required.
+
+Reset grid-square counts:
+
+```sql
+UPDATE grid_square_stats
+SET occurrences_count = 0, species_count = 0, rarity_score = 0;
+DELETE FROM import_offsets
+WHERE source_key = 'derived-stats:grid_square_stats_counts';
+```
+
+Reset taxon rarity categories:
+
+```sql
+UPDATE taxa SET rarity_category = NULL;
+DELETE FROM import_offsets
+WHERE source_key = 'derived-stats:taxon_rarity';
+```
+
+Reset taxon year statistics, including the staging table:
+
+```sql
+DELETE FROM taxon_year_stats;
+DELETE FROM taxon_year_stats_build;
+DELETE FROM import_offsets
+WHERE source_key = 'derived-stats:taxon_year_stats';
+```
+
+Reset taxon statistics and its dirty-scope queue:
+
+```sql
+DELETE FROM taxon_stats;
+DELETE FROM stats_dirty_scopes WHERE stat_type = 'taxon';
+DELETE FROM import_offsets
+WHERE source_key = 'derived-stats:taxon_stats';
+```
+
+After the SQL reset, run the corresponding command without `--restart` until it reports that the
+task is complete. The taxon-year task must complete before the taxon-stats task so frequency
+trends have their source data.
 
 Occurrence inserts and statistics-relevant updates enqueue deduplicated dirty scopes for the
 affected exact taxon, configured reporting taxa, year, and geographic regions. Old scopes are

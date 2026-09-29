@@ -190,6 +190,17 @@ class StatsDirtyScopeService
     }
 
     /**
+     * Clear all queued scopes for a statistic type.
+     *
+     * @param string $statType Queue type to clear.
+     * @return void
+     */
+    public function clear(string $statType): void
+    {
+        $this->model()->where('stat_type', $statType)->delete();
+    }
+
+    /**
      * Return whether more work remains after a bounded run.
      *
      * @param string $statType Queue type.

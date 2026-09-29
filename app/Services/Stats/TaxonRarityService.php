@@ -10,6 +10,20 @@ use Config\Rarity;
 class TaxonRarityService
 {
     /**
+     * Clear stored rarity categories before a complete recalculation.
+     *
+     * @return void
+     */
+    public function resetFullRebuild(): void
+    {
+        db_connect()->table('taxa')->update(['rarity_category' => null]);
+
+        $offset = model(\App\Models\ImportOffsetModel::class);
+        $offset->setCheckpoint('derived-stats:taxon_rarity', null);
+        $offset->setCompletion('derived-stats:taxon_rarity', false);
+    }
+
+    /**
      * Recompute rarity_category for taxa grouped by rarity_group_name.
      *
      * @param bool $dryRun Whether persistence is disabled for this run.

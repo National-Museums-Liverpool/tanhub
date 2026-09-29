@@ -26,6 +26,7 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $prefix = $this->db->getPrefix();
 
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_stats');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'stats_dirty_scopes');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'import_offsets');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_year_stats');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'geographic_regions_occurrences');
@@ -108,6 +109,18 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             next_offset INTEGER NOT NULL DEFAULT 0,
             next_checkpoint VARCHAR(255) NULL,
             is_complete INTEGER NOT NULL DEFAULT 0,
+            created_at DATETIME NULL,
+            updated_at DATETIME NULL
+        )');
+
+        $this->db->query('CREATE TABLE ' . $prefix . 'stats_dirty_scopes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope_key VARCHAR(180) NOT NULL UNIQUE,
+            stat_type VARCHAR(32) NOT NULL,
+            projection VARCHAR(64) NOT NULL,
+            taxon_id INTEGER NOT NULL,
+            geographic_region_id INTEGER NULL,
+            year INTEGER NULL,
             created_at DATETIME NULL,
             updated_at DATETIME NULL
         )');
@@ -370,6 +383,55 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $this->assertSame('success', $counts['status']);
         $this->assertGreaterThan(0, (int) $counts['fetched']);
         $this->assertSame(0, $this->db->table('taxon_stats')->countAllResults());
+    }
+
+    /**
+     * Ensure queued changes cannot divert an incomplete full rebuild.
+     *
+     * @return void
+     */
+    public function testIncompleteFullRebuildTakesPriorityOverDirtyScopes(): void
+    {
+        $this->db->table('occurrences')->insert([
+            'id' => 110,
+            'taxon_id' => 1,
+            'superfamily_id' => 1,
+            'species_id' => 1,
+            'from_date' => '2020-01-01',
+            'to_date' => '2020-01-01',
+            'grid_ref_2km' => 'SU110A',
+            'blocked' => 0,
+            'deleted_at' => null,
+        ]);
+        $this->db->table('taxon_stats')->insert([
+            'uuid' => '00000000-0000-4000-8000-000000000001',
+            'taxon_id' => 2,
+            'first_recorder' => '',
+            'last_recorder' => '',
+            'first_verified_recorder' => '',
+            'last_verified_recorder' => '',
+        ]);
+        $this->db->table('import_offsets')->insert([
+            'source_key' => 'derived-stats:taxon_stats',
+            'next_checkpoint' => '1',
+            'is_complete' => 0,
+        ]);
+        $this->db->table('stats_dirty_scopes')->insert([
+            'scope_key' => 'taxon|species_id|1|global|all',
+            'stat_type' => 'taxon',
+            'projection' => 'species_id',
+            'taxon_id' => 1,
+            'geographic_region_id' => null,
+            'year' => null,
+        ]);
+
+        $service = new TaxonStatsService(new \App\Services\Stats\StatsDirtyScopeService());
+        $counts = $service->run();
+
+        $this->assertSame('success', $counts['status']);
+        $this->assertGreaterThan(0, (int) $counts['fetched']);
+        $this->assertSame(0, (int) $counts['updated']);
+        $this->assertSame(1, $this->db->table('stats_dirty_scopes')->countAllResults());
     }
 
     /**

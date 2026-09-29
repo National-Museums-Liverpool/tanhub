@@ -365,7 +365,7 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
                 parse_str($queryString, $query);
 
                 return $query['startIndex'] === '0'
-                    && str_contains(urldecode($queryString), 'fq=occurrenceID:[5000 TO *]');
+                    && str_contains(urldecode($queryString), 'fq=occurrenceID:["5000" TO *]');
             }))
             ->willReturn($response);
 
@@ -376,6 +376,40 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         );
 
         $page = $adapter->fetchPage('occurrenceID:5000', 200);
+
+        $this->assertTrue($page->hasMore);
+    }
+
+    public function testFetchPageEscapesWhitespaceInOccurrenceIdCursorFilter(): void
+    {
+        $response = $this->createMock(ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn(200);
+        $response->method('getBody')->willReturn((string) json_encode([
+            'totalRecords' => 1000000,
+            'startIndex' => 0,
+            'pageSize' => 1,
+            'occurrences' => [
+                ['uuid' => 'uuid-next', 'occurrenceID' => 'CRA  1000003', 'taxonConceptID' => 'NHMSYS0001'],
+            ],
+        ], JSON_THROW_ON_ERROR));
+
+        $client = $this->createMock(CURLRequest::class);
+        $client->expects($this->once())
+            ->method('get')
+            ->with($this->callback(static function (string $url): bool {
+                $queryString = (string) parse_url($url, PHP_URL_QUERY);
+
+                return str_contains(urldecode($queryString), 'fq=occurrenceID:["CRA  1000002" TO *]');
+            }))
+            ->willReturn($response);
+
+        $adapter = new NbnAtlasOccurrencesAdapter(
+            $client,
+            ['endpoint' => 'https://example.test/nbn'],
+            10,
+        );
+
+        $page = $adapter->fetchPage('occurrenceID:CRA  1000002', 200);
 
         $this->assertTrue($page->hasMore);
     }

@@ -12,8 +12,14 @@ use CodeIgniter\Test\CIUnitTestCase;
  */
 final class TaxonYearStatsServiceTest extends CIUnitTestCase
 {
+    /** @var \CodeIgniter\Database\BaseConnection Test database connection. */
     protected $db;
 
+    /**
+     * Recreate the statistics test schema and fixtures.
+     *
+     * @return void
+     */
     protected function setUp(): void
     {
         parent::setUp();
@@ -70,7 +76,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
 
         $this->db->query('CREATE TABLE ' . $prefix . 'taxon_year_stats (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            uuid CHAR(36) NOT NULL,
+            uuid CHAR(36) NOT NULL UNIQUE,
             taxon_id INTEGER NOT NULL,
             geographic_region_id INTEGER NULL,
             year INTEGER NOT NULL,
@@ -128,6 +134,11 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         }
     }
 
+    /**
+     * Verify the full rebuild creates one global and regional row per scope.
+     *
+     * @return void
+     */
     public function testRunBuildsGlobalAndRegionalRowsWithinConfiguredHistory(): void
     {
         $currentYear = (int) date('Y');
@@ -202,6 +213,11 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         }
     }
 
+    /**
+     * Verify dry runs exclude the current year and do not persist rows.
+     *
+     * @return void
+     */
     public function testRunDryRunExcludesCurrentYearAndDoesNotPersistChanges(): void
     {
         $currentYear = (int) date('Y');
@@ -240,9 +256,9 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             'taxon_identifier' => 'SUBSPECIES',
             'taxon_rank_id' => 1,
             'order_id' => 10,
-            'superfamily_id' => 11,
+            'superfamily_id' => 12,
             'family_id' => 12,
-            'genus_id' => 13,
+            'genus_id' => 14,
             'species_id' => 14,
             'blocked' => 0,
             'deleted_at' => null,
@@ -251,9 +267,9 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             'id' => 20,
             'taxon_id' => 4,
             'order_id' => 10,
-            'superfamily_id' => 11,
+            'superfamily_id' => 12,
             'family_id' => 12,
-            'genus_id' => 13,
+            'genus_id' => 14,
             'species_id' => 14,
             'from_date' => $completedYear . '-06-01',
             'to_date' => $completedYear . '-06-01',
@@ -331,6 +347,11 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $this->assertSame(1, (int) $this->findTaxonYearStatRow(1, null, $completedYear)['occurrences_count']);
     }
 
+    /**
+     * Verify occurrence changes outside the history window do not queue yearly scopes.
+     *
+     * @return void
+     */
     public function testOccurrenceChangesOutsideHistoryWindowDoNotQueueTaxonYearScopes(): void
     {
         $oldYear = (int) date('Y') - 31;

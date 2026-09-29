@@ -71,7 +71,7 @@ class TaxonYearStatsService
         try {
             $db = db_connect();
             $columns = $this->reportingColumns();
-            $projectionCount = count($columns) + 1;
+            $projectionCount = 1;
             $years = $this->completedYears($config->historyYears);
             $state = $this->state();
             if ($state === null || (int) ($state['projection_count'] ?? 0) !== $projectionCount
@@ -277,8 +277,6 @@ class TaxonYearStatsService
     {
         $db = db_connect();
         $prefix = $db->getPrefix();
-        $column = $projection === 0 ? 'taxon_id' : $columns[$projection - 1];
-        $condition = $projection === 0 ? 'tr.is_reporting = 0' : 'o.' . $column . ' IS NOT NULL';
         $sqlite = strtoupper((string) ($db->DBDriver ?? '')) === 'SQLITE3';
         $yearExpression = $sqlite
             ? "CAST(strftime('%Y', o.from_date) AS INTEGER)"
@@ -286,15 +284,43 @@ class TaxonYearStatsService
         $toYearExpression = $sqlite
             ? "CAST(strftime('%Y', o.to_date) AS INTEGER)"
             : 'YEAR(o.to_date)';
-        $regionalBase = ' FROM ' . $prefix . 'occurrences o INNER JOIN ' . $prefix . 'taxa t ON t.id = o.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0
-            INNER JOIN ' . $prefix . 'taxon_ranks tr ON tr.id = t.taxon_rank_id INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro ON gro.occurrence_id = o.id
-            WHERE o.deleted_at IS NULL AND o.blocked = 0 AND o.from_date IS NOT NULL AND o.to_date IS NOT NULL
-            AND ' . $yearExpression . ' = ' . $toYearExpression . ' AND ' . $condition . ' AND ' . $yearExpression . ' BETWEEN ? AND ?';
-        $globalBase = ' FROM ' . $prefix . 'occurrences o INNER JOIN ' . $prefix . 'taxa t ON t.id = o.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0
-            INNER JOIN ' . $prefix . 'taxon_ranks tr ON tr.id = t.taxon_rank_id
-            WHERE o.deleted_at IS NULL AND o.blocked = 0 AND o.from_date IS NOT NULL AND o.to_date IS NOT NULL
-            AND ' . $yearExpression . ' = ' . $toYearExpression . ' AND ' . $condition . ' AND ' . $yearExpression . ' BETWEEN ? AND ?';
-        $rows = $db->query('SELECT o.' . $column . ' AS taxon_id, gro.geographic_region_id, ' . $yearExpression . ' AS year, COUNT(*) AS occurrences_count, COUNT(DISTINCT NULLIF(UPPER(TRIM(o.grid_ref_2km)), "")) AS grid_square_count' . $regionalBase . ' GROUP BY o.' . $column . ', gro.geographic_region_id, ' . $yearExpression . ' UNION ALL SELECT o.' . $column . ' AS taxon_id, NULL AS geographic_region_id, ' . $yearExpression . ' AS year, COUNT(*) AS occurrences_count, COUNT(DISTINCT NULLIF(UPPER(TRIM(o.grid_ref_2km)), "")) AS grid_square_count' . $globalBase . ' GROUP BY o.' . $column . ', ' . $yearExpression, [$startYear, $endYear, $startYear, $endYear])->getResultArray();
+        $projectionColumns = implode(', ', array_map(static fn (string $column): string => 'o.' . $column, $columns));
+        $projectionColumns = $projectionColumns === '' ? '' : ', ' . $projectionColumns;
+        $scopedSelects = [
+            'SELECT ao.occurrence_id, ao.taxon_id, gro.geographic_region_id, ao.year, ao.grid_ref_2km
+             FROM active_occurrences ao
+             INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro ON gro.occurrence_id = ao.occurrence_id
+             WHERE ao.is_reporting = 0',
+            'SELECT ao.occurrence_id, ao.taxon_id, NULL AS geographic_region_id, ao.year, ao.grid_ref_2km
+             FROM active_occurrences ao
+             WHERE ao.is_reporting = 0',
+        ];
+        foreach ($columns as $column) {
+            $scopedSelects[] = 'SELECT ao.occurrence_id, ao.' . $column . ' AS taxon_id, gro.geographic_region_id, ao.year, ao.grid_ref_2km
+                FROM active_occurrences ao
+                INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro ON gro.occurrence_id = ao.occurrence_id
+                WHERE ao.' . $column . ' IS NOT NULL';
+            $scopedSelects[] = 'SELECT ao.occurrence_id, ao.' . $column . ' AS taxon_id, NULL AS geographic_region_id, ao.year, ao.grid_ref_2km
+                FROM active_occurrences ao
+                WHERE ao.' . $column . ' IS NOT NULL';
+        }
+        $rows = $db->query(
+            'WITH active_occurrences AS (
+                SELECT o.id AS occurrence_id, o.taxon_id, tr.is_reporting, ' . $yearExpression . ' AS year,
+                    NULLIF(UPPER(TRIM(o.grid_ref_2km)), "") AS grid_ref_2km' . $projectionColumns . '
+                FROM ' . $prefix . 'occurrences o
+                INNER JOIN ' . $prefix . 'taxa t ON t.id = o.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0
+                INNER JOIN ' . $prefix . 'taxon_ranks tr ON tr.id = t.taxon_rank_id
+                WHERE o.deleted_at IS NULL AND o.blocked = 0 AND o.from_date IS NOT NULL AND o.to_date IS NOT NULL
+                    AND ' . $yearExpression . ' = ' . $toYearExpression . '
+                    AND ' . $yearExpression . ' BETWEEN ? AND ?
+            ), scoped_occurrences AS (' . implode(' UNION ', $scopedSelects) . ')
+            SELECT taxon_id, geographic_region_id, year, COUNT(*) AS occurrences_count,
+                COUNT(DISTINCT grid_ref_2km) AS grid_square_count
+            FROM scoped_occurrences
+            GROUP BY taxon_id, geographic_region_id, year',
+            [$startYear, $endYear],
+        )->getResultArray();
 
         return array_map(function (array $row) use ($buildId, $projection): array {
             $taxonId = (int) $row['taxon_id'];
@@ -348,6 +374,11 @@ class TaxonYearStatsService
         $offset->setCompletion(self::SOURCE_KEY, false);
     }
 
+    /**
+     * Mark the rebuild complete and remove its checkpoint.
+     *
+     * @return void
+     */
     private function clearState(): void
     {
         $offset = model(\App\Models\ImportOffsetModel::class);
@@ -355,6 +386,12 @@ class TaxonYearStatsService
         $offset->setCompletion(self::SOURCE_KEY, true);
     }
 
+    /**
+     * Replace live yearly statistics with one completed staged build.
+     *
+     * @param string $buildId Staging build identifier.
+     * @return void
+     */
     private function publish(string $buildId): void
     {
         $db = db_connect();
@@ -367,6 +404,12 @@ class TaxonYearStatsService
         }
     }
 
+    /**
+     * Generate a deterministic UUID-shaped identifier for an aggregate scope.
+     *
+     * @param string $seed Stable aggregate scope key.
+     * @return string Deterministic UUID-shaped identifier.
+     */
     private function stableUuid(string $seed): string
     {
         $hex = md5($seed);

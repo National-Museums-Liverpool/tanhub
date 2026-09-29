@@ -286,11 +286,15 @@ class TaxonYearStatsService
         $toYearExpression = $sqlite
             ? "CAST(strftime('%Y', o.to_date) AS INTEGER)"
             : 'YEAR(o.to_date)';
-        $base = ' FROM ' . $prefix . 'occurrences o INNER JOIN ' . $prefix . 'taxa t ON t.id = o.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0
-            INNER JOIN ' . $prefix . 'taxon_ranks tr ON tr.id = t.taxon_rank_id LEFT JOIN ' . $prefix . 'geographic_regions_occurrences gro ON gro.occurrence_id = o.id
+        $regionalBase = ' FROM ' . $prefix . 'occurrences o INNER JOIN ' . $prefix . 'taxa t ON t.id = o.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0
+            INNER JOIN ' . $prefix . 'taxon_ranks tr ON tr.id = t.taxon_rank_id INNER JOIN ' . $prefix . 'geographic_regions_occurrences gro ON gro.occurrence_id = o.id
             WHERE o.deleted_at IS NULL AND o.blocked = 0 AND o.from_date IS NOT NULL AND o.to_date IS NOT NULL
             AND ' . $yearExpression . ' = ' . $toYearExpression . ' AND ' . $condition . ' AND ' . $yearExpression . ' BETWEEN ? AND ?';
-        $rows = $db->query('SELECT o.' . $column . ' AS taxon_id, gro.geographic_region_id, ' . $yearExpression . ' AS year, COUNT(*) AS occurrences_count, COUNT(DISTINCT NULLIF(UPPER(TRIM(o.grid_ref_2km)), "")) AS grid_square_count' . $base . ' GROUP BY o.' . $column . ', gro.geographic_region_id, ' . $yearExpression . ' UNION ALL SELECT o.' . $column . ' AS taxon_id, NULL AS geographic_region_id, ' . $yearExpression . ' AS year, COUNT(*) AS occurrences_count, COUNT(DISTINCT NULLIF(UPPER(TRIM(o.grid_ref_2km)), "")) AS grid_square_count' . $base . ' GROUP BY o.' . $column . ', ' . $yearExpression, [$startYear, $endYear, $startYear, $endYear])->getResultArray();
+        $globalBase = ' FROM ' . $prefix . 'occurrences o INNER JOIN ' . $prefix . 'taxa t ON t.id = o.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0
+            INNER JOIN ' . $prefix . 'taxon_ranks tr ON tr.id = t.taxon_rank_id
+            WHERE o.deleted_at IS NULL AND o.blocked = 0 AND o.from_date IS NOT NULL AND o.to_date IS NOT NULL
+            AND ' . $yearExpression . ' = ' . $toYearExpression . ' AND ' . $condition . ' AND ' . $yearExpression . ' BETWEEN ? AND ?';
+        $rows = $db->query('SELECT o.' . $column . ' AS taxon_id, gro.geographic_region_id, ' . $yearExpression . ' AS year, COUNT(*) AS occurrences_count, COUNT(DISTINCT NULLIF(UPPER(TRIM(o.grid_ref_2km)), "")) AS grid_square_count' . $regionalBase . ' GROUP BY o.' . $column . ', gro.geographic_region_id, ' . $yearExpression . ' UNION ALL SELECT o.' . $column . ' AS taxon_id, NULL AS geographic_region_id, ' . $yearExpression . ' AS year, COUNT(*) AS occurrences_count, COUNT(DISTINCT NULLIF(UPPER(TRIM(o.grid_ref_2km)), "")) AS grid_square_count' . $globalBase . ' GROUP BY o.' . $column . ', ' . $yearExpression, [$startYear, $endYear, $startYear, $endYear])->getResultArray();
 
         return array_map(function (array $row) use ($buildId, $projection): array {
             $taxonId = (int) $row['taxon_id'];
@@ -358,6 +362,9 @@ class TaxonYearStatsService
         $db->table('taxon_year_stats')->emptyTable();
         $db->query('INSERT INTO ' . $db->getPrefix() . 'taxon_year_stats (uuid, taxon_id, geographic_region_id, year, occurrences_count, grid_square_count) SELECT uuid, taxon_id, geographic_region_id, year, occurrences_count, grid_square_count FROM ' . $db->getPrefix() . 'taxon_year_stats_build WHERE build_id = ?', [$buildId]);
         $db->transComplete();
+        if (! $db->transStatus()) {
+            throw new \RuntimeException('Failed to publish taxon year stats.');
+        }
     }
 
     private function stableUuid(string $seed): string

@@ -144,6 +144,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             ['id' => 7, 'taxon_id' => 3, 'from_date' => $withinWindowYear . '-07-01', 'to_date' => $withinWindowYear . '-07-01', 'grid_ref_2km' => 'SU07X', 'blocked' => 0, 'deleted_at' => null],
             ['id' => 8, 'taxon_id' => 1, 'from_date' => $withinWindowYear . '-08-01', 'to_date' => null, 'grid_ref_2km' => 'SU08A', 'blocked' => 0, 'deleted_at' => null],
             ['id' => 9, 'taxon_id' => 1, 'from_date' => ($withinWindowYear - 1) . '-01-01', 'to_date' => $withinWindowYear . '-12-31', 'grid_ref_2km' => 'SU09A', 'blocked' => 0, 'deleted_at' => null],
+            ['id' => 10, 'taxon_id' => 1, 'from_date' => $withinWindowYear . '-09-01', 'to_date' => $withinWindowYear . '-09-01', 'grid_ref_2km' => 'SU10B', 'blocked' => 0, 'deleted_at' => null],
         ]);
 
         $this->db->table('geographic_regions_occurrences')->insertBatch([
@@ -171,8 +172,8 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
         $region11Taxon2 = $this->findTaxonYearStatRow(2, 11, $withinWindowYear);
 
         $this->assertNotNull($globalTaxon1);
-        $this->assertSame(2, (int) $globalTaxon1['occurrences_count']);
-        $this->assertSame(2, (int) $globalTaxon1['grid_square_count']);
+        $this->assertSame(3, (int) $globalTaxon1['occurrences_count']);
+        $this->assertSame(3, (int) $globalTaxon1['grid_square_count']);
 
         $globalTaxon1MissingYear = $this->findTaxonYearStatRow(1, null, $currentYear - 1);
         $this->assertNull($globalTaxon1MissingYear);

@@ -335,7 +335,7 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             $taxonConceptId = trim((string) ($record['scientificNameID'] ?? ''));
         }
 
-        $eventDate = $record['eventDate'] ?? $this->eventDateFromParts($record);
+        $eventDate = $record['eventDate'] ?? $record['event']['eventDate'] ?? $this->eventDateFromParts($record);
         [$fromDate, $toDate] = $this->normalizeEventDate($eventDate);
 
         return [

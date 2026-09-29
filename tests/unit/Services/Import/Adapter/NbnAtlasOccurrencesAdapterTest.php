@@ -154,6 +154,38 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
     }
 
     /**
+     * Verify event dates nested in the NBN event object are normalized.
+     *
+     * @return void
+     */
+    public function testFetchPageNormalizesNestedEventDate(): void
+    {
+        $response = $this->createMock(ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn(200);
+        $response->method('getBody')->willReturn((string) json_encode([
+            'totalRecords' => 1,
+            'occurrences' => [[
+                'uuid' => 'nested-date-test',
+                'taxonConceptID' => 'NHMSYS0001',
+                'event' => ['eventDate' => '/1920'],
+            ]],
+        ], JSON_THROW_ON_ERROR));
+
+        $client = $this->createMock(CURLRequest::class);
+        $client->method('get')->willReturn($response);
+        $adapter = new NbnAtlasOccurrencesAdapter(
+            $client,
+            ['endpoint' => 'https://example.test/nbn'],
+            10,
+        );
+
+        $record = $adapter->fetchPage(null, 50)->records[0];
+
+        $this->assertNull($record['from_date']);
+        $this->assertSame('1920-12-31', $record['to_date']);
+    }
+
+    /**
      * Supply supported, partial, interval, and invalid NBN event dates.
      *
      * @return array<string, array{0: string, 1: string|null, 2: string|null}> Test cases.

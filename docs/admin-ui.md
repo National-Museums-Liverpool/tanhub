@@ -124,6 +124,76 @@ All detail pages should follow the same interaction model:
 - Show a success flash message after save.
 - Provide a clear "Back to list" action.
 
+## Occurrence and taxa searches
+
+Both indexes support broad descriptive text search, year, geographic region, taxon group,
+configured classification filters (Family by default), and a taxon-name selector. Different
+filters combine with AND. Text search matches any of the supported descriptive fields.
+
+On occurrences, text search includes taxon names and synonyms, recorded names, identifiers,
+classification/group labels, region names, locality, grid reference, recorder, identifier and
+data-source labels. On taxa it searches the taxon's names, synonyms, identifiers, classification,
+group labels, conservation status, rarity group and remarks, not descendant record text.
+
+### Dates and regional checklists
+
+The Year field accepts `2010`, `2010-2015`, `2010-` or `-2015`. All bounds are inclusive.
+A record's complete date interval must fit inside the chosen range. A record dated 2010-2012
+therefore does not qualify for 2011, but does qualify for 2010-2012. Records with missing date
+bounds do not qualify for date-filtered searches.
+
+Only the text search and Search/Clear controls are shown initially. Expand Advanced for all
+other filters, including year, region, classification, taxon selection, precise date bounds,
+source and independent taxon/occurrence blocked filters. The panel opens automatically when
+an advanced filter is active or invalid, so hidden filters cannot silently affect the results.
+Expanded controls sit in a bordered, rounded, lightly shaded panel with internal spacing.
+Year and precise date constraints both apply when supplied together. Blocked data
+is included by default because these are staff pages; select No for both blocked filters
+when producing a checklist that excludes blocked evidence. Deleted data is always excluded.
+On taxa, Taxon blocked = No also excludes evidence identified as a blocked child taxon.
+Taxon blocked = Yes selects blocked listed taxa without requiring their children to be blocked.
+
+On taxa, choose Rank = Species to list species with matching records, or Rank = Genus to list
+genera. Rank is independent of classification: Family = Noctuidae and Rank = Genus lists genera
+in that family. The Rank selector offers configured reporting ranks, not every imported rank.
+There is no Rank filter on occurrences, whose rows remain original individual records.
+
+Year, region, source and occurrence status must match the same contributing record. A record
+of a child taxon qualifies its configured reporting ancestors, so subspecies evidence can qualify
+a species, and a blackbird record can qualify Aves if Class and that ancestor have been
+configured and imported. This does not create missing ancestors or change import scope.
+When Rank is blank, non-reporting taxa retain exact-record evidence; unconfigured ancestor
+roll-up is not provided. With no occurrence filters, taxa without records remain visible.
+
+These searches use live occurrences, not periodically rebuilt statistics. Taxa occurrence
+filters first build a deduplicated set of exact and reporting taxon IDs, then join it to taxa,
+avoiding an occurrence scan for every taxon in the taxonomy. Annual statistics
+only assign records whose date bounds fall in the same year, whereas a multi-year index search
+can include an interval spanning years when the whole interval is contained.
+
+### Taxon selection and results
+
+Type at least two characters for suggestions matching scientific names, vernacular names or
+synonyms. Suggestions show the accepted name, rank and matched synonym where applicable.
+Use arrow keys and Enter to select, or Escape to dismiss. A selected taxon includes itself
+and its descendants. Editing the name clears the stored selection.
+
+Without JavaScript, enter a name and Search to load up to 20 choices in Selected taxon.
+Choose one and Search again to include descendants. A name without a selection performs
+name matching; general text search is also available without selecting a taxon.
+
+Occurrence tables show readable taxon/classification/source labels, one date or date interval,
+and all linked regions in alphabetical order separated by semicolons. Filtering by one region
+does not hide the other regions linked to the same record. Taxa tables show one row per taxon,
+its rank and configured classification columns; they do not show a misleading single record date.
+
+Filters and sorting are preserved in pagination links and bookmarkable GET URLs. Search resets
+the page number; Clear resets all filters. Invalid filters display errors rather than silently
+widening the results. Downloads are not implemented in this iteration.
+
+See [Staff search presentation](configuration-reference.md#staff-search-presentation) to choose
+which classification ranks appear.
+
 ## Users
 
 Access:

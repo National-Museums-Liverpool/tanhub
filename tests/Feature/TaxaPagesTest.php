@@ -60,7 +60,7 @@ final class TaxaPagesTest extends CIUnitTestCase
         $result->assertSee('Taxa');
         $result->assertSee('Taxon identifier');
         $result->assertSee('Taxon group');
-        $result->assertSee('Bees');
+        $result->assertSee('Bee species');
         $result->assertSee('Blocked');
     }
 

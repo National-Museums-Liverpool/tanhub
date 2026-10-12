@@ -62,6 +62,22 @@ vendor/bin/phpunit -c phpunit.dist.xml \
     tests/Feature/AdminReferenceTablesTest.php tests/Feature/TaxaPagesTest.php
 ```
 
+## Run staff search regression tests
+
+These tests cover inclusive date containment, same-record region/year evidence, reporting
+ancestors and descendant selection, independent classification/rank filters, moderation,
+synonyms, duplicate prevention, protected lookup and invalid filter feedback:
+
+```bash
+vendor/bin/phpunit -c phpunit.dist.xml \
+    --no-coverage \
+    --filter 'TaxonSearchTest|SearchCriteriaTest|TaxaPagesTest|DataSourcesOccurrencesPagesTest'
+```
+
+The query service constructs unpaginated queries independently of HTML rendering. The same
+criteria and batch row preparation can be reused by a future download feature without
+reimplementing filters.
+
 ## Run only taxon media focused tests
 
 Use these during media upload and include refactors:

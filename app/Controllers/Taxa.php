@@ -3,9 +3,11 @@
 namespace App\Controllers;
 
 use App\Models\TaxonModel;
+use App\Services\Search\TaxonSearchService;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\HTTP\Files\UploadedFile;
 use CodeIgniter\HTTP\RedirectResponse;
+use CodeIgniter\HTTP\ResponseInterface;
 
 /**
  * Admin views for taxa and moderation controls.
@@ -20,63 +22,49 @@ use CodeIgniter\HTTP\RedirectResponse;
 class Taxa extends BaseController
 {
     /**
-     * Display a paginated, sortable list of taxa.
-        *
-        * @return string Rendered HTML for the taxa index view.
+     * Display a paginated, sortable taxon checklist with live occurrence filters.
+     *
+     * Reporting ancestors can qualify through descendant records. Invalid criteria
+     * remain visible with HTTP 400 rather than silently returning an unfiltered list.
+     *
+     * @return string Rendered HTML for the taxa index view.
      */
     public function index(): string
     {
-        $sort = strtolower((string) $this->request->getGet('sort'));
-        $direction = strtolower((string) $this->request->getGet('direction'));
-        $q = trim((string) $this->request->getGet('q'));
-
-        $allowedSortColumns = [
-            'id',
-            'taxon_identifier',
-            'scientific_name',
-            'vernacular_name',
-            'conservation_status',
-            'taxon_group_title',
-            'blocked',
-        ];
-
-        if (! in_array($sort, $allowedSortColumns, true)) {
-            $sort = 'scientific_name';
+        $page = (new TaxonSearchService())->page($this->request->getGet(), true);
+        if ($page['errors'] !== []) {
+            $this->response->setStatusCode(400);
         }
 
-        if (! in_array($direction, ['asc', 'desc'], true)) {
-            $direction = 'asc';
-        }
-
-        /** @var TaxonModel $model */
-        $model = model(TaxonModel::class);
-
-        if ($q !== '') {
-            $model->groupStart()
-                ->like('taxon_identifier', $q)
-                ->orLike('scientific_name', $q)
-                ->orLike('vernacular_name', $q)
-                ->orLike('conservation_status', $q)
-                ->orLike('taxon_groups.title', $q)
-                ->groupEnd();
-        }
-
-        $taxa = $model
-            ->select('taxa.*, taxon_groups.title AS taxon_group_title')
-            ->join('taxon_groups', 'taxon_groups.id = taxa.taxon_group_id', 'left')
-            ->orderBy($sort, $direction)
-            ->paginate(20);
-
-        return $this->renderPage('taxa/index', [
+        return $this->renderPage('taxa/index', array_merge($page, [
             'pageTitle' => 'Taxa',
             'metaDescription' => 'Taxa list.',
             'bodyClass' => 'app-shell',
-            'taxa' => $taxa,
-            'pager' => $model->pager,
-            'sort' => $sort,
-            'direction' => $direction,
-            'q' => $q,
-        ]);
+        ]));
+    }
+
+    /**
+     * Suggest taxa by accepted, vernacular or synonymous names for staff searches.
+     *
+     * This staff-only endpoint can include blocked taxa, unlike the public name API.
+     * Successful responses use a `data` suggestion list; invalid inputs use an `errors`
+     * map with HTTP 400. Each suggestion identifies an accepted taxon, not a synonym row.
+     *
+     * @return ResponseInterface JSON suggestions or explicit validation errors.
+     */
+    public function lookup(): ResponseInterface
+    {
+        $search = new TaxonSearchService();
+        $criteria = $search->criteria($this->request->getGet(), true);
+        $term = $criteria->value('taxon_name');
+        if (mb_strlen($term) < 2) {
+            $criteria->errors['taxon_name'] = 'Enter at least two characters.';
+        }
+        if ($criteria->errors !== []) {
+            return $this->response->setStatusCode(400)->setJSON(['errors' => $criteria->errors]);
+        }
+
+        return $this->response->setJSON(['data' => $search->lookup($term, $criteria)]);
     }
 
     /**

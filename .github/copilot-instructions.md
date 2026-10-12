@@ -18,6 +18,27 @@ applyTo: 'app/**'
 	relationship in app/Database/Migrations, update docs/database.md in the same change. Document
 	the field or constraint's purpose, lifecycle, and any database-driver-specific implementation.
 
+# Documentation for new developers
+
+- Document new or materially changed code for a developer unfamiliar with
+  this project. Explain its responsibility and important domain assumptions.
+- Use PHPDoc for PHP classes, methods and functions, including private helpers.
+  Use JSDoc for JavaScript modules and meaningful helper functions; explain
+  non-trivial event handlers and asynchronous state transitions.
+- Document parameter meaning, return values and significant failure modes.
+  Describe structured array/object shapes where their fields form a contract.
+- Explain WHY non-obvious code exists: business rules, query-performance
+  decisions, compatibility constraints, deduplication, security boundaries,
+  race prevention and fallback behaviour.
+- Document the supplied data and responsibilities of shared view partials
+  when these cannot be understood from the template alone.
+- Keep comments accurate when behaviour changes. Link to related project
+  documentation rather than duplicating lengthy explanations.
+- Avoid comments that merely restate obvious code. Prefer a concise explanation
+  of an invariant or decision over narrating every line.
+- Before completing a change, review all changed code, including new files,
+  for documentation gaps and stale comments—not just missing docblocks.
+
 # Theme
 
 - Use Bootstrap 5 for all front-end components and styling.

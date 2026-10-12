@@ -35,6 +35,7 @@ $routes->post('data-sources/create', 'DataSources::store', ['filter' => ['sessio
 $routes->get('data-sources/(:num)', 'DataSources::details/$1', ['filter' => ['session', 'group:admin,manager']]);
 $routes->post('data-sources/(:num)', 'DataSources::update/$1', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('occurrences', 'Occurrences::index', ['filter' => ['session', 'group:admin,manager']]);
+$routes->get('taxon-search', 'Taxa::lookup', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('occurrences/(:num)', 'Occurrences::details/$1', ['filter' => ['session', 'group:admin,manager']]);
 $routes->post('occurrences/(:num)', 'Occurrences::update/$1', ['filter' => ['session', 'group:admin,manager']]);
 $routes->get('users', 'Users::index', ['filter' => ['session', 'group:admin']]);

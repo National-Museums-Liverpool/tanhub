@@ -83,7 +83,6 @@ Config\Import.indiciaProjId = 'TANHUB'
 Config\Import.indiciaUsername = 'tanhub'
 Config\Import.indiciaSecret = ''
 Config\Import.indiciaOccurrencesEsEndpoint= 'es'
-Config\Import.nbnUrl = 'https://records-ws.nbnatlas.org'
 
 # Recover UI tasks that have remained running longer than this many seconds.
 # import.uiTaskStaleAfter = 3600
@@ -153,3 +152,11 @@ Config\Import.nbnUrl = 'https://records-ws.nbnatlas.org'
 # rarity.occurrenceWeight = 1.0
 # taxonFrequencyTrend.gridSquareWeight = 1.0
 # taxonFrequencyTrend.occurrenceWeight = 1.0
+
+#--------------------------------------------------------------------
+# ADMIN UI SEARCH PRESENTATION
+#--------------------------------------------------------------------
+
+# Ordered subset of existing import.taxonRanks shown as filters and columns.
+# This does not change imports or add database columns.
+# taxonSearch.classificationRanks = 'Family'

@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Models\OccurrenceModel;
+use App\Services\Search\TaxonSearchService;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\HTTP\RedirectResponse;
 
@@ -18,70 +19,24 @@ class Occurrences extends BaseController
     /**
      * Display a paginated, sortable list of occurrences.
      *
-     * @return string
+     * The shared search service keeps original record rows and includes blocked data
+     * by default. Invalid filters render validation messages with HTTP 400, not an
+     * apparently successful unfiltered list.
+     *
+     * @return string Rendered occurrence index with current search state.
      */
     public function index(): string
     {
-        $sort = strtolower((string) $this->request->getGet('sort'));
-        $direction = strtolower((string) $this->request->getGet('direction'));
-        $taxonId = $this->nullableInt($this->request->getGet('taxon_id'));
-        $dataSourceId = $this->nullableInt($this->request->getGet('data_source_id'));
-        $blocked = trim((string) $this->request->getGet('blocked'));
-        $fromDate = trim((string) $this->request->getGet('from_date'));
-        $toDate = trim((string) $this->request->getGet('to_date'));
-
-        $allowedSortColumns = ['id', 'unique_key', 'taxon_id', 'taxon_name_id', 'from_date', 'to_date', 'grid_ref', 'data_source_id', 'blocked'];
-
-        if (! in_array($sort, $allowedSortColumns, true)) {
-            $sort = 'from_date';
+        $page = (new TaxonSearchService())->page($this->request->getGet(), false);
+        if ($page['errors'] !== []) {
+            $this->response->setStatusCode(400);
         }
 
-        if (! in_array($direction, ['asc', 'desc'], true)) {
-            $direction = 'desc';
-        }
-
-        /** @var OccurrenceModel $model */
-        $model = model(OccurrenceModel::class);
-
-        if ($taxonId !== null) {
-            $model->where('taxon_id', $taxonId);
-        }
-
-        if ($dataSourceId !== null) {
-            $model->where('data_source_id', $dataSourceId);
-        }
-
-        if (in_array($blocked, ['0', '1'], true)) {
-            $model->where('blocked', (int) $blocked);
-        }
-
-        if ($fromDate !== '') {
-            $model->where('from_date >=', $fromDate);
-        }
-
-        if ($toDate !== '') {
-            $model->where('to_date <=', $toDate);
-        }
-
-        $occurrences = $model->orderBy($sort, $direction)->paginate(20);
-
-        return $this->renderPage('occurrences/index', [
+        return $this->renderPage('occurrences/index', array_merge($page, [
             'pageTitle' => 'Occurrences',
             'metaDescription' => 'Occurrences list.',
             'bodyClass' => 'app-shell',
-            'occurrences' => $occurrences,
-            'pager' => $model->pager,
-            'sort' => $sort,
-            'direction' => $direction,
-            'filters' => [
-                'taxon_id' => $taxonId,
-                'data_source_id' => $dataSourceId,
-                'blocked' => $blocked,
-                'from_date' => $fromDate,
-                'to_date' => $toDate,
-            ],
-            'dataSources' => $this->dataSourceOptions(),
-        ]);
+        ]));
     }
 
     /**

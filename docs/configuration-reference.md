@@ -95,6 +95,22 @@ NBN occurrence imports use `https://records-ws.nbnatlas.org/occurrences/search`.
 
 See [Import](import.md) for the required import order and source behaviour.
 
+## Staff search presentation
+
+- `taxonSearch.classificationRanks`: comma-separated, ordered reporting ranks shown as
+  classification filters and columns on the occurrence and taxa indexes. Defaults to `Family`.
+  Use an empty string to hide classification filters, or `Family,Genus` to show both.
+
+This is a presentation subset of `import.taxonRanks`, not an import or schema setting.
+Every selected rank needs imported rank metadata and its existing `<rank>_id` columns on both
+taxa and occurrences. The default Family filter is omitted with a warning if unavailable.
+Other unavailable classification configurations raise an explicit configuration error.
+The taxa-only Rank selector offers available configured reporting ranks independently.
+
+```dotenv
+taxonSearch.classificationRanks = 'Family,Genus'
+```
+
 ## Incremental derived statistics
 
 - `taxonYearStats.historyYears`: completed years retained by the yearly statistics rebuild; zero

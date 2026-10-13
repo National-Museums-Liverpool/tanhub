@@ -4,6 +4,7 @@ namespace Tests;
 
 use App\Services\Export\ExportService;
 use App\Services\Export\ExportTemplate;
+use CodeIgniter\Events\Events;
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\FeatureTestTrait;
 use CodeIgniter\Shield\Test\AuthenticationTesting;
@@ -21,8 +22,13 @@ final class ExportsTest extends CIUnitTestCase
     use FeatureTestTrait;
     use AuthenticationTesting;
 
+    /** @var Exports Per-test processing and storage limits. */
     private Exports $limits;
+
+    /** @var ExportService Isolated export lifecycle service. */
     private ExportService $exports;
+
+    /** @var string Private random test-artifact directory. */
     private string $directory;
 
     /**
@@ -589,7 +595,29 @@ final class ExportsTest extends CIUnitTestCase
      */
     public function testTaxonOccurrenceEvidenceAndCancelledCleanup(): void
     {
-        $job = $this->finish($this->exports->create(1, 'taxa', ['year' => '2010'], 'grid'));
+        $this->limits->batchSize = 1;
+        $evidenceSql = [];
+        $listener = static function (\CodeIgniter\Database\Query $query) use (&$evidenceSql): void {
+            $sql = $query->getQuery();
+            if (str_contains($sql, 'evidence') && str_contains($sql, '2010-01-01')) {
+                $evidenceSql[] = $sql;
+            }
+        };
+        Events::on('DBQuery', $listener);
+        try {
+            $first = $this->exports->create(1, 'taxa', ['year' => '2010'], 'grid');
+            $first = $this->exports->process($first['uuid'], 1);
+        } finally {
+            Events::removeListener('DBQuery', $listener);
+        }
+        $this->assertSame(1, (int) $first['capture_id']);
+        $this->assertSame(0, (int) $first['captured_rows']);
+        $this->assertNotEmpty($evidenceSql);
+        $this->assertMatchesRegularExpression(
+            '/evidence.*(?:taxon_id|species_id).*IN\s*\(\s*1\s*\)/s',
+            implode("\n", $evidenceSql)
+        );
+        $job = $this->finish($first);
         $this->assertSame(['Alpha', 'Alpha', 'Beta'], array_column(array_slice($this->records($job), 1), 0));
         $cancelled = $this->exports->create(1, 'taxa', [], 'grid');
         $this->exports->process($cancelled['uuid'], 1);

@@ -143,6 +143,7 @@ final class ExportService
             if ($template === 'stats') {
                 $contract['statistics_scope'] = $this->statisticsScope($criteria->value('geographic_region_id'));
             }
+            // The ceiling excludes records inserted after this job starts without claiming a snapshot.
             $maximum = $this->db->table($resource)->selectMax('id')->get()->getRowArray();
             $uuid = bin2hex(random_bytes(16));
             $now = gmdate('Y-m-d H:i:s');
@@ -333,7 +334,7 @@ final class ExportService
     }
 
     /**
-     * Capture matching rows in ascending ID order and atomically advance the checkpoint.
+     * Capture one bounded eligible-ID window and atomically advance its checkpoint.
      *
      * @param array<string, mixed> $job Current job.
      * @param array<string, mixed> $contract Frozen template and query criteria.
@@ -347,7 +348,22 @@ final class ExportService
         $taxa = $job['resource'] === 'taxa';
         $criteria = new SearchCriteria($contract['filters'], array_keys($contract['classifications']), $taxa);
         $alias = $taxa ? 't' : 'o';
-        $candidateIds = array_column($search->query($criteria, $taxa, null, true)
+        $candidateCriteria = $criteria;
+        if ($taxa && $criteria->needsOccurrences()) {
+            // Pick taxa by taxonomic filters first. The full query below checks occurrence
+            // evidence only for this bounded ID batch, avoiding a full evidence UNION per batch.
+            $candidateFilters = array_intersect_key($contract['filters'], array_flip(array_merge(
+                ['q', 'taxon_group_id', 'taxon_blocked', 'taxon_id', 'taxon_name', 'rank_id'],
+                array_map(static fn (string $rank): string => $rank . '_id',
+                    array_keys($contract['classifications']))
+            )));
+            $candidateCriteria = new SearchCriteria(
+                $candidateFilters, array_keys($contract['classifications']), true
+            );
+        }
+        // Capture order is deliberately by immutable ID; grid order is frozen separately
+        // in each staged row and applied later by write().
+        $candidateIds = array_column($search->query($candidateCriteria, $taxa, null, true)
             ->where($alias . '.id >', $job['capture_id'])->where($alias . '.id <=', $job['max_id'])
             ->orderBy($alias . '.id')->get($this->config->batchSize)->getResultArray(), 'id');
         $query = $search->query($criteria, $taxa, $taxa ? ($candidateIds ?: [0]) : null)
@@ -393,9 +409,12 @@ final class ExportService
                 $changes['capture_started_at'] = gmdate('Y-m-d H:i:s');
             }
             if ($candidateIds === []) {
+                // Only an empty filtered ID query ends capture; an empty hydration batch can
+                // instead mean matching source rows changed between the two queries.
                 $changes += ['phase' => 'writing', 'capture_finished_at' => gmdate('Y-m-d H:i:s')];
                 $changes['status'] = 'writing';
             } else {
+                // Stage rows and advance together so retries never skip uncaptured IDs.
                 $changes['capture_id'] = $candidateIds[array_key_last($candidateIds)];
             }
             $this->update($job, $changes);
@@ -443,6 +462,7 @@ final class ExportService
             if ($size < $offset) {
                 throw new RuntimeException('CSV is shorter than its committed checkpoint. Regenerate CSV.');
             }
+            // A crash may leave bytes beyond the last DB checkpoint; discard that uncommitted tail.
             if (! ftruncate($file, $offset) || fseek($file, $offset) !== 0) {
                 throw new RuntimeException('Cannot recover the CSV checkpoint.');
             }
@@ -461,6 +481,8 @@ final class ExportService
                 $length = ftell($buffer);
                 $this->checkFileBudget($length);
                 rewind($buffer);
+                // Make appended bytes durable before committing their offset, so a retry can
+                // safely truncate only data that was never acknowledged in the database.
                 if (stream_copy_to_stream($buffer, $file) !== $length || ! fflush($file) || ! fsync($file)) {
                     throw new RuntimeException('CSV batch could not be written durably.');
                 }
@@ -480,6 +502,7 @@ final class ExportService
             fclose($file);
         }
         if ($rows === []) {
+            // Publish only after a subsequent empty read confirms that every staged row is written.
             if (! rename($part, $final)) {
                 throw new RuntimeException('Cannot publish the completed CSV.');
             }
@@ -497,6 +520,8 @@ final class ExportService
      */
     private function after(BaseBuilder $query, array $keys, array $cursor, string $direction): void
     {
+        // Build the lexicographic "after cursor" predicate to match the indexed multi-column
+        // ordering without OFFSET, including ties in the primary and secondary grid sort keys.
         $query->groupStart();
         foreach ($keys as $index => $key) {
             $query->orGroupStart();
@@ -588,6 +613,7 @@ final class ExportService
         $this->db->transException(true)->transBegin();
         try {
             $work();
+            // Staged rows and their progress cursor must commit or roll back as one checkpoint.
             if (! $this->db->transStatus() || ! $this->db->transCommit()) {
                 throw new RuntimeException('Export checkpoint transaction failed.');
             }
@@ -605,6 +631,7 @@ final class ExportService
      */
     private function locked(Closure $work): mixed
     {
+        // One host-local lock serializes admission, capture, writing and cleanup between requests.
         $lock = $this->fileLock('global', LOCK_EX);
         try {
             return $work();

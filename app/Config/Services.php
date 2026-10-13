@@ -22,6 +22,20 @@ use CodeIgniter\Config\BaseService;
 class Services extends BaseService
 {
     /**
+     * Browser-driven CSV export service.
+     *
+     * @param bool $getShared Whether to share the request-scoped service.
+     * @return \App\Services\Export\ExportService Export lifecycle operations.
+     */
+    public static function exportService(bool $getShared = true): \App\Services\Export\ExportService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('exportService');
+        }
+        return new \App\Services\Export\ExportService();
+    }
+
+    /**
      * Homepage counts service.
      *
      * @param bool $getShared Whether to return a shared service instance.

@@ -11,19 +11,7 @@ $taxa = $page['isTaxa'];
 $path = $taxa ? 'taxa' : 'occurrences';
 $title = $taxa ? 'Taxa' : 'Occurrences';
 $filters = $page['filters'];
-$columns = $taxa
-    ? ['scientific_name' => 'Scientific name', 'vernacular_name' => 'Vernacular name',
-        'rank_title' => 'Rank', 'taxon_group_title' => 'Taxon group']
-    : ['from_date' => 'Date', 'scientific_name' => 'Scientific name',
-        'vernacular_name' => 'Vernacular name', 'taxon_group_title' => 'Taxon group'];
-foreach ($page['classifications'] as $alias => $rank) {
-    $columns[$alias . '_name'] = $rank['rank'];
-}
-$columns += $taxa
-    ? ['conservation_status' => 'Conservation status', 'taxon_identifier' => 'Taxon identifier',
-        'blocked' => 'Blocked']
-    : ['regions' => 'Geographic regions', 'grid_ref' => 'Grid ref', 'data_source_title' => 'Data source',
-        'unique_key' => 'Unique key', 'blocked' => 'Blocked'];
+$columns = $page['columnLabels'];
 $rows = $page[$path];
 ?>
 <section class="page-section">

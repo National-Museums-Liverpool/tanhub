@@ -159,6 +159,34 @@ final class TaxonSearchTest extends CIUnitTestCase
     }
 
     /**
+     * ID-only capture queries retain every grid predicate while projecting only IDs.
+     */
+    public function testIdOnlyQueriesMatchGridFilters(): void
+    {
+        $search = new TaxonSearchService();
+        $inputs = [[], ['q' => 'Noctuidae'], ['q' => 'West region'], ['q' => 'Old turnip'],
+            ['taxon_name' => 'Agrotis'], ['taxon_id' => '20'], ['family_id' => '20'],
+            ['taxon_group_id' => '1'], ['blocked' => '0'], ['taxon_blocked' => '0'],
+            ['geographic_region_id' => '1'], ['data_source_id' => '90'], ['year' => '2010'],
+            ['from_date' => '2010-01-01', 'to_date' => '2010-12-31'],
+            ['year' => '2010', 'geographic_region_id' => '1', 'taxon_blocked' => '0']];
+        foreach ([true, false] as $taxa) {
+            foreach ($inputs as $input) {
+                $criteria = $search->criteria($input, $taxa);
+                $alias = $taxa ? 't' : 'o';
+                $expected = array_column($search->query($criteria, $taxa)->orderBy($alias . '.id')
+                    ->get()->getResultArray(), 'id');
+                $actual = $search->query($criteria, $taxa, null, true)->orderBy($alias . '.id')
+                    ->get()->getResultArray();
+                $this->assertSame($expected, array_column($actual, 'id'), json_encode($input));
+                foreach ($actual as $row) {
+                    $this->assertSame(['id'], array_keys($row));
+                }
+            }
+        }
+    }
+
+    /**
      * Containment excludes vague, partial and deleted intervals unless wholly included.
      */
     public function testDateContainmentAndOpenRanges(): void
@@ -354,7 +382,7 @@ final class TaxonSearchTest extends CIUnitTestCase
     }
 
     /**
-     * Staff pages and lookup require authentication and expose no downloads.
+     * Staff pages and lookup require authentication and expose applied-state CSV downloads.
      */
     public function testPagesAndLookup(): void
     {
@@ -391,7 +419,8 @@ final class TaxonSearchTest extends CIUnitTestCase
         $page->assertSee('Agrotis');
         $page->assertSee('Taxon (including descendants)');
         $this->assertStringContainsString('<details id="advanced-search" open>', $page->getBody());
-        $page->assertDontSee('Download');
+        $page->assertSee('Download CSV');
+        $this->assertStringContainsString('exports/new?', $page->getBody());
         $this->get('taxa?year=2012-2010')->assertStatus(400);
         $this->get('taxa?sort[]=bad')->assertStatus(400);
         $occurrences = $this->get('occurrences?year=2010');

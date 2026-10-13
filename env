@@ -160,3 +160,19 @@ Config\Import.indiciaOccurrencesEsEndpoint= 'es'
 # Ordered subset of existing import.taxonRanks shown as filters and columns.
 # This does not change imports or add database columns.
 # taxonSearch.classificationRanks = 'Family'
+
+#--------------------------------------------------------------------
+# ADMIN CSV EXPORTS
+#--------------------------------------------------------------------
+
+# All three budgets must be configured before exports are enabled (bytes).
+# Staging payload excludes database index/storage overhead: provision additional DB capacity.
+# exports.fileBudgetBytes = 10737418240
+# exports.freeReserveBytes = 1073741824
+# exports.stagingBudgetBytes = 2147483648
+# exports.batchSize = 500
+# exports.maxActivePerUser = 2
+# exports.retentionSeconds = 86400
+# exports.inactivitySeconds = 86400
+# Optional Nginx internal location mapped to writable/exports; never expose it publicly.
+# exports.xAccelRedirectPrefix = '/private-exports/'

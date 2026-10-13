@@ -35,11 +35,12 @@ final class TaxonSearchService
      * Reporting columns are installation-specific. Only installed, normalized aliases
      * may become SQL identifiers; request values never define column names.
      *
+     * @param BaseConnection|null $db Explicit connection for bounded export transactions.
      * @throws RuntimeException If a non-default classification setting is unavailable.
      */
-    public function __construct()
+    public function __construct(?BaseConnection $db = null)
     {
-        $this->db = db_connect();
+        $this->db = $db ?? db_connect();
         $configured = config('Import')->taxonRanks;
         $configured = is_array($configured) ? $configured : explode(',', $configured);
         $metadata = $this->db->table('taxon_ranks')->where('deleted_at', null)
@@ -130,26 +131,58 @@ final class TaxonSearchService
      *
      * @param SearchCriteria $criteria Validated search filters.
      * @param bool $taxa Whether to return taxa rather than occurrences.
+     * @param list<int|string>|null $candidateIds Optional bounded export candidate IDs.
+     * @param bool $idsOnly Select matching IDs without unnecessary display joins.
      * @return BaseBuilder Query usable for counting, pagination or future batch output.
      */
-    public function query(SearchCriteria $criteria, bool $taxa): BaseBuilder
+    public function query(SearchCriteria $criteria, bool $taxa, ?array $candidateIds = null, bool $idsOnly = false): BaseBuilder
     {
         $builder = $taxa ? $this->db->table('taxa t') : $this->db->table('occurrences o');
+        $lookupOnly = false;
         if (! $taxa) {
-            $builder->join('taxa t', 't.id = o.taxon_id AND t.deleted_at IS NULL')
-                ->join('taxon_names recorded', 'recorded.id = o.taxon_name_id AND recorded.deleted_at IS NULL', 'left')
-                ->join('data_sources ds', 'ds.id = o.data_source_id', 'left')
-                ->where('o.deleted_at', null);
+            $taxonFilters = array_intersect_key($criteria->values, array_flip(
+                ['q', 'taxon_group_id', 'taxon_blocked', 'taxon_id', 'taxon_name']
+            ));
+            $lookupOnly = $idsOnly && $this->db->DBDriver === 'MySQLi'
+                && array_filter($taxonFilters, static fn (string $value): bool => $value !== '') === [];
+            if ($lookupOnly) {
+                // Prevent a buffered taxon join from sorting the entire ID range before LIMIT.
+                $aliases = $this->db->aliasedTables;
+                $table = $this->db->escapeIdentifiers($this->db->prefixTable('taxa'));
+                $builder->join($table . ' t FORCE INDEX (PRIMARY)',
+                    't.id = o.taxon_id AND t.deleted_at IS NULL', 'inner', false);
+                $this->db->setAliasedTables(array_merge($aliases, ['t']));
+            } else {
+                $builder->join('taxa t', 't.id = o.taxon_id AND t.deleted_at IS NULL');
+            }
+            $builder->where('o.deleted_at', null);
+            if (! $idsOnly || $criteria->value('q') !== '') {
+                $builder->join('taxon_names recorded', 'recorded.id = o.taxon_name_id AND recorded.deleted_at IS NULL', 'left')
+                    ->join('data_sources ds', 'ds.id = o.data_source_id', 'left');
+            }
         }
-        $builder->select($taxa ? 't.*' : 'o.*, t.scientific_name, t.vernacular_name, ds.title AS data_source_title')
-            ->select('tr.rank AS rank_title, tg.title AS taxon_group_title, tg.friendly AS taxon_group_friendly')
-            ->join('taxon_groups tg', 'tg.id = t.taxon_group_id AND tg.deleted_at IS NULL', 'left')
-            ->join('taxon_ranks tr', 'tr.id = t.taxon_rank_id AND tr.deleted_at IS NULL', 'left')
-            ->where('t.deleted_at', null);
+        if ($lookupOnly) {
+            $builder->select('STRAIGHT_JOIN o.id', false);
+        } else {
+            $builder->select($idsOnly ? ($taxa ? 't.id' : 'o.id')
+                : ($taxa ? 't.*' : 'o.*, t.scientific_name, t.vernacular_name, ds.title AS data_source_title'));
+        }
+        $builder->where('t.deleted_at', null);
+        if (! $idsOnly || $criteria->value('q') !== '') {
+            $builder->join('taxon_groups tg', 'tg.id = t.taxon_group_id AND tg.deleted_at IS NULL', 'left')
+                ->join('taxon_ranks tr', 'tr.id = t.taxon_rank_id AND tr.deleted_at IS NULL', 'left');
+        }
+        if (! $idsOnly) {
+            $builder->select('tr.rank AS rank_title, tr.sort_order AS rank_order, tg.title AS taxon_group_title, tg.friendly AS taxon_group_friendly');
+        }
         foreach ($this->classifications as $alias => $rank) {
             $owner = $taxa ? 't' : 'o';
-            $builder->join("taxa c_{$alias}", "c_{$alias}.id = {$owner}.{$alias}_id AND c_{$alias}.deleted_at IS NULL", 'left')
-                ->select("c_{$alias}.scientific_name AS {$alias}_name");
+            if (! $idsOnly || $criteria->value('q') !== '') {
+                $builder->join("taxa c_{$alias}", "c_{$alias}.id = {$owner}.{$alias}_id AND c_{$alias}.deleted_at IS NULL", 'left');
+            }
+            if (! $idsOnly) {
+                $builder->select("c_{$alias}.scientific_name AS {$alias}_name");
+            }
             if ($criteria->value($alias . '_id') !== '') {
                 $builder->where("{$owner}.{$alias}_id", $criteria->value($alias . '_id'));
             }
@@ -171,7 +204,7 @@ final class TaxonSearchService
             $this->applyTextSearch($builder, $criteria->value('q'), $taxa);
         }
         if ($taxa && $criteria->needsOccurrences()) {
-            $matches = $this->matchingTaxa($criteria);
+            $matches = $this->matchingTaxa($criteria, $candidateIds);
             $builder->join(
                 '(' . $matches->getCompiledSelect(false) . ') matching_taxa',
                 'matching_taxa.taxon_id = t.id',
@@ -200,9 +233,10 @@ final class TaxonSearchService
      * a Species projection can point at an aggregate without making that row a species.
      *
      * @param SearchCriteria $criteria Validated occurrence and rank filters.
+     * @param list<int|string>|null $candidateIds Optional bounded taxa candidates.
      * @return BaseBuilder Matching taxon IDs suitable for joining to the taxa list.
      */
-    private function matchingTaxa(SearchCriteria $criteria): BaseBuilder
+    private function matchingTaxa(SearchCriteria $criteria, ?array $candidateIds = null): BaseBuilder
     {
         $evidence = $this->db->table('occurrences evidence')
             ->join('taxa exact_taxon', 'exact_taxon.id = evidence.taxon_id AND exact_taxon.deleted_at IS NULL')
@@ -214,6 +248,9 @@ final class TaxonSearchService
         }
         $this->applyOccurrenceFilters($evidence, $criteria, 'evidence');
         $matches = (clone $evidence)->select('evidence.taxon_id AS taxon_id');
+        if ($candidateIds !== null) {
+            $matches->whereIn('evidence.taxon_id', $candidateIds);
+        }
         if ($criteria->value('rank_id') !== '') {
             $matches->where('exact_taxon.taxon_rank_id', $criteria->value('rank_id'));
         }
@@ -225,6 +262,9 @@ final class TaxonSearchService
                 ->join('taxa reporting_taxon', "reporting_taxon.id = evidence.{$alias}_id")
                 ->where('reporting_taxon.taxon_rank_id', $rank['id'])
                 ->where('reporting_taxon.deleted_at', null);
+            if ($candidateIds !== null) {
+                $projection->whereIn("evidence.{$alias}_id", $candidateIds);
+            }
             $matches->union($projection);
         }
 
@@ -244,35 +284,10 @@ final class TaxonSearchService
     public function page(array $input, bool $taxa): array
     {
         $criteria = $this->criteria($input, $taxa);
-        $sorts = $taxa
-            ? ['id' => 't.id', 'taxon_identifier' => 't.taxon_identifier', 'scientific_name' => 't.scientific_name',
-                'vernacular_name' => 't.vernacular_name', 'conservation_status' => 't.conservation_status',
-                'taxon_group_title' => 'tg.title', 'rank_title' => 'tr.sort_order', 'blocked' => 't.blocked']
-            : ['id' => 'o.id', 'unique_key' => 'o.unique_key', 'from_date' => 'o.from_date', 'to_date' => 'o.to_date',
-                'grid_ref' => 'o.grid_ref', 'data_source_id' => 'o.data_source_id', 'blocked' => 'o.blocked',
-                'taxon_id' => 'o.taxon_id', 'taxon_name_id' => 'o.taxon_name_id',
-                'scientific_name' => 't.scientific_name', 'vernacular_name' => 't.vernacular_name',
-                'taxon_group_title' => 'tg.title', 'data_source_title' => 'ds.title'];
-        foreach ($this->classifications as $alias => $rank) {
-            $sorts[$alias . '_name'] = 'c_' . $alias . '.scientific_name';
-        }
-        $sort = $taxa ? 'scientific_name' : 'from_date';
-        $direction = $taxa ? 'asc' : 'desc';
-        foreach (['sort', 'direction'] as $key) {
-            if (isset($input[$key]) && $input[$key] !== '') {
-                $value = is_string($input[$key]) ? strtolower($input[$key]) : '';
-                if (($key === 'sort' && isset($sorts[$value]))
-                    || ($key === 'direction' && in_array($value, ['asc', 'desc'], true))) {
-                    if ($key === 'sort') {
-                        $sort = $value;
-                    } else {
-                        $direction = $value;
-                    }
-                } else {
-                    $criteria->errors[$key] = 'Choose a valid sort option.';
-                }
-            }
-        }
+        $ordering = $this->ordering($input, $taxa);
+        $criteria->errors += $ordering['errors'];
+        $sort = $ordering['sort'];
+        $direction = $ordering['direction'];
         $page = filter_var($input['page'] ?? 1, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         if ($page === false) {
             $criteria->errors['page'] = 'Choose a valid page number.';
@@ -281,12 +296,7 @@ final class TaxonSearchService
         $query = $this->query($criteria, $taxa);
         // Resetting the count builder would clear shared connection aliases needed by the row query.
         $total = (clone $query)->countAllResults(false);
-        $query->orderBy($sorts[$sort], $direction);
-        if (! $taxa && $sort === 'from_date') {
-            $query->orderBy('o.to_date', $direction);
-        }
-        // Equal labels/dates must retain a stable order across page boundaries.
-        $query->orderBy($taxa ? 't.id' : 'o.id', $direction);
+        $this->orderQuery($query, $ordering, $taxa);
         $rows = $query->get(20, ($page - 1) * 20)->getResultArray();
         $pager = service('pager');
         $pager->store('default', $page, 20, $total);
@@ -306,7 +316,172 @@ final class TaxonSearchService
             'isTaxa' => $taxa, 'filters' => $criteria->values, 'errors' => $criteria->errors,
             'q' => $criteria->value('q'), 'sort' => $sort, 'direction' => $direction,
             'pager' => $pager, 'total' => $total, 'selectedTaxon' => $selected, 'taxonMatches' => $matches,
+            'filterLabels' => $this->filterLabels($taxa), 'columnLabels' => $this->columnLabels($taxa),
         ]);
+    }
+
+    /**
+     * Validate the shared grid/export ordering without running the page query.
+     *
+     * @param array<string, mixed> $input Submitted ordering.
+     * @param bool $taxa Whether this is the taxa list.
+     * @return array<string, mixed> Sort key, SQL column, direction and validation errors.
+     */
+    public function ordering(array $input, bool $taxa): array
+    {
+        $sorts = $taxa
+            ? ['id' => 't.id', 'taxon_identifier' => 't.taxon_identifier', 'scientific_name' => 't.scientific_name',
+                'vernacular_name' => 't.vernacular_name', 'conservation_status' => 't.conservation_status',
+                'taxon_group_title' => 'tg.title', 'rank_title' => 'tr.sort_order', 'blocked' => 't.blocked']
+            : ['id' => 'o.id', 'unique_key' => 'o.unique_key', 'from_date' => 'o.from_date', 'to_date' => 'o.to_date',
+                'grid_ref' => 'o.grid_ref', 'data_source_id' => 'o.data_source_id', 'blocked' => 'o.blocked',
+                'taxon_id' => 'o.taxon_id', 'taxon_name_id' => 'o.taxon_name_id',
+                'scientific_name' => 't.scientific_name', 'vernacular_name' => 't.vernacular_name',
+                'taxon_group_title' => 'tg.title', 'data_source_title' => 'ds.title'];
+        foreach ($this->classifications as $alias => $rank) {
+            $sorts[$alias . '_name'] = 'c_' . $alias . '.scientific_name';
+        }
+        $sort = $taxa ? 'scientific_name' : 'from_date';
+        $direction = $taxa ? 'asc' : 'desc';
+        $errors = [];
+        foreach (['sort', 'direction'] as $key) {
+            if (isset($input[$key]) && $input[$key] !== '') {
+                $value = is_string($input[$key]) ? strtolower($input[$key]) : '';
+                if (($key === 'sort' && isset($sorts[$value]))
+                    || ($key === 'direction' && in_array($value, ['asc', 'desc'], true))) {
+                    if ($key === 'sort') {
+                        $sort = $value;
+                    } else {
+                        $direction = $value;
+                    }
+                } else {
+                    $errors[$key] = 'Choose a valid sort option.';
+                }
+            }
+        }
+        return ['sort' => $sort, 'direction' => $direction, 'column' => $sorts[$sort], 'errors' => $errors];
+    }
+
+    /**
+     * Apply the grid's complete deterministic ordering.
+     *
+     * @param BaseBuilder $query Filtered query.
+     * @param array<string, mixed> $ordering Validated ordering.
+     * @param bool $taxa Whether to order taxa.
+     */
+    public function orderQuery(BaseBuilder $query, array $ordering, bool $taxa): void
+    {
+        $query->orderBy($ordering['column'], $ordering['direction']);
+        if (! $taxa && $ordering['sort'] === 'from_date') {
+            $query->orderBy('o.to_date', $ordering['direction']);
+        }
+        $query->orderBy($taxa ? 't.id' : 'o.id', $ordering['direction']);
+    }
+
+    /**
+     * Return configured visible classifications for a frozen export contract.
+     *
+     * @return array<string, array<string, mixed>> Classification rank metadata.
+     */
+    public function classifications(): array
+    {
+        return $this->classifications;
+    }
+
+    /**
+     * Share filter captions between search controls and export confirmation.
+     *
+     * @param bool $taxa Whether the controls belong to the taxa list.
+     * @return array<string, string> Filter keys and user-facing captions.
+     */
+    public function filterLabels(bool $taxa): array
+    {
+        $labels = ['q' => 'Search any descriptive field', 'year' => 'Year',
+            'geographic_region_id' => 'Geographic region', 'taxon_group_id' => 'Taxon group',
+            'taxon_name' => 'Taxon (including descendants)', 'taxon_id' => 'Selected taxon',
+            'data_source_id' => $taxa ? 'Data source (matching records)' : 'Data source',
+            'taxon_blocked' => 'Taxon blocked', 'blocked' => 'Occurrence blocked',
+            'from_date' => 'From date', 'to_date' => 'To date'];
+        if ($taxa) {
+            $labels['rank_id'] = 'Rank';
+        }
+        foreach ($this->classifications as $alias => $rank) {
+            $labels[$alias . '_id'] = $rank['rank'];
+        }
+        return $labels;
+    }
+
+    /**
+     * Share grid column captions with export ordering summaries.
+     *
+     * @param bool $taxa Whether displaying taxa rather than occurrences.
+     * @return array<string, string> Visible grid columns in display order.
+     */
+    public function columnLabels(bool $taxa): array
+    {
+        $columns = $taxa
+            ? ['scientific_name' => 'Scientific name', 'vernacular_name' => 'Vernacular name',
+                'rank_title' => 'Rank', 'taxon_group_title' => 'Taxon group']
+            : ['from_date' => 'Date', 'scientific_name' => 'Scientific name',
+                'vernacular_name' => 'Vernacular name', 'taxon_group_title' => 'Taxon group'];
+        foreach ($this->classifications as $alias => $rank) {
+            $columns[$alias . '_name'] = $rank['rank'];
+        }
+        return $columns + ($taxa
+            ? ['conservation_status' => 'Conservation status', 'taxon_identifier' => 'Taxon identifier',
+                'blocked' => 'Blocked']
+            : ['regions' => 'Geographic regions', 'grid_ref' => 'Grid ref', 'data_source_title' => 'Data source',
+                'unique_key' => 'Unique key', 'blocked' => 'Blocked']);
+    }
+
+    /**
+     * Resolve applied criteria to the same labels and selected captions as search controls.
+     *
+     * @param SearchCriteria $criteria Validated filters with any visible errors.
+     * @param array<string, mixed> $ordering Validated grid ordering.
+     * @param bool $taxa Whether summarising the taxa list.
+     * @return list<array{label: string, value: string}> Human-readable non-empty filters and ordering.
+     */
+    public function summary(SearchCriteria $criteria, array $ordering, bool $taxa): array
+    {
+        $labels = $this->filterLabels($taxa);
+        $references = ['geographic_region_id' => ['geographic_regions', 'higher_geography'],
+            'taxon_group_id' => ['taxon_groups', 'title'], 'taxon_id' => ['taxa', 'scientific_name'],
+            'data_source_id' => ['data_sources', 'title'], 'rank_id' => ['taxon_ranks', 'rank']];
+        foreach ($this->classifications as $alias => $rank) {
+            $references[$alias . '_id'] = ['taxa', 'scientific_name'];
+        }
+        $summary = [];
+        foreach ($criteria->values as $key => $value) {
+            if ($value === '') {
+                continue;
+            }
+            if (isset($references[$key])) {
+                [$table, $field] = $references[$key];
+                $row = isset($criteria->errors[$key]) ? null : $this->db->table($table)
+                    ->where('id', $value)->get()->getRowArray();
+                if ($row === null) {
+                    $value = 'Unavailable selection';
+                } elseif ($key === 'taxon_group_id' && ! empty($row['friendly'])) {
+                    $value = $row['friendly'];
+                } elseif ($key === 'taxon_id') {
+                    $value = $row['scientific_name'] . (empty($row['vernacular_name'])
+                        ? '' : ' - ' . $row['vernacular_name']);
+                } else {
+                    $value = $row[$field];
+                }
+            } elseif (in_array($key, ['blocked', 'taxon_blocked'], true)
+                && ! isset($criteria->errors[$key])) {
+                $value = $value === '1' ? 'Yes' : 'No';
+            }
+            $summary[] = ['label' => $labels[$key], 'value' => (string) $value];
+        }
+        $sortLabels = $this->columnLabels($taxa) + ['id' => $taxa ? 'Taxon ID' : 'Occurrence ID',
+            'to_date' => 'To date', 'data_source_id' => 'Data source ID', 'taxon_id' => 'Taxon ID',
+            'taxon_name_id' => 'Recorded name ID'];
+        $summary[] = ['label' => 'Sort by', 'value' => $sortLabels[$ordering['sort']]];
+        $summary[] = ['label' => 'Direction', 'value' => $ordering['direction'] === 'asc' ? 'Ascending' : 'Descending'];
+        return $summary;
     }
 
     /**

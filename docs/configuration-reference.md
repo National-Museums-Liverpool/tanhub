@@ -1,5 +1,36 @@
 # Configuration reference
 
+## Admin CSV exports
+
+Exports are disabled until all three positive byte limits are configured:
+
+- `exports.fileBudgetBytes`: total private artifact-directory allowance.
+- `exports.freeReserveBytes`: minimum free filesystem space remaining after a batch write.
+- `exports.stagingBudgetBytes`: maximum staged JSON payload bytes per export. Allow extra database
+  quota for rows, indexes and transactional overhead; this is not a measurement of physical DB size.
+
+Processing uses private files under `writable/exports` on one application host.
+Other settings:
+
+- `exports.batchSize`: matching-ID capture and CSV-writing batch limit; default `500`.
+- `exports.maxActivePerUser`: unfinished jobs allowed per user; default `2`.
+- `exports.retentionSeconds`: completed-file lifetime; default `86400`.
+- `exports.inactivitySeconds`: unfinished-job lifetime without committed progress; default `86400`.
+- `exports.historySeconds`: terminal job history retention; default `604800`.
+- `exports.cleanupBatchSize`: staged rows deleted per cleanup job; default `500`.
+- `exports.xAccelRedirectPrefix`: optional trusted Nginx internal URL prefix ending in `/`.
+  Empty uses bounded PHP streaming. See [Installation](installation.md) for protected configuration.
+
+Start conservatively and measure processing-request duration on your host. Smaller batches bound
+PHP work but cannot guarantee that every SQL filter or download meets the hosting timeout.
+Capture applies filters before its ID limit and then hydrates only the selected batch. On MySQL,
+occurrence ID selection without taxon filters starts with occurrences and uses a primary-key taxon
+lookup to avoid a buffered/reordered join sorting the entire occurrence range. Occurrence indexes
+remain available for date/source filters. Taxon-filtered queries retain normal optimizer choices.
+All numeric settings must be positive. Changing classifications during capture requires creating
+a new export. Template version 2 simplifies statistics headings and moves scope to metadata;
+existing version 1 exports retain their frozen headings and can still finish.
+
 Copy `env` to `.env`, then uncomment only the settings you need to change. Use this page to check
 the available values and defaults. Start with [Installation](installation.md) for first-run setup;
 see [Administration](administration.md) for media maintenance.

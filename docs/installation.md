@@ -1,5 +1,64 @@
 # Installation
 
+## Enable admin CSV exports
+
+Exports need no background worker, cron or ZIP extension. The browser advances short capture and
+CSV-writing requests, with durable checkpoints between requests. Use 64-bit PHP and transactional
+MySQL/InnoDB job/staging tables; allow sufficient database space for full projected export rows.
+The staging index requires InnoDB support for a 3,072-byte index key with utf8mb4.
+
+Apply migrations, then configure all three budgets in `.env`, using values appropriate for your
+hosting quota:
+
+```dotenv
+exports.fileBudgetBytes = 10737418240
+exports.freeReserveBytes = 1073741824
+exports.stagingBudgetBytes = 2147483648
+exports.batchSize = 500
+```
+
+The figures are examples, not a capacity promise. Staging payload allowance excludes database
+index/row/undo overhead. Source filters can still require substantial database work; verify broad
+and selective searches on your host before enabling multi-million-row exports.
+
+The application creates `writable/exports` privately. Its PHP user must be able to create, append,
+truncate, flush and rename files there. Do not map this directory to a public URL. Export files
+must not be symbolic links. Initial support assumes a single host and local artifact storage.
+
+The My downloads page performs bounded cleanup. Expired downloads become inaccessible immediately,
+but physical files/staged rows can remain until traffic or optional scheduled cleanup reclaims
+them. For quiet sites or large staging tables, schedule the same bounded operation:
+
+```cron
+* * * * * /usr/bin/php /var/www/tanhub/spark exports:cleanup >> /var/www/tanhub/writable/logs/export-cleanup.log 2>&1
+```
+
+Each invocation performs bounded work; it does not generate exports. Account for log retention
+using your existing maintenance. Cleanup never silently evicts unexpired downloads to admit work.
+
+### Efficient large-file delivery
+
+Default delivery reads chunks rather than loading the CSV into PHP memory, but a very large
+transfer can still exceed a host's PHP/web timeout. If you control Nginx, configure an internal
+location and offload file delivery:
+
+```nginx
+location /private-exports/ {
+    internal;
+    alias /var/www/tanhub/writable/exports/;
+}
+```
+
+```dotenv
+exports.xAccelRedirectPrefix = '/private-exports/'
+```
+
+Nginx needs read access to the private files. The internal location must remain inaccessible to
+direct client requests. PHP authorises ownership/expiry before sending `X-Accel-Redirect`.
+A short cleanup grace period protects Nginx opening the file; normal PHP delivery holds a shared
+file lock for its response lifetime. Sites without offloading must verify delivery against their
+provider's limits. Browser-driven batching is not a guarantee for every shared-hosting plan.
+
 Use this guide to install Tanhub locally or on a server. By the end, you will have a working
 database, an administrator account, and the configuration needed to import data.
 

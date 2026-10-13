@@ -112,6 +112,7 @@ abstract class BaseController extends Controller
             ]);
             $navItems[] = $this->navLink('Occurrences', site_url('occurrences'), 'occurrences', 'link');
             $navItems[] = $this->navLink('Imports', site_url('imports'), 'imports', 'link');
+            $navItems[] = $this->navLink('My downloads', site_url('exports'), 'exports', 'link');
         }
 
         if ($isAdmin) {

@@ -57,6 +57,8 @@ Vagrantfile
 /writable/import-logs/*
 !/writable/import-logs/index.html
 
+/writable/exports/*
+
 /writable/session/*
 !/writable/session/index.html
 

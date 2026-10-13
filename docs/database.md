@@ -1,5 +1,47 @@
 # Database schema
 
+## Temporary admin export storage
+
+### export_jobs
+
+Browser-driven CSV jobs store an owner ID and opaque UUID, resource and frozen JSON contract,
+including the optional grid-count estimate and statistics scope caption. The estimate is retained
+for progress only; capture termination and CSV writing use actual matching rows. Jobs also store
+phase/status, source high-water ID and capture cursor, captured row/payload counters, written row
+count, committed file offset and output cursor. Creation/progress, capture completion, completion
+and expiry timestamps describe the rolling capture; `error` contains a safe user-facing failure.
+`staging_cleaned` and `files_cleaned` record bounded cleanup completion so retained history cannot
+starve newer jobs of cleanup.
+`capture_started_at` records the first committed capture batch separately from job creation and
+the ID ceiling. `delivery_until` gives offloaded delivery a short file-opening grace period;
+download authorisation still enforces the original expiry.
+
+Indexes support UUID lookup, owner/status history, inactive jobs and file expiry. There is no
+foreign key to the owner: deleting a user must not cascade away cleanup metadata or trigger a
+large staging deletion. All web access checks current ownership and staff membership.
+
+### export_rows
+
+Immutable captured rows use a compound primary key `(job_id, record_id)`. `payload` stores the
+projected CSV cells as JSON. `sort_present`, `sort_value`, `date_present` and `date_value` freeze
+the grid's primary and secondary ordering; an indexed compound key ending in `record_id`
+supports ascending and descending keyset output. Numeric keys use order-preserving text encoding.
+Text keys retain the database collation, which export creation validates against the source.
+
+MySQL uses `VARCHAR(255)` for the primary key value, keeping the compound index below the
+modern InnoDB 3,072-byte key limit with utf8mb4. Legacy InnoDB configurations with smaller key
+limits require upgrading their index configuration before installing the migration.
+The migration explicitly selects InnoDB for both export tables on MySQL-compatible drivers
+so capture/checkpoint transactions remain atomic even if the server default engine differs.
+SQLite uses its native text ordering for portable tests. Source relationships are deliberately
+not foreign keys: deleting/editing live data must not alter captured rows.
+
+Rows are removed in bounded cleanup batches after CSV completion, cancellation or expiry.
+No cascading job foreign key is used, so cleanup can remove millions of rows incrementally.
+Database payload limits measure JSON bytes only; provision additional space for rows, indexes
+and transactional overhead. Completed files expire after 24 hours, inactive unfinished jobs
+after 24 hours without committed progress, and terminal metadata after configurable retention.
+
 Tanhub stores a normalized copy of taxonomy and occurrence data for fast, consistent reporting. It
 keeps the source identity of each record, but the schema is not a raw archive of every source field.
 

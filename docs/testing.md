@@ -74,9 +74,40 @@ vendor/bin/phpunit -c phpunit.dist.xml \
     --filter 'TaxonSearchTest|SearchCriteriaTest|TaxaPagesTest|DataSourcesOccurrencesPagesTest'
 ```
 
-The query service constructs unpaginated queries independently of HTML rendering. The same
-criteria and batch row preparation can be reused by a future download feature without
-reimplementing filters.
+The query service constructs unpaginated queries independently of HTML rendering. CSV exports
+reuse its criteria, batch preparation and complete ordering without reimplementing filters.
+
+## Run staff export checks
+
+Portable feature tests cover rolling ID capture, frozen values, grid ordering, null/date ties,
+CSV escaping/formula safety, file checkpoint recovery, ownership, quotas, expiry and delivery locks:
+
+```bash
+vendor/bin/phpunit -c phpunit.dist.xml --no-coverage \
+    tests/Feature/ExportsTest.php tests/Feature/TaxonSearchTest.php
+```
+
+The opt-in MySQL-compatible suite installs randomly prefixed test tables only in an isolated
+database whose name ends in `_exports_validation`. Never point it at a production database.
+Use a dedicated test user and configure access through environment variables:
+
+```bash
+TANHUB_EXPORT_TEST_DATABASE=tanhub_exports_validation \
+TANHUB_EXPORT_TEST_HOST=127.0.0.1 \
+TANHUB_EXPORT_TEST_USER=test_user \
+vendor/bin/phpunit -c phpunit.dist.xml --no-coverage tests/Integration/ExportMySqlTest.php
+```
+
+`TANHUB_EXPORT_TEST_PASSWORD` and `TANHUB_EXPORT_TEST_PORT` configure authentication/port.
+The host can also be an absolute local socket path. The suite checks every taxon sort against
+database-native case/accent ordering.
+
+Set `TANHUB_EXPORT_SCALE_ROWS=2000000` to enable the large occurrence fixture. It verifies every
+output row against an independent source traversal after repeated capture/writing requests,
+enforces a five-second processing-request budget and a 128 MiB peak PHP-memory ceiling, and
+reports measured maximum batch duration. Expect substantial disposable database storage.
+The test deletes its own prefixed tables/files afterwards. It does not certify every host or
+every filtered query; inspect representative query plans and test your intended deployment.
 
 ## Run only taxon media focused tests
 

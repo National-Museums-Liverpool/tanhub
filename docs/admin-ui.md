@@ -1,5 +1,51 @@
 # Admin user interface
 
+## CSV downloads
+
+Admins and managers can use **Download CSV**, next to Search on the taxa and occurrences lists.
+It exports all matching rows using the applied filters and grid sort, not just the current page.
+Apply edited form values with Search first: download confirmation uses the displayed search.
+
+Choose a grid-equivalent template, detailed occurrences, or taxa with stored all-date statistics.
+Detailed occurrences include raw dates, identifiers, recorder/identifier, locality, coordinates
+and moderation context. Stored statistics use the selected region, or global scope; year/source
+filters select qualifying taxa but do not recalculate the stored statistics.
+Statistics headings use short names such as **Occurrences count** and **Stats available**.
+The shared statistics scope appears in export metadata rather than repeating in every CSV row.
+
+New exports start processing automatically when the progress page opens. Capture shows
+committed row counts against the estimated total passed from the grid. This estimate can change
+as live data changes; it never limits the export or determines when capture finishes.
+CSV writing shows progress against the exact captured total. Links without a grid count show an
+activity indicator during capture. **Pause** stops after the current request. **My downloads**
+lets you return and click **Resume**. Closing the tab pauses work. Without JavaScript,
+**Process next batch** advances one batch
+at a time. Confirmation displays search-control captions and selected names rather than internal
+IDs. Progress identifies the chosen column template by its full name; its version identifies the
+column layout, not the data version.
+
+This is a rolling capture, not a point-in-time snapshot. Capture applies the search filters in SQL,
+then selects a batch of matching IDs in ascending order up to the ID ceiling set at creation.
+It does not send batches of unrelated records through the browser. Already captured values are
+frozen. Edits/deletions before a row is reached can change membership; edits to IDs already passed
+are not revisited. Later
+higher-ID inserts are excluded. CSV ordering uses the captured values and original grid sort.
+
+Downloads, progress and history are private to the requesting staff member, including for admins.
+Completed files expire after 24 hours by default; unfinished exports expire after 24 hours without
+committed progress. A maximum of two unfinished exports per user prevents abandoned work
+accumulating. Deployment settings can change these limits.
+
+If a request fails, committed batches remain safe. Reload to see server progress and Resume after
+resolving the reported error. **Regenerate CSV** is available during writing to rebuild output from
+the staged values without recapturing live data. Cancel and create a new export for a fresh capture.
+
+CSV uses UTF-8 with a BOM, quoted fields and ISO raw dates. Text that could execute as a spreadsheet
+formula receives a leading apostrophe; typed numeric values keep their sign. Geographic regions
+are semicolon-separated. Missing statistics are explicitly unavailable, not zero counts.
+Excel cannot display more than 1,048,576 rows in a worksheet: use a suitable data tool for larger
+files. ZIP and automatic file splitting are not offered in this release.
+
 ## Purpose
 
 The admin user interface gives authenticated staff a place to manage reference data, moderate

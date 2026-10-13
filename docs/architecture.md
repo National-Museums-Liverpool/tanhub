@@ -29,6 +29,24 @@ both staff administration pages and a read-only REST API.
 
 ## Request flows
 
+### Browser-driven staff exports
+
+`TaxonSearchService` shares filter semantics and validated grid ordering with exports.
+The browser posts one CSRF-protected batch at a time. Capture first selects a bounded window of
+base IDs, then filters and hydrates only those candidates; empty-match windows still advance.
+Complete projected values and grid sort keys are committed to `export_rows` with the capture
+cursor in a short transaction. No database snapshot or connection survives between requests.
+
+After capture, indexed keyset reads traverse immutable staged rows in grid order. CSV batches
+are flushed before their file offset/output cursor commits. A retry truncates uncommitted tails;
+publication atomically renames the completed file and reconciles interrupted completion.
+Request-scoped local locks serialize competing tabs without reserving a slot for paused jobs.
+
+Owner-only history, actions and delivery recheck staff access. Cleanup removes staged rows in
+bounded batches, protecting active delivery. Artifacts expire independently of cleanup traffic.
+The browser must remain open for automatic advancement; no background processing is implied.
+Optional Nginx internal delivery avoids PHP transfer timeouts. ZIP is intentionally deferred.
+
 ### Staff administration
 
 A request such as `GET /taxa` is routed to `Taxa::index`. The session and

@@ -14,11 +14,10 @@ use RuntimeException;
  *
  * Used by the scheduled/CLI "auto" import entry point (see
  * {@see \App\Commands\ImportAuto}) to decide, without an operator picking a
- * task manually, which single import to run next: first any incomplete
- * taxonomy bootstrap task, then an incomplete occurrence source between
- * scheduled derived runs, then the least-recently-successful report/derived
- * task when its cadence is due, otherwise the least-recently-run occurrence
- * source.
+ * task manually, which single import to run next: first incomplete taxonomy
+ * bootstrap tasks, then runnable prerequisites for unfinished report tasks,
+ * then scheduled report/derived work and occurrence imports according to the
+ * configured cadence.
  * Delegates execution to {@see \App\Services\Import\EntityImportOrchestrator}
  * (via the `importOrchestrator` service), {@see \App\Services\Import\ImportOrchestrator}
  * (via `occurrenceImportOrchestrator`), or {@see DerivedImportRunner} depending
@@ -61,6 +60,15 @@ class AutoImportService
     ];
 
     /**
+     * Report tasks whose unfinished work can be delayed by their prerequisites.
+     *
+     * @var array<int, string>
+     */
+    private const DEPENDENCY_CHAIN_TASKS = [
+        'derived-stats:taxon_stats',
+    ];
+
+    /**
      * Occurrence import source keys eligible for automated runs once all
      * bootstrap taxonomy tasks are complete. Selection picks whichever
      * source was least recently run successfully.
@@ -98,11 +106,11 @@ class AutoImportService
      * Select the next task according to the automation rules.
      *
      * Priority order: (1) the first not-yet-complete taxonomy bootstrap task,
-    * in the fixed order of {@see self::BOOTSTRAP_TASKS}; (2) a due
-    * report/derived task; (3) an incomplete occurrence source, preferring the
-    * least recently successful source; (4) otherwise, whichever occurrence
-    * source (`indicia` or `nbn`) was least recently run successfully. A
-    * derived task that has never succeeded is considered due immediately.
+     * in the fixed order of {@see self::BOOTSTRAP_TASKS}; (2) the least-recently
+     * successful runnable task in a dependency chain for unfinished report
+     * work; (3) a due report/derived task; (4) an incomplete occurrence source;
+     * (5) otherwise, the least-recently-run occurrence source. A derived task
+     * that has never succeeded is considered due immediately.
      *
      * @return array<string, mixed> Selected task metadata. Always includes
      *                              `source_key`, `kind` (`entity`|`derived`|`occurrence`),
@@ -130,6 +138,11 @@ class AutoImportService
         }
 
         $dirtyScopeService = $this->statsDirtyScopeService ?? service('statsDirtyScopeService');
+        $blockingTask = $this->selectBlockingTask($offsetModel, $dirtyScopeService);
+        if ($blockingTask !== null) {
+            return $blockingTask;
+        }
+
         $reportTasks = array_values(array_filter(self::REPORT_TASKS, function (array $task) use ($offsetModel, $dirtyScopeService): bool {
             if ($task['source_key'] === 'derived-stats:taxon_year_stats') {
                 return $this->statsTaskHasWork($offsetModel, $dirtyScopeService, $task['source_key'], StatsDirtyScopeService::TAXON_YEAR);
@@ -206,10 +219,25 @@ class AutoImportService
         string $statType,
     ): bool {
         $dependencyService = $this->taskDependencyService ?? service('importTaskDependencyService');
-        if (! $dependencyService->isRunnable($sourceKey)) {
-            return false;
-        }
+        return $dependencyService->isRunnable($sourceKey)
+            && $this->statsTaskNeedsWork($offsetModel, $dirtyScopeService, $sourceKey, $statType);
+    }
 
+    /**
+     * Determine whether a derived statistics task has incomplete or dirty work.
+     *
+     * @param ImportOffsetModel      $offsetModel Completion state model.
+     * @param StatsDirtyScopeService $dirtyScopeService Dirty statistics queue service.
+     * @param string                 $sourceKey Task source key.
+     * @param string                 $statType Queue statistic type.
+     * @return bool True when the task needs a run.
+     */
+    private function statsTaskNeedsWork(
+        ImportOffsetModel $offsetModel,
+        StatsDirtyScopeService $dirtyScopeService,
+        string $sourceKey,
+        string $statType,
+    ): bool {
         if ($offsetModel->hasSourceKey($sourceKey)) {
             return ! $offsetModel->isComplete($sourceKey)
                 || $dirtyScopeService->hasWork($statType);
@@ -227,6 +255,167 @@ class AutoImportService
         }
 
         return $dirtyScopeService->hasWork($statType);
+    }
+
+    /**
+     * Select the oldest runnable prerequisite for unfinished report work.
+     *
+     * Traverses dependencies from report tasks that need work. If a task has
+     * unfinished prerequisites, only its deepest unfinished prerequisites are
+     * candidates; otherwise the task itself is ready to run. This keeps work
+     * that blocks report completion ahead of unrelated scheduled maintenance.
+     *
+     * @param ImportOffsetModel      $offsetModel Completion state model.
+     * @param StatsDirtyScopeService $dirtyScopeService Dirty statistics queue service.
+     * @return array<string, mixed>|null Selected task metadata, or null when no
+     *                                    unfinished dependency chain exists.
+     */
+    private function selectBlockingTask(
+        ImportOffsetModel $offsetModel,
+        StatsDirtyScopeService $dirtyScopeService,
+    ): ?array {
+        $dependencyService = $this->taskDependencyService ?? service('importTaskDependencyService');
+        $candidates = [];
+
+        foreach (self::DEPENDENCY_CHAIN_TASKS as $sourceKey) {
+            if (! $this->taskNeedsWork($sourceKey, $offsetModel, $dirtyScopeService)) {
+                continue;
+            }
+
+            $candidates = array_merge(
+                $candidates,
+                $this->runnableDependencyLeaves($sourceKey, $offsetModel, $dirtyScopeService),
+            );
+        }
+
+        $candidates = array_values(array_unique($candidates));
+        if ($candidates === []) {
+            return null;
+        }
+
+        $selection = $this->leastRecentlySuccessful($candidates);
+        $sourceKey = (string) $selection['task'];
+        $task = $this->taskMetadata($sourceKey);
+        $task['reason'] = 'unfinished report dependency chain has priority';
+        $task['last_run'] = $selection['last_run'];
+
+        return $task;
+    }
+
+    /**
+     * Return the deepest unfinished tasks on a report task's dependency paths.
+     *
+     * @param string                 $sourceKey Task to inspect.
+     * @param ImportOffsetModel      $offsetModel Completion state model.
+     * @param StatsDirtyScopeService $dirtyScopeService Dirty statistics queue service.
+     * @return array<int, string> Runnable unfinished task source keys.
+     */
+    private function runnableDependencyLeaves(
+        string $sourceKey,
+        ImportOffsetModel $offsetModel,
+        StatsDirtyScopeService $dirtyScopeService,
+    ): array {
+        $dependencyService = $this->taskDependencyService ?? service('importTaskDependencyService');
+        $unfinishedDependencies = array_values(array_filter(
+            $dependencyService->dependenciesOf($sourceKey),
+            fn (string $dependency): bool => $this->taskNeedsWork(
+                $dependency,
+                $offsetModel,
+                $dirtyScopeService,
+            ),
+        ));
+
+        if ($unfinishedDependencies === []) {
+            return [$sourceKey];
+        }
+
+        $leaves = [];
+        foreach ($unfinishedDependencies as $dependency) {
+            $leaves = array_merge(
+                $leaves,
+                $this->runnableDependencyLeaves($dependency, $offsetModel, $dirtyScopeService),
+            );
+        }
+
+        return $leaves;
+    }
+
+    /**
+     * Determine whether a dependency task has incomplete work.
+     *
+     * @param string                 $sourceKey Task source key.
+     * @param ImportOffsetModel      $offsetModel Completion state model.
+     * @param StatsDirtyScopeService $dirtyScopeService Dirty statistics queue service.
+     * @return bool True when the task is incomplete or has queued work.
+     */
+    private function taskNeedsWork(
+        string $sourceKey,
+        ImportOffsetModel $offsetModel,
+        StatsDirtyScopeService $dirtyScopeService,
+    ): bool {
+        if ($sourceKey === 'derived-stats:taxon_year_stats') {
+            return $this->statsTaskNeedsWork(
+                $offsetModel,
+                $dirtyScopeService,
+                $sourceKey,
+                StatsDirtyScopeService::TAXON_YEAR,
+            );
+        }
+
+        if ($sourceKey === 'derived-stats:taxon_stats') {
+            return $this->statsTaskNeedsWork(
+                $offsetModel,
+                $dirtyScopeService,
+                $sourceKey,
+                StatsDirtyScopeService::TAXON,
+            );
+        }
+
+        return ! $offsetModel->isComplete($sourceKey);
+    }
+
+    /**
+     * Build task metadata for a dependency-chain selection.
+     *
+     * @param string $sourceKey Task source key.
+     * @return array<string, mixed> Task metadata understood by {@see self::run()}.
+     *
+     * @throws RuntimeException If the dependency graph references an unregistered task.
+     */
+    private function taskMetadata(string $sourceKey): array
+    {
+        foreach (self::BOOTSTRAP_TASKS as $bootstrapTask) {
+            if ($sourceKey === $bootstrapTask) {
+                return [
+                    'source_key' => $sourceKey,
+                    'kind' => 'entity',
+                    'source' => 'indicia',
+                    'entity' => substr($sourceKey, strlen('indicia-taxonomy:')),
+                ];
+            }
+        }
+
+        foreach (self::OCCURRENCE_TASKS as $occurrenceTask) {
+            if ($sourceKey === $occurrenceTask) {
+                return [
+                    'source_key' => $sourceKey,
+                    'kind' => 'occurrence',
+                    'source' => str_starts_with($sourceKey, 'nbn-') ? 'nbn' : 'indicia',
+                ];
+            }
+        }
+
+        foreach (self::REPORT_TASKS as $reportTask) {
+            if ($sourceKey === $reportTask['source_key']) {
+                return [
+                    'source_key' => $sourceKey,
+                    'kind' => 'derived',
+                    'service' => $reportTask['service'],
+                ];
+            }
+        }
+
+        throw new RuntimeException('Dependency graph references an unregistered import task.');
     }
 
     /**

@@ -74,9 +74,20 @@ class ImportTaskDependencyService
         $offsetModel = $this->importOffsetModel ?? model(ImportOffsetModel::class);
 
         return array_values(array_filter(
-            self::DEPENDENCIES[$sourceKey] ?? [],
+            $this->dependenciesOf($sourceKey),
             static fn (string $dependency): bool => ! $offsetModel->isComplete($dependency),
         ));
+    }
+
+    /**
+     * Return the declared prerequisites for a task.
+     *
+     * @param string $sourceKey Task source key.
+     * @return array<int, string> Prerequisite source keys, in dependency order.
+     */
+    public function dependenciesOf(string $sourceKey): array
+    {
+        return self::DEPENDENCIES[$sourceKey] ?? [];
     }
 
     /**

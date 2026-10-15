@@ -41,7 +41,9 @@ class Import extends BaseConfig
     public int $httpTimeout = 30;
 
     /**
-     * Maximum age in seconds for a UI import task to remain running before recovery.
+     * Legacy UI timeout retained for configuration compatibility.
+     *
+     * Recovery now requires the exclusive import lock, not an elapsed timeout.
      *
      * @var int
      */

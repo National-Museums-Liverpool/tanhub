@@ -14,7 +14,7 @@ use RuntimeException;
  *
  * Used by the scheduled/CLI "auto" import entry point (see
  * {@see \App\Commands\ImportAuto}) to decide, without an operator picking a
- * task manually, which single import to run next: first incomplete taxonomy
+ * task manually, which single import to run next: queued admin requests, incomplete taxonomy
  * bootstrap tasks, then runnable prerequisites for unfinished report tasks,
  * then scheduled report/derived work and occurrence imports according to the
  * configured cadence.
@@ -105,13 +105,15 @@ class AutoImportService
     /**
      * Select the next task according to the automation rules.
      *
-     * Priority order: (1) the first not-yet-complete taxonomy bootstrap task,
+     * Priority order: queued admin work and its prerequisites, then the first
+     * not-yet-complete taxonomy bootstrap task,
      * in the fixed order of {@see self::BOOTSTRAP_TASKS}; (2) the least-recently
      * successful runnable task in a dependency chain for unfinished report
      * work; (3) a due report/derived task; (4) an incomplete occurrence source;
      * (5) otherwise, the least-recently-run occurrence source. A derived task
      * that has never succeeded is considered due immediately.
      *
+     * @param DateTimeInterface|null $now Reserved clock override for selection.
      * @return array<string, mixed> Selected task metadata. Always includes
      *                              `source_key`, `kind` (`entity`|`derived`|`occurrence`),
      *                              and `reason` (human-readable explanation of why
@@ -123,6 +125,11 @@ class AutoImportService
      */
     public function select(?DateTimeInterface $now = null): array
     {
+        $queued = $this->selectQueued();
+        if ($queued !== null) {
+            return $queued;
+        }
+
         $offsetModel = $this->importOffsetModel ?? model(ImportOffsetModel::class);
 
         foreach (self::BOOTSTRAP_TASKS as $sourceKey) {
@@ -296,7 +303,7 @@ class AutoImportService
         $selection = $this->leastRecentlySuccessful($candidates);
         $sourceKey = (string) $selection['task'];
         $task = $this->taskMetadata($sourceKey);
-        $task['reason'] = 'unfinished report dependency chain has priority';
+        $task['reason'] = 'task has not been completed yet so it has priority';
         $task['last_run'] = $selection['last_run'];
 
         return $task;
@@ -419,6 +426,18 @@ class AutoImportService
     }
 
     /**
+     * Select a queued admin request or a prerequisite while holding the import lock.
+     *
+     * @return array<string, mixed>|null Runnable queued work with execution metadata.
+     */
+    public function selectQueued(): ?array
+    {
+        $queued = service('importTaskQueueService')->select();
+
+        return $queued === null ? null : array_merge($this->taskMetadata($queued['source_key']), $queued);
+    }
+
+    /**
      * Select and execute one automated import task.
      *
      * Resolves `limit`/`pageSize` to at least 1, falling back to the
@@ -451,21 +470,44 @@ class AutoImportService
         $limit = max(1, $limit ?: (int) $config->defaultLimit);
         $pageSize = max(1, $pageSize ?: (int) $config->defaultPageSize);
 
+        if (isset($task['queue_id'])) {
+            $result = service('importTaskQueueService')->run(
+                $task,
+                fn (callable $onRunCreated): array => $this->execute($task, $limit, $pageSize, $dryRun, $onRunCreated),
+                $dryRun,
+            );
+        } else {
+            service('importTaskQueueService')->assertRunnable($task['source_key']);
+            $result = $this->execute($task, $limit, $pageSize, $dryRun);
+        }
+
+        return ['task' => $task, 'result' => $result];
+    }
+
+    /**
+     * Dispatch one batch to its existing import runner.
+     *
+     * @param array<string, mixed> $task Execution metadata.
+     * @param int $limit Record limit.
+     * @param int $pageSize Occurrence page size.
+     * @param bool $dryRun Whether data writes are disabled.
+     * @param callable(int): void|null $onRunCreated Run linkage callback.
+     * @return array<string, mixed> Batch result.
+     */
+    private function execute(array $task, int $limit, int $pageSize, bool $dryRun, ?callable $onRunCreated = null): array
+    {
         if ($task['kind'] === 'entity') {
-            $result = service('importOrchestrator')->run('indicia', $task['entity'], $limit, $dryRun, null);
+            $result = service('importOrchestrator')->run('indicia', $task['entity'], $limit, $dryRun, null, $onRunCreated);
         } elseif ($task['kind'] === 'occurrence') {
-            $result = service('occurrenceImportOrchestrator')->run($task['source'], $limit, $pageSize, $dryRun, null);
+            $result = service('occurrenceImportOrchestrator')->run($task['source'], $limit, $pageSize, $dryRun, null, $onRunCreated);
         } elseif ($task['kind'] === 'derived') {
             $runner = $this->derivedImportRunner ?? service('derivedImportRunner');
-            $result = $runner->run($task['source_key'], $task['service'], $dryRun);
+            $result = $runner->run($task['source_key'], $task['service'], $dryRun, $onRunCreated);
         } else {
             throw new RuntimeException('Selected import task is not runnable.');
         }
 
-        return [
-            'task' => $task,
-            'result' => $result,
-        ];
+        return $result;
     }
 
     /**

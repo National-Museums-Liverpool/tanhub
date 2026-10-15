@@ -83,6 +83,7 @@ class ImportOrchestrator
      *                            updates are disabled for this run.
      * @param string|null $checkpointOverride Optional checkpoint to resume from instead
      *                                        of the last successful checkpoint.
+     * @param callable(int): void|null $onRunCreated Callback linking a new run to its queue request.
      *
      * @return array<string, int|string|null> Result with `run_id`, `status`
      *         (`success`|`failed`), `checkpoint` (final checkpoint reached),
@@ -102,6 +103,7 @@ class ImportOrchestrator
         int $pageSize,
         bool $dryRun = false,
         ?string $checkpointOverride = null,
+        ?callable $onRunCreated = null,
     ): array {
         $config = $this->config ?? config(ImportConfig::class);
         $adapterFactory = $this->adapterFactory ?? new OccurrenceSourceAdapterFactory($config);
@@ -157,6 +159,9 @@ class ImportOrchestrator
         $geographicRegionAssignmentFailed = false;
 
         try {
+            if ($onRunCreated !== null) {
+                $onRunCreated($runId);
+            }
             while ($hasMore && $processed < $limit) {
                 $batchLimit = min($pageSize, $limit - $processed);
                 $page = $adapter->fetchPage($checkpoint, $batchLimit);

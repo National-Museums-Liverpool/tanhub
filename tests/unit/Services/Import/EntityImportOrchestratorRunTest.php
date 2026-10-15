@@ -66,12 +66,18 @@ final class EntityImportOrchestratorRunTest extends CIUnitTestCase
         $this->assertFalse($result['has_more']);
     }
 
+    /**
+     * Persist completed progress and link the run before batch execution.
+     */
     public function testRunNonDrySuccessPersistsOffsetAndCompletion(): void
     {
+        $linkedRunId = null;
         $adapter = $this->createMock(ImportSourceAdapterInterface::class);
-        $adapter->method('fetchBatch')->willReturn(new ImportBatch('recording_schemes', 0, [
-            ['external_key' => 'one'],
-        ], 1, false));
+        $adapter->method('fetchBatch')->willReturnCallback(function () use (&$linkedRunId): ImportBatch {
+            $this->assertSame(77, $linkedRunId);
+
+            return new ImportBatch('recording_schemes', 0, [['external_key' => 'one']], 1, false);
+        });
 
         $factory = $this->mockEntityFactory($adapter);
 
@@ -102,7 +108,9 @@ final class EntityImportOrchestratorRunTest extends CIUnitTestCase
             $importOffsetModel,
         );
 
-        $result = $orchestrator->run('indicia', 'recording_schemes', 100, false, 0);
+        $result = $orchestrator->run('indicia', 'recording_schemes', 100, false, 0, static function (int $runId) use (&$linkedRunId): void {
+            $linkedRunId = $runId;
+        });
 
         $this->assertSame('success', $result['status']);
         $this->assertSame(1, $result['next_offset']);

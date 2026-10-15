@@ -80,11 +80,10 @@ class DerivedImportRunner
             'checkpoint' => null,
             'started_at' => date('Y-m-d H:i:s'),
         ]);
-        if ($onRunCreated !== null) {
-            $onRunCreated($runId);
-        }
-
         try {
+            if ($onRunCreated !== null) {
+                $onRunCreated($runId);
+            }
             $result = service($serviceName)->run($dryRun);
             $status = strtolower((string) ($result['status'] ?? 'success')) === 'success'
                 ? 'success'

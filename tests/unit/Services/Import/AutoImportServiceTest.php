@@ -6,6 +6,8 @@ use App\Models\ImportOffsetModel;
 use App\Models\ImportRunModel;
 use App\Services\Import\AutoImportService;
 use App\Services\Import\ImportTaskDependencyService;
+use App\Services\Import\ImportTaskQueueService;
+use App\Services\Stats\StatsDirtyScopeService;
 use CodeIgniter\Test\CIUnitTestCase;
 use DateTimeImmutable;
 
@@ -162,10 +164,73 @@ final class AutoImportDependencyServiceDouble extends ImportTaskDependencyServic
 }
 
 /**
+ * Dirty-scope service double for automated task selection tests.
+ */
+final class AutoImportStatsDirtyScopeServiceDouble extends StatsDirtyScopeService
+{
+    /** @var array<string, bool> */
+    public array $work = [];
+
+    /**
+     * Return the configured dirty-work state.
+     *
+     * @param string $statType Statistic queue type.
+     * @return bool Whether queued or initial-population work remains.
+     */
+    public function hasWork(string $statType): bool
+    {
+        return $this->work[$statType] ?? false;
+    }
+}
+
+/**
  * @internal
  */
 final class AutoImportServiceTest extends CIUnitTestCase
 {
+    /**
+     * Isolate routine selector tests from persisted admin requests.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $queue = $this->createMock(ImportTaskQueueService::class);
+        $queue->method('select')->willReturn(null);
+        \Config\Services::injectMock('importTaskQueueService', $queue);
+    }
+
+    /**
+     * Release the injected queue after each isolated selector test.
+     */
+    protected function tearDown(): void
+    {
+        \Config\Services::reset();
+        parent::tearDown();
+    }
+
+    /**
+     * Prioritise an explicit queued request over incomplete bootstrap imports.
+     */
+    public function testQueuedRequestIsSelectedBeforeRoutineAutomation(): void
+    {
+        $queue = $this->createMock(ImportTaskQueueService::class);
+        $queue->method('select')->willReturn([
+            'source_key' => 'indicia-taxonomy:recording_schemes',
+            'queue_id' => 42,
+            'requested_source_key' => 'derived-stats:taxon_stats',
+            'reason' => 'prerequisite for queued admin request derived-stats:taxon_stats',
+        ]);
+        \Config\Services::injectMock('importTaskQueueService', $queue);
+        $offset = new AutoImportOffsetModelDouble();
+        $offset->completion = ['indicia-taxonomy:recording_schemes' => true];
+
+        $task = (new AutoImportService($offset))->select();
+
+        $this->assertSame(42, $task['queue_id']);
+        $this->assertSame('recording_schemes', $task['entity']);
+        $this->assertSame('entity', $task['kind']);
+    }
+
     /**
      * Verify incomplete bootstrap tasks follow the configured order.
      */
@@ -180,7 +245,13 @@ final class AutoImportServiceTest extends CIUnitTestCase
             'indicia-taxonomy:taxon_ranks' => false,
         ];
 
-        $service = new AutoImportService($offsetModel, new AutoImportRunModelDouble(), null, null, new AutoImportDependencyServiceDouble());
+        $service = new AutoImportService(
+            $offsetModel,
+            new AutoImportRunModelDouble(),
+            null,
+            new AutoImportStatsDirtyScopeServiceDouble(),
+            new AutoImportDependencyServiceDouble(),
+        );
         $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
 
         $this->assertSame('indicia-taxonomy:taxon_ranks', $task['source_key']);
@@ -203,7 +274,13 @@ final class AutoImportServiceTest extends CIUnitTestCase
         $runModel->latestDerivedRun = '2026-07-31 09:00:00';
         $runModel->occurrenceRunsSinceDerived = 2;
 
-        $service = new AutoImportService($offsetModel, $runModel, null, null, new AutoImportDependencyServiceDouble());
+        $service = new AutoImportService(
+            $offsetModel,
+            $runModel,
+            null,
+            new AutoImportStatsDirtyScopeServiceDouble(),
+            new AutoImportDependencyServiceDouble(),
+        );
         $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
 
         $this->assertSame('derived-stats:taxon_rarity', $task['source_key']);
@@ -223,7 +300,13 @@ final class AutoImportServiceTest extends CIUnitTestCase
             'derived-stats:taxon_stats' => '2026-07-31 11:00:00',
         ];
 
-        $service = new AutoImportService($offsetModel, $runModel, null, null, new AutoImportDependencyServiceDouble());
+        $service = new AutoImportService(
+            $offsetModel,
+            $runModel,
+            null,
+            new AutoImportStatsDirtyScopeServiceDouble(),
+            new AutoImportDependencyServiceDouble(),
+        );
         $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
 
         $this->assertSame('derived-stats:taxon_year_stats', $task['source_key']);
@@ -248,12 +331,123 @@ final class AutoImportServiceTest extends CIUnitTestCase
         $runModel->latestDerivedRun = '2026-07-31 08:00:00';
         $runModel->occurrenceRunsSinceDerived = 1;
 
-        $service = new AutoImportService($offsetModel, $runModel, null, null, new AutoImportDependencyServiceDouble());
+        $service = new AutoImportService(
+            $offsetModel,
+            $runModel,
+            null,
+            new AutoImportStatsDirtyScopeServiceDouble(),
+            new AutoImportDependencyServiceDouble(),
+        );
         $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
 
         $this->assertSame('indicia-occurrences:occurrences', $task['source_key']);
         $this->assertSame('occurrence', $task['kind']);
         $this->assertSame('occurrence source is incomplete', $task['reason']);
+    }
+
+    /**
+     * Verify an occurrence prerequisite is selected ahead of due unrelated reports.
+     */
+    public function testBlockingOccurrencePrerequisiteIsPrioritisedUntilComplete(): void
+    {
+        $offsetModel = $this->completeOffsetModel();
+        $offsetModel->completion['indicia-occurrences:occurrences'] = false;
+        $offsetModel->completion['derived-stats:taxon_year_stats'] = false;
+        $offsetModel->completion['derived-stats:taxon_stats'] = false;
+        $runModel = new AutoImportRunModelDouble();
+        $runModel->finishedAt = [
+            'indicia-occurrences:occurrences' => '2026-07-31 11:00:00',
+            'nbn-occurrences:occurrences' => '2026-07-31 10:00:00',
+            'derived-stats:grid_square_stats_counts' => '2026-07-31 08:00:00',
+            'derived-stats:taxon_rarity' => '2026-07-31 07:00:00',
+            'derived-stats:taxon_year_stats' => '2026-07-31 08:00:00',
+            'derived-stats:taxon_stats' => '2026-07-31 08:00:00',
+        ];
+        $runModel->latestDerivedRun = '2026-07-31 08:00:00';
+        $runModel->occurrenceRunsSinceDerived = 10;
+        $dirtyScopeService = new AutoImportStatsDirtyScopeServiceDouble();
+        $dirtyScopeService->work = [
+            StatsDirtyScopeService::TAXON_YEAR => true,
+            StatsDirtyScopeService::TAXON => true,
+        ];
+
+        $service = new AutoImportService(
+            $offsetModel,
+            $runModel,
+            null,
+            $dirtyScopeService,
+            new AutoImportDependencyServiceDouble(),
+        );
+        $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
+
+        $this->assertSame('indicia-occurrences:occurrences', $task['source_key']);
+        $this->assertSame('occurrence', $task['kind']);
+        $this->assertSame('task has not been completed yet so it has priority', $task['reason']);
+    }
+
+    /**
+     * Verify dirty taxon-year work remains a prerequisite even when its completion flag is set.
+     */
+    public function testDirtyTaxonYearPrerequisiteIsSelectedBeforeTaxonStats(): void
+    {
+        $offsetModel = $this->completeOffsetModel();
+        $offsetModel->completion['derived-stats:taxon_year_stats'] = true;
+        $offsetModel->completion['derived-stats:taxon_stats'] = false;
+        $runModel = new AutoImportRunModelDouble();
+        $runModel->finishedAt = [
+            'derived-stats:grid_square_stats_counts' => '2026-07-31 08:00:00',
+            'derived-stats:taxon_rarity' => '2026-07-31 07:00:00',
+            'derived-stats:taxon_year_stats' => '2026-07-31 09:00:00',
+            'derived-stats:taxon_stats' => '2026-07-31 08:00:00',
+        ];
+        $dirtyScopeService = new AutoImportStatsDirtyScopeServiceDouble();
+        $dirtyScopeService->work = [
+            StatsDirtyScopeService::TAXON_YEAR => true,
+            StatsDirtyScopeService::TAXON => true,
+        ];
+
+        $service = new AutoImportService(
+            $offsetModel,
+            $runModel,
+            null,
+            $dirtyScopeService,
+            new AutoImportDependencyServiceDouble(),
+        );
+        $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
+
+        $this->assertSame('derived-stats:taxon_year_stats', $task['source_key']);
+        $this->assertSame('derived', $task['kind']);
+        $this->assertSame('task has not been completed yet so it has priority', $task['reason']);
+    }
+
+    /**
+     * Verify the dependent taxon-stat task runs once all prerequisites are complete.
+     */
+    public function testTaxonStatsRunsAfterItsPrerequisitesAreComplete(): void
+    {
+        $offsetModel = $this->completeOffsetModel();
+        $offsetModel->completion['derived-stats:taxon_year_stats'] = true;
+        $offsetModel->completion['derived-stats:taxon_stats'] = false;
+        $runModel = new AutoImportRunModelDouble();
+        $runModel->finishedAt = [
+            'derived-stats:grid_square_stats_counts' => '2026-07-31 08:00:00',
+            'derived-stats:taxon_rarity' => '2026-07-31 07:00:00',
+            'derived-stats:taxon_year_stats' => '2026-07-31 09:00:00',
+        ];
+        $dirtyScopeService = new AutoImportStatsDirtyScopeServiceDouble();
+
+        $service = new AutoImportService(
+            $offsetModel,
+            $runModel,
+            null,
+            $dirtyScopeService,
+            new AutoImportDependencyServiceDouble(),
+        );
+        $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
+
+        $this->assertSame('derived-stats:taxon_stats', $task['source_key']);
+        $this->assertSame('derived', $task['kind']);
+        $this->assertSame('task has not been completed yet so it has priority', $task['reason']);
     }
 
     /**
@@ -273,7 +467,13 @@ final class AutoImportServiceTest extends CIUnitTestCase
         $runModel->latestDerivedRun = '2026-07-31 08:00:00';
         $runModel->occurrenceRunsSinceDerived = 10;
 
-        $service = new AutoImportService($offsetModel, $runModel, null, null, new AutoImportDependencyServiceDouble());
+        $service = new AutoImportService(
+            $offsetModel,
+            $runModel,
+            null,
+            new AutoImportStatsDirtyScopeServiceDouble(),
+            new AutoImportDependencyServiceDouble(),
+        );
         $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
 
         $this->assertSame('derived-stats:grid_square_stats_counts', $task['source_key']);
@@ -298,7 +498,13 @@ final class AutoImportServiceTest extends CIUnitTestCase
         $runModel->latestDerivedRun = '2026-07-31 11:00:00';
         $runModel->occurrenceRunsSinceDerived = 0;
 
-        $service = new AutoImportService($offsetModel, $runModel, null, null, new AutoImportDependencyServiceDouble());
+        $service = new AutoImportService(
+            $offsetModel,
+            $runModel,
+            null,
+            new AutoImportStatsDirtyScopeServiceDouble(),
+            new AutoImportDependencyServiceDouble(),
+        );
         $task = $service->select(new DateTimeImmutable('2026-07-31 12:00:00'));
 
         $this->assertSame('indicia-occurrences:occurrences', $task['source_key']);
@@ -328,7 +534,13 @@ final class AutoImportServiceTest extends CIUnitTestCase
 
         try {
             $runModel->occurrenceRunsSinceDerived = 1;
-            $service = new AutoImportService($offsetModel, $runModel, null, null, new AutoImportDependencyServiceDouble());
+            $service = new AutoImportService(
+                $offsetModel,
+                $runModel,
+                null,
+                new AutoImportStatsDirtyScopeServiceDouble(),
+                new AutoImportDependencyServiceDouble(),
+            );
             $task = $service->select();
             $this->assertSame('occurrence', $task['kind']);
 

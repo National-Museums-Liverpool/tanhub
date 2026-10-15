@@ -248,6 +248,21 @@ class Services extends BaseService
     }
 
     /**
+     * Create the shared admin import queue.
+     *
+     * @param bool $getShared Whether to reuse the shared service.
+     * @return \App\Services\Import\ImportTaskQueueService Queue lifecycle service.
+     */
+    public static function importTaskQueueService(bool $getShared = true): \App\Services\Import\ImportTaskQueueService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('importTaskQueueService');
+        }
+
+        return new \App\Services\Import\ImportTaskQueueService();
+    }
+
+    /**
      * Automated import task selector and executor.
      */
     public static function autoImportService(bool $getShared = true): \App\Services\Import\AutoImportService

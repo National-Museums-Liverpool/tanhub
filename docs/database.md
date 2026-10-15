@@ -650,22 +650,30 @@ There are compound indexes on `source_key, status` and `source_key, finished_at`
 
 ### import_task_queue
 
-Transient queue for currently active import tasks.
+Queue of explicit admin import requests shared by the web UI and scheduled `import:auto` command.
 
 | Column      | Type        | Null | Key | Default           | Description                                        |
 | ----------- | ----------- | ---- | --- | ----------------- | -------------------------------------------------- |
 | id          | BIGINT      | NO   | PK  | AUTO_INCREMENT    | Primary key                                        |
 | source_key  | VARCHAR(64) | NO   |     |                   | Identifier of the task currently queued or running |
 | run_id      | BIGINT      | YES  | FK  |                   | Linked `import_runs.id` while processing, if known |
-| status      | VARCHAR(20) | NO   |     | queued            | Current task status, e.g. queued, running          |
+| status      | VARCHAR(20) | NO   |     | queued            | Request status: queued, running or failed         |
 | queued_at   | DATETIME    | NO   |     | CURRENT_TIMESTAMP | Time the task was queued                           |
 | started_at  | DATETIME    | YES  |     |                   | Time the task run started                          |
 | finished_at | DATETIME    | YES  |     |                   | Time the task run finished                         |
 | created_at  | DATETIME    | NO   |     | CURRENT_TIMESTAMP | Creation date                                      |
 | updated_at  | DATETIME    | YES  |     |                   | Update date                                        |
 
-Rows are removed when a queued task is processed (success, failure, or blocked), so this table
-does not provide task history. Use `import_runs` for run outcomes and summaries.
+Requests are selected in ID order under the exclusive import lock. Successful batches with more
+work return to `queued`; rows are removed only after completion or explicit removal. Blocked
+requests remain queued while the runner advances prerequisites. Failed requests remain for
+explicit retry or removal. Legacy `completed` rows are ignored.
+
+`run_id` points to the latest batch, which can be a prerequisite executed on behalf of the
+request. `started_at` is refreshed for each batch, and `finished_at` records failure time.
+Interrupted executions are recovered only while holding the import lock. This table is not a
+complete history: use `import_runs` for all run outcomes and summaries. These lifecycle rules use
+the existing columns and apply to all database drivers.
 
 There are indexes on `status, queued_at`, `source_key`, and `run_id`.
 

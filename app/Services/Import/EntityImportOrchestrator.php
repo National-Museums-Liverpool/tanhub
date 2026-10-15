@@ -78,6 +78,7 @@ class EntityImportOrchestrator
      *                                 updates are disabled for this run.
      * @param int|null $offsetOverride Optional offset to fetch from instead of the
      *                                 last successful offset (e.g. for manual re-runs).
+     * @param callable(int): void|null $onRunCreated Callback linking a newly created run to its request.
      *
      * @return array<string, int|string|null> Result with `run_id`, `entity`,
      *         `status` (`success`|`failed`), `offset` (offset fetched from),
@@ -91,7 +92,14 @@ class EntityImportOrchestrator
      *                                  throws (the original exception is wrapped and
      *                                  the run is marked failed before rethrowing).
      */
-    public function run(string $sourceKey, string $entity, int $limit, bool $dryRun = false, ?int $offsetOverride = null): array
+    public function run(
+        string $sourceKey,
+        string $entity,
+        int $limit,
+        bool $dryRun = false,
+        ?int $offsetOverride = null,
+        ?callable $onRunCreated = null,
+    ): array
     {
         $config = $this->config ?? config(ImportConfig::class);
         $adapterFactory = $this->adapterFactory ?? new ImportSourceAdapterFactory($config);
@@ -125,6 +133,9 @@ class EntityImportOrchestrator
         ]);
 
         try {
+            if ($onRunCreated !== null) {
+                $onRunCreated($runId);
+            }
             $batch = $adapterFactory->make($source)->fetchBatch($entityKey, $limit, $offset);
             $counts = $entityImportService->import($entityKey, $batch->rows, $dryRun);
             $processed = max(0, min((int) ($counts['processed'] ?? 0), (int) ($counts['fetched'] ?? 0)));

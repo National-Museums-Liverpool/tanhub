@@ -65,10 +65,9 @@ when importing Indicia taxonomy or occurrence data.
 - `Config\Import.indiciaSecret`: REST client secret.
 - `Config\Import.indiciaOccurrencesEsEndpoint`: configured occurrence
   Elasticsearch endpoint; defaults to `es` in the template.
-- `import.uiTaskStaleAfter`: age in seconds after which an interrupted UI import
-  task is recovered as failed. The default is `3600` seconds (one hour). Set
-  this above the longest expected legitimate UI run, with enough margin for the
-  web-server timeout.
+- `import.uiTaskStaleAfter`: legacy timeout retained for configuration compatibility.
+  Queue recovery now checks exclusive import-lock ownership instead of elapsed time; this
+  setting no longer controls recovery.
 - `import.occurrenceRunsPerDerivedRun`: successful occurrence import runs allowed between
   automated derived statistics runs. The default is `2`. A lower number ensures stats data is
   kept updated more frequently, a higher number allows more rapid population or update of

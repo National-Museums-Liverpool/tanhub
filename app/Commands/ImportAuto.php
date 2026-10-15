@@ -63,6 +63,8 @@ class ImportAuto extends BaseCommand
     /**
      * Select and execute one import task.
      *
+     * Queued admin work is selected first while holding the shared import lock.
+     *
      * @param array<int|string, mixed> $params Command parameters.
      *
      * @return void
@@ -76,6 +78,9 @@ class ImportAuto extends BaseCommand
 
         try {
             $this->runWithImportLock(function () use ($limit, $pageSize, $dryRun): void {
+                if (! $dryRun) {
+                    service('importTaskQueueService')->recover();
+                }
                 $service = service('autoImportService');
                 $task = $service->select();
                 CLI::write('Selected task: ' . $task['source_key'], 'yellow');

@@ -3,9 +3,7 @@
 namespace App\Controllers;
 
 use App\Models\ImportOffsetModel;
-use App\Models\ImportRunModel;
 use App\Models\ImportTaskQueueModel;
-use App\Services\Import\ImportTaskDependencyService;
 use CodeIgniter\HTTP\RedirectResponse;
 use Config\Import as ImportConfig;
 use RuntimeException;
@@ -14,20 +12,17 @@ use Throwable;
 /**
  * Admin controller for reviewing and running import tasks.
  *
- * Provides the imports dashboard (task list with per-task offset/status and
- * the task queue) and the endpoint used to enqueue a task and drain the
- * queue in FIFO order until a task is blocked, fails, or throws. The full
- * task registry and dependency graph are declared as class constants; see
- * {@see self::TASKS} and {@see self::DEPENDENCIES}.
+ * Displays task progress and explicit admin requests. Web and scheduled
+ * execution share the same queue and run one bounded batch at a time.
  */
 class Imports extends BaseController
 {
     /**
-     * Queue row statuses that are considered "active" (not yet finished).
+     * Queue row statuses that still require an operator or runner action.
      *
      * @var array<int, string>
      */
-    private const ACTIVE_QUEUE_STATUSES = ['queued', 'running'];
+    private const REQUEST_STATUSES = ['queued', 'running', 'failed'];
 
     /**
      * Registry of every import task that can be displayed and run from this page.
@@ -40,7 +35,7 @@ class Imports extends BaseController
      *                                (`indicia`, `nbn`), or null for derived tasks.
      * - `kind`         (string)      One of `entity`, `occurrence`, or `derived`;
      *                                determines which orchestrator/service runs the task
-     *                                (see {@see self::runTask()}).
+     *                                for the shared automatic import executor.
      * - `entity`       (string)      Entity name; only present for `entity` kind tasks.
      * - `service`      (string)      Service name; only present for `derived` kind tasks.
      * - `supports_run` (bool)        Whether the "Run" action is currently implemented.
@@ -155,15 +150,12 @@ class Imports extends BaseController
     /**
      * Render the imports dashboard.
      *
-     * Recovers any stale (abandoned) running tasks, then builds the full
-     * task registry with each task's completion state and blocking
-     * dependencies, alongside the current task queue.
+     * Reading the dashboard never starts imports or changes execution state.
      *
      * @return string Rendered HTML for the imports page.
      */
     public function index(): string
     {
-        $this->recoverStaleTasks(model(ImportTaskQueueModel::class));
         $taskStates = $this->buildTaskStates();
 
         return $this->renderPage('imports/index', [
@@ -176,14 +168,7 @@ class Imports extends BaseController
     }
 
     /**
-     * Queue the requested task, then drain the queue in FIFO order.
-     *
-     * Reads `source_key` from the POST body and adds it to the queue if it
-     * is not already queued/running. If no task is currently running, the
-     * queue is then processed one task at a time: each queued task is run
-     * and removed from the queue, stopping as soon as a task is blocked by
-     * an incomplete dependency, fails, or throws. Info/warning/error
-     * messages accumulated while processing are flashed to the redirect.
+     * Queue a task, then attempt one batch without waiting for a busy import.
      *
      * @return RedirectResponse Redirect back to the imports page with
      *                          flashed status messages.
@@ -196,125 +181,88 @@ class Imports extends BaseController
             return redirect()->to(site_url('imports'))->with('error', 'Unknown import task.');
         }
 
-        $queueModel = model(ImportTaskQueueModel::class);
-        $this->recoverStaleTasks($queueModel);
+        service('importTaskQueueService')->enqueue($sourceKey);
 
-        if (! $this->isTaskQueued($queueModel, $sourceKey)) {
-            $queueModel->insert([
-                'source_key' => $sourceKey,
-                'status' => 'queued',
-                'queued_at' => date('Y-m-d H:i:s'),
-            ]);
+        return $this->process();
+    }
+
+    /**
+     * Process one existing queued batch without adding a request.
+     *
+     * @return RedirectResponse Redirect with execution or waiting details.
+     */
+    public function process(): RedirectResponse
+    {
+        $lock = service('importLock');
+        if (! $lock->acquire()) {
+            return redirect()->to(site_url('imports'))->with(
+                'message',
+                'Another import is running. Queued requests will be processed by the next scheduled import:auto invocation, or use Process next batch now once it finishes.',
+            );
         }
 
-        if ($this->hasRunningTask($queueModel)) {
-            return redirect()->to(site_url('imports'))->with('message', 'Task was queued. Another task is currently running.');
+        try {
+            service('importTaskQueueService')->recover();
+            $service = service('autoImportService');
+            $task = $service->selectQueued();
+            if ($task === null) {
+                return redirect()->to(site_url('imports'))->with('warning', 'No runnable requests. Check the queue for failed requests that need Retry.');
+            }
+            $config = config(ImportConfig::class);
+            $execution = $service->run($config->defaultLimit, $config->defaultPageSize, false, $task);
+            $result = $execution['result'];
+            $summary = service('importTaskSummaryFormatter')->format($task['source_key'], $result);
+            $level = ($result['status'] ?? null) !== 'success'
+                ? 'error'
+                : (((int) ($result['skipped'] ?? 0)) > 0 ? 'warning' : 'message');
+
+            $nextStep = $level === 'error'
+                ? ' The failed request requires Retry in the current queue.'
+                : ' Any remaining work stays queued for the next batch.';
+
+            return redirect()->to(site_url('imports'))->with($level, $summary . $nextStep);
+        } catch (Throwable $exception) {
+            log_message('error', 'Admin import queue failed: {message}', ['message' => $exception->getMessage()]);
+
+            return redirect()->to(site_url('imports'))->with('error', $exception->getMessage());
+        } finally {
+            $lock->release();
         }
+    }
 
-        $infoMessages = [];
-        $warningMessages = [];
-        $errorMessages = [];
-
-        while (true) {
-            $nextQueued = $this->nextQueuedTask($queueModel);
-
-            if ($nextQueued === null) {
-                break;
+    /**
+     * Retry or remove an existing request while holding the import lock.
+     *
+     * @return RedirectResponse Redirect with the outcome.
+     */
+    public function updateQueue(): RedirectResponse
+    {
+        $action = (string) $this->request->getPost('action');
+        if (! in_array($action, ['retry', 'remove'], true)) {
+            return redirect()->to(site_url('imports'))->with('error', 'Unknown queue action.');
+        }
+        $lock = service('importLock');
+        if (! $lock->acquire()) {
+            return redirect()->to(site_url('imports'))->with('warning', 'Another import is running. Try this queue action again once it finishes.');
+        }
+        try {
+            $queue = service('importTaskQueueService');
+            $queue->recover();
+            $id = (int) $this->request->getPost('queue_id');
+            if ($action === 'retry') {
+                $queue->retry($id);
+            } else {
+                $queue->remove($id);
             }
 
-            $headSourceKey = (string) $nextQueued['source_key'];
-            $taskStates = $this->buildTaskStates();
-            $state = $taskStates[$headSourceKey] ?? null;
-
-            if ($state === null) {
-                $errorMessages[] = 'Unknown queued source key: ' . $headSourceKey . '.';
-                $queueModel->delete((int) $nextQueued['id']);
-                continue;
-            }
-
-            if ($state['blocked_by'] !== []) {
-                $errorMessages[] = 'Queued task ' . $state['label'] . ' is blocked by: ' . implode(', ', $state['blocked_by']) . '.';
-                $queueModel->delete((int) $nextQueued['id']);
-                break;
-            }
-
-            if (! $state['supports_run']) {
-                $errorMessages[] = 'Task ' . $state['label'] . ' is not implemented yet.';
-                $queueModel->delete((int) $nextQueued['id']);
-                continue;
-            }
-
-            $lock = service('importLock');
-
-            if (! $lock->acquire()) {
-                return redirect()->to(site_url('imports'))->with(
-                    'message',
-                    'Task was queued. Another import is currently running.',
-                );
-            }
-
-            $queueModel->update((int) $nextQueued['id'], [
-                'status' => 'running',
-                'started_at' => date('Y-m-d H:i:s'),
-                'run_id' => null,
-            ]);
-
-            try {
-                $result = $this->runTask($state, function (int $runId) use ($queueModel, $nextQueued): void {
-                    if ($runId > 0) {
-                        $queueModel->update((int) $nextQueued['id'], ['run_id' => $runId]);
-                    }
-                });
-                $runId = (int) ($result['run_id'] ?? 0);
-                $summary = $this->summarizeTaskResult($state, $result);
-                $runStatus = strtolower((string) ($result['status'] ?? 'success'));
-                $queueStatus = $runStatus === 'success' ? 'completed' : 'failed';
-
-                if ($runId > 0 && $this->importRunExists($runId)) {
-                    $queueModel->update((int) $nextQueued['id'], ['run_id' => $runId]);
-                }
-
-                if ($runStatus !== 'success') {
-                    $errorMessages[] = $summary;
-                } elseif (((int) ($result['skipped'] ?? 0)) > 0) {
-                    $warningMessages[] = $summary;
-                } else {
-                    $infoMessages[] = $summary;
-                }
-
-                $queueModel->delete((int) $nextQueued['id']);
-
-                if ($queueStatus === 'failed') {
-                    break;
-                }
-            } catch (Throwable $exception) {
-                $errorMessages[] = 'Task ' . $state['label'] . ' failed: ' . $exception->getMessage();
-                $queueModel->delete((int) $nextQueued['id']);
-                break;
-            } finally {
-                $lock->release();
-            }
+            return redirect()->to(site_url('imports'))->with('message', $action === 'retry'
+                ? 'Request queued for retry from its saved checkpoint.'
+                : 'Request removed. Imported data and checkpoints were not changed.');
+        } catch (RuntimeException $exception) {
+            return redirect()->to(site_url('imports'))->with('error', $exception->getMessage());
+        } finally {
+            $lock->release();
         }
-
-        if ($infoMessages === [] && $warningMessages === [] && $errorMessages === []) {
-            return redirect()->to(site_url('imports'))->with('message', 'No tasks were processed.');
-        }
-
-        $redirect = redirect()->to(site_url('imports'));
-
-        if ($infoMessages !== []) {
-            $redirect = $redirect->with('message', implode(' ', $infoMessages));
-        }
-
-        if ($warningMessages !== []) {
-            $redirect = $redirect->with('warning', implode(' ', $warningMessages));
-        }
-
-        if ($errorMessages !== []) {
-            $redirect = $redirect->with('error', implode(' ', $errorMessages));
-        }
-
-        return $redirect;
     }
 
     /**
@@ -331,15 +279,6 @@ class Imports extends BaseController
         }
 
         $queueModel = model(ImportTaskQueueModel::class);
-        $this->recoverStaleTasks($queueModel);
-
-        if ($this->isTaskQueued($queueModel, $sourceKey)) {
-            return redirect()->to(site_url('imports'))->with(
-                'error',
-                'Cannot restart an import task while it is queued or running.',
-            );
-        }
-
         $lock = service('importLock');
 
         if (! $lock->acquire()) {
@@ -350,6 +289,12 @@ class Imports extends BaseController
         }
 
         try {
+            if ($this->isTaskQueued($queueModel, $sourceKey)) {
+                return redirect()->to(site_url('imports'))->with(
+                    'error',
+                    'Remove the existing queue request before restarting this task.',
+                );
+            }
             $this->resetTaskProgress($sourceKey, self::TASKS[$sourceKey]);
         } finally {
             $lock->release();
@@ -358,22 +303,6 @@ class Imports extends BaseController
         return redirect()->to(site_url('imports'))->with(
             'message',
             'Import task ' . self::TASKS[$sourceKey]['label'] . ' was restarted from the beginning.',
-        );
-    }
-
-    /**
-     * Format a user-facing summary for a completed task run.
-     *
-     * @param array<string, mixed> $state  Task state as built by {@see self::buildTaskStates()}.
-     * @param array<string, mixed> $result Result returned by the orchestrator/service that ran the task.
-     *
-     * @return string Human-readable summary message.
-     */
-    private function summarizeTaskResult(array $state, array $result): string
-    {
-        return service('importTaskSummaryFormatter')->format(
-            (string) ($state['label'] ?? 'unknown'),
-            $result,
         );
     }
 
@@ -464,86 +393,19 @@ class Imports extends BaseController
     }
 
     /**
-     * Execute a single task and return its raw orchestrator/service result.
-     *
-     * Dispatches to the entity import orchestrator, the occurrence import
-     * orchestrator, or a derived stats service depending on the task's `kind`.
-     *
-     * @param array<string, mixed> $state Task state as built by {@see self::buildTaskStates()}.
-     *
-     * @return array<string, mixed> Result reported by the orchestrator/service; expected
-     *                              to include at least a `status` key (and typically
-     *                              `run_id` and `skipped`).
-     *
-     * @throws RuntimeException If the task's entity is missing, or its `kind` is not runnable.
-     */
-    private function runTask(array $state, ?callable $onRunCreated = null): array
-    {
-        $config = config(ImportConfig::class);
-        $kind = (string) $state['kind'];
-
-        if ($kind === 'entity') {
-            $entity = (string) ($state['entity'] ?? '');
-            $source = (string) ($state['source'] ?? 'indicia');
-
-            if ($entity === '') {
-                throw new RuntimeException('Task entity is missing.');
-            }
-
-            /** @var \App\Services\Import\EntityImportOrchestrator $orchestrator */
-            $orchestrator = service('importOrchestrator');
-
-            return $orchestrator->run(
-                $source,
-                $entity,
-                max(1, (int) $config->defaultLimit),
-                false,
-                null,
-            );
-        }
-
-        if ($kind === 'occurrence') {
-            $source = (string) ($state['source'] ?? 'indicia');
-
-            /** @var \App\Services\Import\ImportOrchestrator $orchestrator */
-            $orchestrator = service('occurrenceImportOrchestrator');
-
-            return $orchestrator->run(
-                $source,
-                max(1, (int) $config->defaultLimit),
-                max(1, (int) $config->defaultPageSize),
-                false,
-                null,
-            );
-        }
-
-        if ($kind === 'derived') {
-            return $this->runDerivedTask($state, $onRunCreated);
-        }
-
-        throw new RuntimeException('Task is not runnable yet.');
-    }
-
-    /**
-     * Return active queued/running rows in queue order.
+     * Return queued, running and failed requests in queue order.
      *
      * @return array<int, array<string, mixed>> Queue rows ordered oldest first (FIFO).
      */
     private function taskQueueRows(): array
     {
-        /** @var ImportTaskQueueModel $queueModel */
-        $queueModel = model(ImportTaskQueueModel::class);
-
-        return $queueModel
-            ->whereIn('status', self::ACTIVE_QUEUE_STATUSES)
-            ->orderBy('id', 'asc')
-            ->findAll();
+        return service('importTaskQueueService')->rows();
     }
 
     /**
-     * Return active queue status keyed by source key.
+     * Return outstanding request status keyed by source key.
      *
-     * @return array<string, string> Queue `status` (`queued` or `running`) indexed by
+     * @return array<string, string> Queue status (`queued`, `running` or `failed`) indexed by
      *                               task source key.
      */
     private function queueStatusBySourceKey(): array
@@ -565,162 +427,19 @@ class Imports extends BaseController
     }
 
     /**
-     * Determine whether a task is already queued or running.
+     * Determine whether a task has an outstanding request.
      *
      * @param ImportTaskQueueModel $queueModel Queue model.
      * @param string               $sourceKey  Task source key to check.
      *
-     * @return bool True if a queue row for this task already has an active status.
+     * @return bool True if a queue row still needs runner or operator action.
      */
     private function isTaskQueued(ImportTaskQueueModel $queueModel, string $sourceKey): bool
     {
         return $queueModel
             ->where('source_key', $sourceKey)
-            ->whereIn('status', self::ACTIVE_QUEUE_STATUSES)
+            ->whereIn('status', self::REQUEST_STATUSES)
             ->countAllResults() > 0;
     }
 
-    /**
-     * Determine whether any queue item is currently running.
-     *
-     * @param ImportTaskQueueModel $queueModel Queue model.
-     *
-     * @return bool True if at least one queue row has status `running`.
-     */
-    private function hasRunningTask(ImportTaskQueueModel $queueModel): bool
-    {
-        return $queueModel->where('status', 'running')->countAllResults() > 0;
-    }
-
-    /**
-     * Recover queue rows stuck in "running" past the configured stale timeout.
-     *
-     * A UI request can be interrupted (e.g. by a browser timeout) after a
-     * task has started but before its queue row is updated. This finds any
-     * such rows older than `Config\Import::$uiTaskStaleAfter`, marks their
-     * linked import run as failed if it is still recorded as running, and
-     * updates the queue row to `failed` (or `completed` if the run had in
-     * fact succeeded) so the queue is not left permanently blocked.
-     *
-     * @param ImportTaskQueueModel $queueModel Queue model.
-     *
-     * @return void
-     */
-    private function recoverStaleTasks(ImportTaskQueueModel $queueModel): void
-    {
-        $staleAfter = max(1, (int) config(ImportConfig::class)->uiTaskStaleAfter);
-        $staleBefore = date('Y-m-d H:i:s', time() - $staleAfter);
-        $staleTasks = $queueModel
-            ->where('status', 'running')
-            ->where('started_at <', $staleBefore)
-            ->findAll();
-
-        if ($staleTasks === []) {
-            return;
-        }
-
-        $importRunModel = model(ImportRunModel::class);
-        $finishedAt = date('Y-m-d H:i:s');
-
-        foreach ($staleTasks as $staleTask) {
-            $runId = (int) ($staleTask['run_id'] ?? 0);
-            $message = 'UI import task was recovered after exceeding the stale task timeout.';
-            $queueStatus = 'failed';
-
-            if ($runId > 0) {
-                $run = $importRunModel->find($runId);
-
-                if (is_array($run) && (string) ($run['status'] ?? '') === 'running') {
-                    $importRunModel->update($runId, [
-                        'status' => 'failed',
-                        'message' => $message,
-                        'finished_at' => $finishedAt,
-                    ]);
-                } elseif (is_array($run) && (string) ($run['status'] ?? '') === 'success') {
-                    $queueStatus = 'completed';
-                }
-            } else {
-                $sourceKey = (string) ($staleTask['source_key'] ?? '');
-                if ($sourceKey !== '') {
-                    $run = $importRunModel
-                        ->where('source_key', $sourceKey)
-                        ->where('status', 'running')
-                        ->where('started_at >=', (string) ($staleTask['started_at'] ?? ''))
-                        ->orderBy('id', 'DESC')
-                        ->first();
-                    if (is_array($run)) {
-                        $importRunModel->update((int) $run['id'], [
-                            'status' => 'failed',
-                            'message' => $message,
-                            'finished_at' => $finishedAt,
-                        ]);
-                    }
-                }
-            }
-
-            $queueModel->update((int) $staleTask['id'], [
-                'status' => $queueStatus,
-                'finished_at' => $finishedAt,
-            ]);
-        }
-    }
-
-    /**
-     * Get the next queued item in FIFO order.
-     *
-     * @param ImportTaskQueueModel $queueModel Queue model.
-     *
-     * @return array<string, mixed>|null The oldest row with status `queued`, or null if
-     *                                   the queue holds no queued rows.
-     */
-    private function nextQueuedTask(ImportTaskQueueModel $queueModel): ?array
-    {
-        $row = $queueModel
-            ->where('status', 'queued')
-            ->orderBy('id', 'asc')
-            ->first();
-
-        return is_array($row) ? $row : null;
-    }
-
-    /**
-     * Check whether an import run row exists for the given ID.
-     *
-     * @param int $runId Import run ID; values <= 0 are treated as non-existent.
-     *
-     * @return bool True if a matching `import_runs` row exists.
-     */
-    private function importRunExists(int $runId): bool
-    {
-        if ($runId <= 0) {
-            return false;
-        }
-
-        /** @var ImportRunModel $importRunModel */
-        $importRunModel = model(ImportRunModel::class);
-
-        return $importRunModel->where('id', $runId)->countAllResults() > 0;
-    }
-
-    /**
-     * Execute a derived stats task and persist a matching import_runs row.
-     *
-     * Resolves the state's `service` name via {@see \App\Services\Import\DerivedImportRunner}.
-     *
-     * @param array<string, mixed> $state Task state as built by {@see self::buildTaskStates()};
-     *                                    must include `source_key` and `service`.
-     *
-     * @return array<string, mixed> Result reported by the derived service, including a
-     *                              `status` key.
-     */
-    private function runDerivedTask(array $state, ?callable $onRunCreated = null): array
-    {
-        $serviceName = trim((string) ($state['service'] ?? ''));
-        $sourceKey = (string) ($state['source_key'] ?? '');
-
-        /** @var \App\Services\Import\DerivedImportRunner $runner */
-        $runner = service('derivedImportRunner');
-
-        return $runner->run($sourceKey, $serviceName, false, $onRunCreated);
-    }
 }

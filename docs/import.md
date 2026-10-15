@@ -150,15 +150,24 @@ exact non-reporting taxon batch. Its progress is stored in `import_offsets`, so 
 invocations continue where the previous one stopped. Each completed batch replaces only its own
 taxon rows, leaving other completed ranks available while the refresh continues.
 
-The admin Imports page queue is transient and shows only active tasks. For execution history,
-status, and run summaries, use the `import_runs` table.
+The admin Imports page queue holds explicit requests until completion or removal. Scheduled
+`php spark import:auto` invocations process these requests before routine automatic work. Each
+invocation runs one batch and leaves a request queued if more work remains. Prerequisites are
+processed first. Failed requests remain visible for explicit retry rather than automatic retries.
+For execution history, status, and run summaries, use the `import_runs` table.
+
+**Run** adds a request and attempts one queued batch immediately. When another import is
+running, the request waits for a later scheduled invocation. **Process next batch now** processes
+existing requests without adding another task, including on installations without a scheduler.
+Refreshing the page never processes requests.
 
 The admin page runs imports synchronously in the web request. For large Indicia occurrence imports,
 prefer `php spark import:occurrences --source indicia` or the scheduled `import:auto` command so
-the work is not limited by browser, PHP, or web-server request timeouts. If a UI request is
-terminated, the next UI task request recovers a `running` queue row older than
-`import.uiTaskStaleAfter` (one hour by default), marks its linked run failed, and retries from the
-persisted checkpoint. Set this value above the longest expected legitimate UI run.
+the work is not limited by browser, PHP, or web-server request timeouts. If execution is interrupted,
+the next non-dry-run scheduled or manual queue operation recovers abandoned requests after
+acquiring the exclusive import lock. Unfinished executions are marked failed for **Retry** from
+the saved checkpoint; successful runs are reconciled with their persisted completion state.
+Recovery no longer uses the legacy `import.uiTaskStaleAfter` timeout.
 
 ## Running the import using CodeIgniter Spark commands
 
@@ -179,7 +188,8 @@ Repeat the command until the initial lookup and taxonomy tasks report completion
 a schedule to import new occurrences and refresh derived statistics. Each successful run reports
 its task and whether more work remains, which helps identify a stalled task.
 
-The automatic task uses this order until the initial imports are complete:
+After servicing queued admin requests and their prerequisites, the automatic task uses this order
+until the initial imports are complete:
 
 1. recording schemes
 2. geographic regions
@@ -189,17 +199,20 @@ The automatic task uses this order until the initial imports are complete:
 6. taxa
 7. taxon names
 
-After the initial imports, a report-stat task is selected when its last successful
-run is more than two hours old. The least recently run stale report-stat task wins.
-When all report-stat tasks are current, the least recently run occurrence source is
-selected between Indicia and NBN. A task with no successful run is treated as the
-oldest task.
+After the initial imports, unfinished taxon-statistics dependency chains take priority.
+For example, `taxon_year_stats` requires both occurrence imports, and `taxon_stats` requires
+`taxon_year_stats` and both occurrence imports. Automation advances unfinished prerequisites
+before the dependent report task.
 
-Before this age-based selection, `import:auto` applies the same completion dependencies as the
-admin Imports page. For example, `taxon_year_stats` is not selected until both occurrence imports
-are complete, and `taxon_stats` is not selected until `taxon_year_stats` and both occurrence
-imports are complete. When a prerequisite is incomplete, automation skips the blocked task and
-continues looking for another eligible task on a later invocation.
+Otherwise, report tasks are selected according to the configured number of successful occurrence
+runs since the last derived run. The least recently successful eligible report task wins, with a
+task that has never succeeded considered due immediately. Between report runs, automation selects
+the least recently successful occurrence source. See the import cadence settings in the
+[configuration reference](configuration-reference.md).
+
+A failed admin request pauses automatic execution of that task until it is retried or removed.
+Failures in its prerequisites can also pause dependent automatic work. A dry run leaves queue
+state unchanged.
 
 If refreshing an import from the beginning, use the appropriate `--since=0` or `--offset=0`
 override and clear the relevant `import_offsets` rows. Existing `import_runs` history may provide

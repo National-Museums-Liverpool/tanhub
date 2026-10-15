@@ -70,9 +70,17 @@ final class ImportsPageTest extends CIUnitTestCase
         $result->assertDontSee('Not implemented');
     }
 
-    public function testRunBlockedTaskShowsError(): void
+    /**
+     * Retain blocked requests and advance their prerequisites instead of discarding them.
+     */
+    public function testRunBlockedTaskAdvancesPrerequisite(): void
     {
         $this->authenticateAs('imports-admin-blocked@example.com', 'admin');
+        $mock = $this->createMock(EntityImportOrchestrator::class);
+        $mock->expects($this->once())->method('run')
+            ->with('indicia', 'taxon_groups', $this->greaterThan(0), false, null)
+            ->willReturn(['status' => 'success', 'has_more' => true]);
+        \Config\Services::injectMock('importOrchestrator', $mock);
 
         $result = $this->post('imports/run', [
             'source_key' => 'indicia-taxonomy:taxa',
@@ -80,7 +88,7 @@ final class ImportsPageTest extends CIUnitTestCase
 
         $result->assertStatus(302);
         $result->assertRedirectTo(site_url('imports'));
-        $result->assertSessionHas('error');
+        $result->assertSessionHas('message');
 
         $queueRows = db_connect()
             ->table('import_task_queue')
@@ -88,7 +96,8 @@ final class ImportsPageTest extends CIUnitTestCase
             ->get()
             ->getResultArray();
 
-        $this->assertCount(0, $queueRows);
+        $this->assertCount(1, $queueRows);
+        $this->assertSame('queued', $queueRows[0]['status']);
     }
 
     public function testResetOccurrenceTaskStartsFromBeginning(): void
@@ -233,6 +242,7 @@ final class ImportsPageTest extends CIUnitTestCase
             ->with('nbn', $this->greaterThan(0), $this->greaterThan(0), false, null)
             ->willReturn([
                 'status' => 'success',
+                'has_more' => false,
                 'run_id' => 102,
                 'fetched' => 10,
                 'inserted' => 8,
@@ -263,6 +273,9 @@ final class ImportsPageTest extends CIUnitTestCase
         $this->assertNull($queueRow);
     }
 
+    /**
+     * Recover interrupted work under the lock and require explicit retry.
+     */
     public function testRunRecoversStaleRunningOccurrenceTask(): void
     {
         $this->markTaxonomyDependenciesComplete();
@@ -283,18 +296,7 @@ final class ImportsPageTest extends CIUnitTestCase
         ]);
 
         $mock = $this->createMock(ImportOrchestrator::class);
-        $mock->expects($this->once())
-            ->method('run')
-            ->with('indicia', $this->greaterThan(0), $this->greaterThan(0), false, null)
-            ->willReturn([
-                'status' => 'success',
-                'run_id' => 103,
-                'fetched' => 0,
-                'inserted' => 0,
-                'updated' => 0,
-                'skipped' => 0,
-                'errors' => 0,
-            ]);
+        $mock->expects($this->never())->method('run');
 
         \Config\Services::injectMock('occurrenceImportOrchestrator', $mock);
 
@@ -306,7 +308,7 @@ final class ImportsPageTest extends CIUnitTestCase
 
         $result->assertStatus(302);
         $result->assertRedirectTo(site_url('imports'));
-        $result->assertSessionHas('message');
+        $result->assertSessionHas('warning');
 
         $staleRun = $db->table('import_runs')->where('id', $runId)->get()->getRowArray();
         $this->assertIsArray($staleRun);
@@ -394,7 +396,136 @@ final class ImportsPageTest extends CIUnitTestCase
             ->get()
             ->getRowArray();
 
-        $this->assertNull($queueRow);
+        $this->assertIsArray($queueRow);
+        $this->assertSame('failed', $queueRow['status']);
+    }
+
+    /**
+     * Expose manual queue controls without changing state when the page is refreshed.
+     */
+    public function testQueuePageIsReadOnlyAndShowsManualControls(): void
+    {
+        $this->authenticateAs('imports-admin-readonly@example.com', 'admin');
+        $db = db_connect();
+        $db->table('import_task_queue')->insert([
+            'source_key' => 'derived-stats:taxon_stats',
+            'status' => 'queued',
+            'queued_at' => '2026-10-14 14:51:22',
+        ]);
+        $db->table('import_task_queue')->insert([
+            'source_key' => 'indicia-taxonomy:taxon_groups',
+            'status' => 'running',
+            'started_at' => '2026-10-14 14:00:00',
+        ]);
+        $before = $db->table('import_task_queue')->orderBy('id')->get()->getResultArray();
+        $lock = $this->createMock(ImportLock::class);
+        $lock->expects($this->never())->method('acquire');
+        \Config\Services::injectMock('importLock', $lock);
+
+        $result = $this->get('imports');
+
+        $result->assertStatus(200);
+        $result->assertSee('Process next batch now');
+        $result->assertSee('Remove from queue');
+        $result->assertSee('2026-10-14 14:51:22');
+        $result->assertSee('Run');
+        $this->assertSame($before, $db->table('import_task_queue')->orderBy('id')->get()->getResultArray());
+    }
+
+    /**
+     * Process an existing request without enqueueing a second unrelated task.
+     */
+    public function testProcessExistingQueueWithoutAddingTask(): void
+    {
+        $this->markTaxonomyDependenciesComplete();
+        $this->authenticateAs('imports-admin-process@example.com', 'admin');
+        service('importTaskQueueService')->enqueue('indicia-taxonomy:taxon_names');
+        $mock = $this->createMock(EntityImportOrchestrator::class);
+        $mock->expects($this->once())->method('run')
+            ->willReturn(['status' => 'success', 'has_more' => false]);
+        \Config\Services::injectMock('importOrchestrator', $mock);
+
+        $result = $this->post('imports/process', $this->csrfFields());
+
+        $result->assertRedirectTo(site_url('imports'));
+        $result->assertSessionHas('message');
+        $this->assertSame(0, db_connect()->table('import_task_queue')->countAllResults());
+    }
+
+    /**
+     * Keep a manual request bounded to one batch rather than draining other requests.
+     */
+    public function testManualProcessingRunsOnlyOneQueuedBatch(): void
+    {
+        $this->markTaxonomyDependenciesComplete();
+        $this->authenticateAs('imports-admin-bounded@example.com', 'admin');
+        $queue = service('importTaskQueueService');
+        $queue->enqueue('indicia-taxonomy:taxon_names');
+        $queue->enqueue('indicia-taxonomy:recording_schemes');
+        $mock = $this->createMock(EntityImportOrchestrator::class);
+        $mock->expects($this->once())->method('run')
+            ->with('indicia', 'taxon_names', $this->greaterThan(0), false, null, $this->callback('is_callable'))
+            ->willReturn(['status' => 'success', 'has_more' => false]);
+        \Config\Services::injectMock('importOrchestrator', $mock);
+
+        $result = $this->post('imports/process', $this->csrfFields());
+
+        $result->assertSessionHas('message');
+        $rows = $queue->rows();
+        $this->assertCount(1, $rows);
+        $this->assertSame('indicia-taxonomy:recording_schemes', $rows[0]['source_key']);
+    }
+
+    /**
+     * Offer explicit retry and removal without changing import checkpoints.
+     */
+    public function testRetryAndRemoveQueueRequests(): void
+    {
+        $this->authenticateAs('imports-admin-retry@example.com', 'admin');
+        $db = db_connect();
+        $db->table('import_task_queue')->insert([
+            'source_key' => 'indicia-occurrences:occurrences',
+            'status' => 'failed',
+        ]);
+        $id = $db->insertID();
+        $result = $this->get('imports');
+        $result->assertSee('Retry');
+        $result->assertSee('The last attempt failed or was interrupted.');
+
+        $result = $this->post('imports/queue', [
+            'queue_id' => $id, 'action' => 'retry',
+        ] + $this->csrfFields());
+        $result->assertSessionHas('message');
+        $this->assertSame('queued', $db->table('import_task_queue')->where('id', $id)->get()->getRowArray()['status']);
+
+        $result = $this->post('imports/queue', [
+            'queue_id' => $id, 'action' => 'remove',
+        ] + $this->csrfFields());
+        $result->assertSessionHas('message');
+        $this->assertSame(0, $db->table('import_task_queue')->countAllResults());
+        $this->assertSame('abc123', model(\App\Models\ImportOffsetModel::class)->getCheckpoint('indicia-occurrences:occurrences'));
+    }
+
+    /**
+     * Busy manual processing leaves both waiting and running requests untouched.
+     */
+    public function testBusyProcessDoesNotRecoverOrConsumeQueue(): void
+    {
+        $this->authenticateAs('imports-admin-busy@example.com', 'admin');
+        $db = db_connect();
+        $db->table('import_task_queue')->insert([
+            'source_key' => 'derived-stats:taxon_stats', 'status' => 'running',
+            'started_at' => '2026-10-14 14:00:00',
+        ]);
+        $lock = $this->createMock(ImportLock::class);
+        $lock->expects($this->once())->method('acquire')->willReturn(false);
+        $lock->expects($this->never())->method('release');
+        \Config\Services::injectMock('importLock', $lock);
+
+        $result = $this->post('imports/process', $this->csrfFields());
+
+        $result->assertSessionHas('message');
+        $this->assertSame('running', $db->table('import_task_queue')->get()->getRowArray()['status']);
     }
 
     public function testRunDerivedGridSquareStatsCountsTask(): void

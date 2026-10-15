@@ -286,18 +286,29 @@ lookups, taxonomy, occurrences and report stats:
   - taxon_stats
   - taxon_year_stats
 
-Each task in the table shows the task name, data source (not relevant for report stats), next
-offset or checkpoint, is complete and has a "Go" button allowing the task to be run from the UI. If
-the import task is blocked because it depends on another task which is not yet complete it shows
-"Blocked by ..." with a list of the blocking tasks instead of a Go button.
+Each task shows its name, source, next offset or checkpoint, completion state and action.
+**Run** adds a request and attempts one batch of the oldest runnable queued work. If
+another import is running, the request stays queued; it does not start in the background when
+that process finishes.
 
-When you click Go, Tanhub adds the task to a queue and starts the first queued task immediately.
-The button becomes a `running` badge while work is in progress. On success, the task reports its
-new checkpoint, the button returns, and dependent tasks become eligible. A failed task remains in
-the run history and does not unblock its dependants.
+Schedule `php spark import:auto` to consume queued requests automatically. Each invocation gives
+admin requests priority over routine automatic imports and processes one batch. Without a
+schedule, use **Process next batch now** to process existing requests without adding another task.
+Refreshing the page only displays progress and never starts work or recovers runs.
 
-The current queue is shown on the page and only includes active items (`queued` or `running`).
-Completed and failed rows are removed from the queue table once processed.
+Requests stay queued across successful batches until the requested work completes. Incomplete
+prerequisites are listed and processed before the requested task. The current queue shows waiting,
+running and failed requests, their queued time, and the start time of running work.
+
+Failed requests stay visible with their latest run details and require **Retry** to resume from
+the saved checkpoint. They are not automatically retried. **Remove from queue** discards a waiting
+or failed request without deleting imported data or resetting progress. Running requests cannot
+be removed. **Restart** resets progress and is available only when there is no outstanding request.
+
+Both UI processing and `import:auto` acquire the same execution lock before selecting work.
+Interrupted requests are recovered only after acquiring that lock, so a long-running import is
+not marked failed merely because it exceeds a time limit. Recovery reconciles successful runs;
+unfinished interrupted executions are marked failed for explicit retry.
 
 Task outcomes and summaries are stored in `import_runs`, which is the canonical history for import
 and derived-task executions.

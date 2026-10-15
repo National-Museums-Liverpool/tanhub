@@ -7,6 +7,7 @@ use App\Commands\ImportOccurrences;
 use App\Services\Import\AutoImportService;
 use App\Services\Import\ImportLock;
 use App\Services\Import\ImportOrchestrator;
+use App\Services\Import\ImportTaskQueueService;
 use CodeIgniter\Config\Services;
 use CodeIgniter\Test\CIUnitTestCase;
 
@@ -67,6 +68,9 @@ final class ImportCommandsTest extends CIUnitTestCase
      */
     public function testAutoCommandSelectsAndRunsTask(): void
     {
+        $queue = $this->createMock(ImportTaskQueueService::class);
+        $queue->expects($this->once())->method('recover');
+        Services::injectMock('importTaskQueueService', $queue);
         $service = $this->createMock(AutoImportService::class);
         $service->expects($this->once())
             ->method('select')

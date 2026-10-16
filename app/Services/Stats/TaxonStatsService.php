@@ -86,13 +86,33 @@ class TaxonStatsService
             )));
 
             if ($taxonIds !== []) {
-                $db->table('taxon_stats')->whereIn('taxon_id', $taxonIds)->delete();
+                $db->transException(true)->transBegin();
+                try {
+                    $existingRows = $db->table('taxon_stats')
+                        ->select('taxon_id, geographic_region_id, notable, notable_comment, notable_decision_date')
+                        ->whereIn('taxon_id', $taxonIds)
+                        ->get()
+                        ->getResultArray();
+                    $rows = $this->mergeNotableFields($rows, $existingRows);
+                    $db->table('taxon_stats')->whereIn('taxon_id', $taxonIds)->delete();
+
+                    if ($rows !== []) {
+                        $this->insertRows($rows);
+                    }
+
+                    if (! $db->transStatus() || ! $db->transCommit()) {
+                        throw new \RuntimeException('Taxon statistics could not be replaced.');
+                    }
+                } catch (\Throwable $exception) {
+                    $db->transRollback();
+                    throw $exception;
+                }
             }
 
-            if ($rows !== []) {
+            if ($taxonIds === [] && $rows !== []) {
                 $this->insertRows($rows);
-                $counts['inserted'] = count($rows);
             }
+            $counts['inserted'] = count($rows);
 
             $offsetModel->setCheckpoint(
                 'derived-stats:taxon_stats',
@@ -110,14 +130,58 @@ class TaxonStatsService
     }
 
     /**
-     * Clear taxon statistics and reset the full-rebuild state.
+     * Reset derived statistics while retaining curated key-species decisions.
      *
      * @return void
      */
     public function resetFullRebuild(): void
     {
         $db = db_connect();
-        $db->table('taxon_stats')->emptyTable();
+        $db->transException(true)->transBegin();
+        try {
+            $existingRows = $db->table('taxon_stats')
+                ->select('uuid, taxon_id, geographic_region_id, notable, notable_comment, notable_decision_date')
+                ->groupStart()
+                ->where('notable IS NOT NULL', null, false)
+                ->orWhere('notable_comment IS NOT NULL', null, false)
+                ->orWhere('notable_decision_date IS NOT NULL', null, false)
+                ->groupEnd()
+                ->get()
+                ->getResultArray();
+
+            $db->table('taxon_stats')->emptyTable();
+            foreach ($existingRows as $row) {
+                $db->table('taxon_stats')->insert([
+                    'uuid' => $row['uuid'],
+                    'taxon_id' => (int) $row['taxon_id'],
+                    'geographic_region_id' => $row['geographic_region_id'] === null
+                        ? null
+                        : (int) $row['geographic_region_id'],
+                    'occurrences_count' => 0,
+                    'grid_square_count' => 0,
+                    'frequency_trend' => null,
+                    'frequency_trend_state' => null,
+                    'first_record_date' => null,
+                    'last_record_date' => null,
+                    'first_recorder' => '',
+                    'last_recorder' => '',
+                    'first_verified_record_date' => null,
+                    'last_verified_record_date' => null,
+                    'first_verified_recorder' => '',
+                    'last_verified_recorder' => '',
+                    'notable' => $row['notable'],
+                    'notable_comment' => $row['notable_comment'],
+                    'notable_decision_date' => $row['notable_decision_date'],
+                ]);
+            }
+
+            if (! $db->transStatus() || ! $db->transCommit()) {
+                throw new \RuntimeException('Taxon statistics could not be reset.');
+            }
+        } catch (\Throwable $exception) {
+            $db->transRollback();
+            throw $exception;
+        }
 
         $offsetModel = model(\App\Models\ImportOffsetModel::class);
         $offsetModel->setCheckpoint('derived-stats:taxon_stats', null);
@@ -225,10 +289,100 @@ class TaxonStatsService
         } else {
             $builder->where('geographic_region_id', (int) $scope['geographic_region_id']);
         }
-        $builder->delete();
-        if ($rows !== []) {
-            $this->insertRows($rows);
+
+        $db->transException(true)->transBegin();
+        try {
+            $existingRows = $builder
+                ->select('taxon_id, geographic_region_id, notable, notable_comment, notable_decision_date')
+                ->get()
+                ->getResultArray();
+            $rows = $this->mergeNotableFields($rows, $existingRows);
+
+            $deleteBuilder = $db->table('taxon_stats')
+                ->where('taxon_id', (int) $scope['taxon_id']);
+            if ($scope['geographic_region_id'] === null) {
+                $deleteBuilder->where('geographic_region_id', null);
+            } else {
+                $deleteBuilder->where('geographic_region_id', (int) $scope['geographic_region_id']);
+            }
+            $deleteBuilder->delete();
+            if ($rows !== []) {
+                $this->insertRows($rows);
+            }
+
+            if (! $db->transStatus() || ! $db->transCommit()) {
+                throw new \RuntimeException('Taxon statistics scope could not be replaced.');
+            }
+        } catch (\Throwable $exception) {
+            $db->transRollback();
+            throw $exception;
         }
+    }
+
+    /**
+     * Carry curated decisions into recomputed rows and retain decision-only scopes.
+     *
+     * @param array<int, array<string, mixed>> $rows Newly computed rows.
+     * @param array<int, array<string, mixed>> $existingRows Previous rows with curated fields.
+     * @return array<int, array<string, mixed>> Rows ready for replacement.
+     */
+    private function mergeNotableFields(array $rows, array $existingRows): array
+    {
+        $existingByScope = [];
+        foreach ($existingRows as $existingRow) {
+            $key = $this->scopeKey(
+                (int) $existingRow['taxon_id'],
+                $this->nullableInt($existingRow['geographic_region_id'] ?? null),
+            );
+            $existingByScope[$key] = $existingRow;
+        }
+
+        $computedScopes = [];
+        foreach ($rows as &$row) {
+            $key = $this->scopeKey(
+                (int) $row['taxon_id'],
+                $this->nullableInt($row['geographic_region_id'] ?? null),
+            );
+            $computedScopes[$key] = true;
+            $existingRow = $existingByScope[$key] ?? [];
+            $row['notable'] = $existingRow['notable'] ?? null;
+            $row['notable_comment'] = $existingRow['notable_comment'] ?? null;
+            $row['notable_decision_date'] = $existingRow['notable_decision_date'] ?? null;
+        }
+        unset($row);
+
+        foreach ($existingByScope as $key => $existingRow) {
+            if (isset($computedScopes[$key])) {
+                continue;
+            }
+            if ($existingRow['notable'] === null
+                && $existingRow['notable_comment'] === null
+                && $existingRow['notable_decision_date'] === null) {
+                continue;
+            }
+
+            $rows[] = [
+                'taxon_id' => (int) $existingRow['taxon_id'],
+                'geographic_region_id' => $existingRow['geographic_region_id'] === null
+                    ? null
+                    : (int) $existingRow['geographic_region_id'],
+                'occurrences_count' => 0,
+                'grid_square_count' => 0,
+                'first_record_date' => null,
+                'last_record_date' => null,
+                'first_recorder' => '',
+                'last_recorder' => '',
+                'first_verified_record_date' => null,
+                'last_verified_record_date' => null,
+                'first_verified_recorder' => '',
+                'last_verified_recorder' => '',
+                'notable' => $existingRow['notable'],
+                'notable_comment' => $existingRow['notable_comment'],
+                'notable_decision_date' => $existingRow['notable_decision_date'],
+            ];
+        }
+
+        return $rows;
     }
 
     /**
@@ -790,7 +944,7 @@ class TaxonStatsService
             }
 
             $payload[] = [
-                'uuid' => $this->stableUuid($taxonId . '|' . ($geographicRegionId ?? 'global')),
+                'uuid' => TaxonStatsIdentity::uuidForScope($taxonId, $geographicRegionId),
                 'taxon_id' => $taxonId,
                 'geographic_region_id' => $geographicRegionId,
                 'frequency_trend' => $frequencyTrends[$this->scopeKey($taxonId, $geographicRegionId)]['score'] ?? null,
@@ -805,6 +959,9 @@ class TaxonStatsService
                 'last_verified_record_date' => $row['last_verified_record_date'] ?? null,
                 'first_verified_recorder' => substr((string) ($row['first_verified_recorder'] ?? ''), 0, 255),
                 'last_verified_recorder' => substr((string) ($row['last_verified_recorder'] ?? ''), 0, 255),
+                'notable' => $row['notable'] ?? null,
+                'notable_comment' => $row['notable_comment'] ?? null,
+                'notable_decision_date' => $row['notable_decision_date'] ?? null,
             ];
         }
 
@@ -841,25 +998,4 @@ class TaxonStatsService
         return (int) $string;
     }
 
-    /**
-     * Build a deterministic UUID-like value from a seed string.
-     *
-     * @param string $seed Identifier seed.
-     *
-     * @return string
-     */
-    private function stableUuid(string $seed): string
-    {
-        $hex = md5($seed);
-
-        return sprintf(
-            '%s-%s-4%s-%s%s-%s',
-            substr($hex, 0, 8),
-            substr($hex, 8, 4),
-            substr($hex, 13, 3),
-            dechex((hexdec(substr($hex, 16, 1)) & 0x3) | 0x8),
-            substr($hex, 17, 3),
-            substr($hex, 20, 12),
-        );
-    }
 }

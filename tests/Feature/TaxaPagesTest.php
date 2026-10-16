@@ -154,6 +154,147 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->assertSame('Manager edited remarks', $taxon['taxon_remarks']);
     }
 
+    /**
+     * Save global and regional decisions when no derived statistics exist.
+     */
+    public function testManagerCanSaveGlobalAndRegionalKeySpeciesDecisionsWithoutStats(): void
+    {
+        $regionId = $this->createTestRegion('TPG-KEY-1', 'Key species test region');
+        $this->authenticateAs('taxa-manager-key-species@example.com', 'manager');
+
+        $details = $this->get('taxa/1');
+        $details->assertStatus(200);
+        $details->assertSee('Key species by scope');
+        $details->assertSee('Global');
+        $details->assertSee('Key species test region');
+
+        $result = $this->post('taxa/1', [
+            'notable' => [
+                'global' => '1',
+                (string) $regionId => '0',
+            ],
+            'notable_comment' => [
+                'global' => 'Important across all regions',
+                (string) $regionId => 'Regional decision',
+            ],
+        ]);
+
+        $result->assertStatus(302);
+        $result->assertRedirect();
+
+        $db = db_connect();
+        $global = $db->table('taxon_stats')
+            ->where('taxon_id', 1)
+            ->where('geographic_region_id', null)
+            ->get()
+            ->getRowArray();
+        $regional = $db->table('taxon_stats')
+            ->where('taxon_id', 1)
+            ->where('geographic_region_id', $regionId)
+            ->get()
+            ->getRowArray();
+
+        $this->assertSame(1, (int) $global['notable']);
+        $this->assertSame('Important across all regions', $global['notable_comment']);
+        $this->assertSame(date('Y-m-d'), $global['notable_decision_date']);
+        $this->assertSame(0, (int) $regional['notable']);
+        $this->assertSame('Regional decision', $regional['notable_comment']);
+        $this->assertSame(date('Y-m-d'), $regional['notable_decision_date']);
+        $this->assertSame(0, (int) $global['occurrences_count']);
+        $this->assertSame(0, (int) $regional['occurrences_count']);
+    }
+
+    /**
+     * Clear unset decisions and retain or refresh dates according to decision changes.
+     */
+    public function testNotSetClearsDecisionDateAndCommentAndCommentEditKeepsDate(): void
+    {
+        $this->authenticateAs('taxa-manager-key-species-date@example.com', 'manager');
+        $this->post('taxa/1', [
+            'notable' => ['global' => '1'],
+            'notable_comment' => ['global' => 'Initial rationale'],
+        ])->assertStatus(302);
+
+        $db = db_connect();
+        $db->table('taxon_stats')
+            ->where('taxon_id', 1)
+            ->where('geographic_region_id', null)
+            ->update(['notable_decision_date' => '2000-01-01']);
+
+        $this->post('taxa/1', [
+            'notable' => ['global' => '1'],
+            'notable_comment' => ['global' => 'Updated rationale'],
+        ])->assertStatus(302);
+
+        $row = $db->table('taxon_stats')
+            ->where('taxon_id', 1)
+            ->where('geographic_region_id', null)
+            ->get()
+            ->getRowArray();
+        $this->assertSame('Updated rationale', $row['notable_comment']);
+        $this->assertSame('2000-01-01', $row['notable_decision_date']);
+
+        $this->post('taxa/1', [
+            'notable' => ['global' => '0'],
+            'notable_comment' => ['global' => 'Changed to not key'],
+        ])->assertStatus(302);
+
+        $row = $db->table('taxon_stats')
+            ->where('taxon_id', 1)
+            ->where('geographic_region_id', null)
+            ->get()
+            ->getRowArray();
+        $this->assertSame(0, (int) $row['notable']);
+        $this->assertSame('Changed to not key', $row['notable_comment']);
+        $this->assertSame(date('Y-m-d'), $row['notable_decision_date']);
+
+        $this->post('taxa/1', [
+            'notable' => ['global' => ''],
+            'notable_comment' => ['global' => 'This must be cleared'],
+        ])->assertStatus(302);
+
+        $row = $db->table('taxon_stats')
+            ->where('taxon_id', 1)
+            ->where('geographic_region_id', null)
+            ->get()
+            ->getRowArray();
+        $this->assertNull($row['notable']);
+        $this->assertNull($row['notable_comment']);
+        $this->assertNull($row['notable_decision_date']);
+    }
+
+    /**
+     * Reject key-species decisions submitted for unknown geographic regions.
+     */
+    public function testManagerCannotSubmitUnknownKeySpeciesRegion(): void
+    {
+        $this->authenticateAs('taxa-manager-key-species-invalid@example.com', 'manager');
+
+        $result = $this->post('taxa/1', [
+            'notable' => ['999999' => '1'],
+            'notable_comment' => ['999999' => 'Invalid scope'],
+        ]);
+
+        $result->assertStatus(302);
+        $this->assertSame(0, db_connect()->table('taxon_stats')->countAllResults());
+        $this->assertStringContainsString('invalid key-species scope', session('errors')['notable']);
+    }
+
+    /**
+     * Prevent a standard user from saving key-species decisions.
+     */
+    public function testStandardUserCannotSaveKeySpeciesDecisions(): void
+    {
+        $this->authenticateAs('taxa-standard-key-species@example.com', 'user');
+
+        $this->post('taxa/1', [
+            'notable' => ['global' => '1'],
+            'notable_comment' => ['global' => 'Should not save'],
+        ])->assertStatus(302);
+
+        $this->assertSame(0, db_connect()->table('taxon_stats')->countAllResults());
+    }
+
     public function testManagerCannotUpdateModerationFields(): void
     {
         $this->authenticateAs('taxa-manager-update@example.com', 'manager');
@@ -343,6 +484,47 @@ final class TaxaPagesTest extends CIUnitTestCase
     {
         $this->actingAs($this->makeUser($email, $group));
         $this->withSession($_SESSION);
+    }
+
+    /**
+     * Find or create a geographic region for admin UI feature tests.
+     *
+     * @param string $identifier Stable test identifier.
+     * @param string $name Display name.
+     * @return int Geographic region identifier.
+     */
+    private function createTestRegion(string $identifier, string $name): int
+    {
+        $db = db_connect();
+        $source = $db->table('data_sources')->where('abbr', 'TPG')->get()->getRowArray();
+        if ($source === null) {
+            $db->table('data_sources')->insert([
+                'abbr' => 'TPG',
+                'title' => 'Taxa pages test source',
+                'url' => 'https://example.test',
+            ]);
+            $sourceId = (int) $db->insertID();
+        } else {
+            $sourceId = (int) $source['id'];
+        }
+
+        $region = $db->table('geographic_regions')
+            ->where('higher_geography_identifier', $identifier)
+            ->get()
+            ->getRowArray();
+        if ($region !== null) {
+            return (int) $region['id'];
+        }
+
+        $db->table('geographic_regions')->insert([
+            'higher_geography_identifier' => $identifier,
+            'higher_geography' => $name,
+            'location_type' => 'Test region',
+            'data_source_id' => $sourceId,
+            'deleted_at' => null,
+        ]);
+
+        return (int) $db->insertID();
     }
 
     private function seedTaxa(): void

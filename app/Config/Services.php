@@ -162,6 +162,20 @@ class Services extends BaseService
     }
 
     /**
+     * Taxon key-species decision service.
+     *
+     * @return \App\Services\Stats\TaxonNotableService
+     */
+    public static function taxonNotableService(bool $getShared = true): \App\Services\Stats\TaxonNotableService
+    {
+        if ($getShared) {
+            return static::getSharedInstance('taxonNotableService');
+        }
+
+        return new \App\Services\Stats\TaxonNotableService();
+    }
+
+    /**
      * Taxon year stats derived service.
      */
     public static function taxonYearStatsService(bool $getShared = true): \App\Services\Stats\TaxonYearStatsService

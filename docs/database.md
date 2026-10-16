@@ -528,6 +528,9 @@ access stats across the dataset or region filtered.
 | grid_square_count          | INT          | NO   |         |                | Number of grid squares for the taxon and region scope                                  |
 | frequency_trend            | INT          | YES  |         | NULL           | Relative frequency trend from 0 (most declining) to 100 (most increasing)              |
 | frequency_trend_state      | VARCHAR(32)  | YES  |         | NULL           | Trend classification: increasing, decreasing, stable, insufficient_data, or unclear    |
+| notable                    | BOOLEAN      | YES  |         | NULL           | Curated key-species decision for this scope: true, false, or not set                    |
+| notable_comment            | TEXT         | YES  |         | NULL           | Current rationale for the key-species decision; cleared when the decision is not set    |
+| notable_decision_date      | DATE         | YES  |         | NULL           | Date the current true/false decision was made; updated when the decision changes       |
 | first_record_date          | DATE         | YES  |         | NULL           | Date of the first record, or null when all records are undated                          |
 | last_record_date           | DATE         | YES  |         | NULL           | Date of the last record, or null when all records are undated                           |
 | first_recorder             | VARCHAR(255) | NO   |         |                | Recorder name of the first record of this taxon (in the region or across all)          |
@@ -536,6 +539,11 @@ access stats across the dataset or region filtered.
 | last_verified_record_date  | DATE         | YES  |         | NULL           | Date of the last verified record, or null when no verified record has a date           |
 | first_verified_recorder    | VARCHAR(255) | NO   |         |                | Recorder name of the first verified record of this taxon (in the region or across all) |
 | last_verified_recorder     | VARCHAR(255) | NO   |         |                | Recorder name of the last verified record of this taxon (in the region or across all)  |
+
+Key-species decisions are manually maintained alongside derived statistics. Global decisions use
+the row whose `geographic_region_id` is null; regional decisions use that region's row. When a
+decision scope has no statistics yet, the admin UI can create a zero-count row. Full and incremental
+statistics rebuilds preserve these curated fields and any decision-only scope rows.
 
 ### taxon_year_stats
 

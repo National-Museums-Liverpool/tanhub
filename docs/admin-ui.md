@@ -133,6 +133,19 @@ used to provide species account text in tanvis visualisation outputs.
 3. Enter or update the text in **Taxon remarks**.
 4. Save the changes.
 
+### Set a key-species decision
+
+Managers and admins can record whether a taxon is a key species in each active geographic region,
+and set an independent decision for the global scope. Each scope has a decision of **Yes**, **No**,
+or **Not set**, plus a current rationale comment. The decision date is set when the decision
+changes to Yes or No; editing only the comment does not change the date. Choosing **Not set**
+clears the comment and decision date. These fields show the current decision, not a history of
+earlier decisions.
+
+1. Open **Taxonomy > Taxa**, find the taxon, and open its details page.
+2. In **Key species by scope**, choose a decision for each region or for **Global**.
+3. Add or update the rationale comment where useful, then save the page.
+
 ### Add a media file to a taxon
 
 You can attach an image to an individual taxon from its details page. Use a clear, relevant image

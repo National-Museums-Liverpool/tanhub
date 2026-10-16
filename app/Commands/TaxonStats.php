@@ -52,7 +52,7 @@ class TaxonStats extends BaseCommand
      */
     protected $options = [
         '--dry-run' => 'Calculate taxon stats without writing updates.',
-        '--restart' => 'Clear taxon_stats and restart the full population.',
+        '--restart' => 'Restart the full population and retain key-species decisions.',
     ];
 
     /**

@@ -7,7 +7,7 @@
             <div class="auth-panel p-4 p-lg-5 h-100">
                 <span class="eyebrow mb-3">Taxonomy</span>
                 <h1 class="section-heading mb-3">Taxon details</h1>
-                <p class="section-copy mb-4">Most fields are read-only. Manager and admin users can edit rarity group name and taxon remarks. Admin users can also set blocking controls.</p>
+                <p class="section-copy mb-4">Most fields are read-only. Manager and admin users can edit rarity group name, taxon remarks, and key-species decisions. Admin users can also set blocking controls.</p>
             </div>
         </div>
         <div class="col-lg-7">
@@ -110,6 +110,81 @@
                                 <span class="badge bg-secondary ms-2">Read-only</span>
                             </label>
                             <input class="form-control" id="rarity_category" type="text" value="<?= esc((string) ($page['referenceLabels']['rarity_category'] ?? '')) ?>" disabled>
+                        </div>
+
+                        <div class="col-12">
+                            <h2 class="h5 mb-1">Key species by scope</h2>
+                            <p class="form-text mb-2">Set a separate decision for each active region or for the global scope.</p>
+                            <?php if (isset($errors['notable'])): ?>
+                                <div class="alert alert-danger" role="alert"><?= esc($errors['notable']) ?></div>
+                            <?php endif; ?>
+                            <?php
+                            $notableRows = [[
+                                'key' => 'global',
+                                'label' => 'Global',
+                            ]];
+                            foreach ($page['notableRegions'] as $region) {
+                                $notableRows[] = [
+                                    'key' => (string) $region['id'],
+                                    'label' => (string) $region['higher_geography']
+                                        . ' (' . (string) $region['higher_geography_identifier'] . ')',
+                                ];
+                            }
+                            $oldNotable = old('notable', []);
+                            $oldNotableComments = old('notable_comment', []);
+                            if (! is_array($oldNotable)) {
+                                $oldNotable = [];
+                            }
+                            if (! is_array($oldNotableComments)) {
+                                $oldNotableComments = [];
+                            }
+                            ?>
+                            <div class="table-responsive">
+                                <table class="table table-bordered align-middle mb-0">
+                                    <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Region</th>
+                                        <th scope="col">Decision</th>
+                                        <th scope="col">Comment</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    <?php foreach ($notableRows as $notableRow): ?>
+                                        <?php
+                                        $scopeKey = $notableRow['key'];
+                                        $savedDecision = $page['notableByScope'][$scopeKey]['notable'] ?? null;
+                                        $decisionValue = array_key_exists($scopeKey, $oldNotable)
+                                            ? (string) $oldNotable[$scopeKey]
+                                            : ($savedDecision === null ? '' : ((bool) $savedDecision ? '1' : '0'));
+                                        $savedComment = $page['notableByScope'][$scopeKey]['notable_comment'] ?? '';
+                                        $commentValue = array_key_exists($scopeKey, $oldNotableComments)
+                                            ? (string) $oldNotableComments[$scopeKey]
+                                            : (string) $savedComment;
+                                        $decisionDate = $page['notableByScope'][$scopeKey]['notable_decision_date'] ?? null;
+                                        $controlId = 'notable_' . str_replace('-', '_', $scopeKey);
+                                        ?>
+                                        <tr>
+                                            <th scope="row"><?= esc($notableRow['label']) ?></th>
+                                            <td>
+                                                <label class="visually-hidden" for="<?= esc($controlId) ?>"><?= esc($notableRow['label']) ?> decision</label>
+                                                <select class="form-select" id="<?= esc($controlId) ?>" name="notable[<?= esc($scopeKey) ?>]" <?= $page['canEditDetails'] ? '' : 'disabled' ?>>
+                                                    <option value="" <?= $decisionValue === '' ? 'selected' : '' ?>>Not set</option>
+                                                    <option value="1" <?= $decisionValue === '1' ? 'selected' : '' ?>>Yes</option>
+                                                    <option value="0" <?= $decisionValue === '0' ? 'selected' : '' ?>>No</option>
+                                                </select>
+                                                <?php if ($decisionDate !== null): ?>
+                                                    <div class="form-text">Decision date: <?= esc((string) $decisionDate) ?></div>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <label class="visually-hidden" for="<?= esc($controlId) ?>_comment"><?= esc($notableRow['label']) ?> comment</label>
+                                                <textarea class="form-control" id="<?= esc($controlId) ?>_comment" name="notable_comment[<?= esc($scopeKey) ?>]" rows="2" maxlength="65535" <?= $page['canEditDetails'] ? '' : 'disabled' ?>><?= esc($commentValue) ?></textarea>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
 
                         <?php foreach ($page['classificationColumns'] as $column): ?>

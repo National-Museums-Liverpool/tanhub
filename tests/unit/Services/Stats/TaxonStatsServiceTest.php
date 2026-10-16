@@ -100,7 +100,10 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             first_verified_record_date DATE NULL,
             last_verified_record_date DATE NULL,
             first_verified_recorder VARCHAR(255) NOT NULL,
-            last_verified_recorder VARCHAR(255) NOT NULL
+            last_verified_recorder VARCHAR(255) NOT NULL,
+            notable BOOLEAN NULL DEFAULT NULL,
+            notable_comment TEXT NULL,
+            notable_decision_date DATE NULL
         )');
 
         $this->db->query('CREATE TABLE ' . $prefix . 'import_offsets (
@@ -231,6 +234,141 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         foreach ($allRows as $row) {
             $this->assertSame(36, strlen((string) $row['uuid']));
         }
+    }
+
+    /**
+     * Preserve curated decisions and decision-only scopes during a full rebuild.
+     *
+     * @return void
+     */
+    public function testFullRebuildPreservesNotableDecisionsAndScopesWithoutStats(): void
+    {
+        $this->db->table('occurrences')->insert([
+            'id' => 110,
+            'taxon_id' => 1,
+            'from_date' => '2020-01-01',
+            'to_date' => '2020-01-01',
+            'grid_ref_2km' => 'SU110A',
+            'blocked' => 0,
+            'deleted_at' => null,
+        ]);
+        $this->db->table('taxon_stats')->insertBatch([
+            [
+                'uuid' => '00000000-0000-4000-8000-000000000110',
+                'taxon_id' => 1,
+                'geographic_region_id' => null,
+                'first_recorder' => '',
+                'last_recorder' => '',
+                'first_verified_recorder' => '',
+                'last_verified_recorder' => '',
+                'notable' => 1,
+                'notable_comment' => 'Global decision',
+                'notable_decision_date' => '2026-01-02',
+            ],
+            [
+                'uuid' => '00000000-0000-4000-8000-000000000111',
+                'taxon_id' => 1,
+                'geographic_region_id' => 22,
+                'first_recorder' => '',
+                'last_recorder' => '',
+                'first_verified_recorder' => '',
+                'last_verified_recorder' => '',
+                'notable' => 0,
+                'notable_comment' => 'Decision without regional records',
+                'notable_decision_date' => '2026-01-03',
+            ],
+        ]);
+
+        $counts = $this->runAllTaxonStatBatches(new TaxonStatsService());
+
+        $this->assertSame('success', $counts['status']);
+        $global = $this->findTaxonStatRow(1, null);
+        $region = $this->findTaxonStatRow(1, 22);
+        $this->assertSame(1, (int) $global['notable']);
+        $this->assertSame('Global decision', $global['notable_comment']);
+        $this->assertSame('2026-01-02', $global['notable_decision_date']);
+        $this->assertSame(0, (int) $region['notable']);
+        $this->assertSame('Decision without regional records', $region['notable_comment']);
+        $this->assertSame('2026-01-03', $region['notable_decision_date']);
+        $this->assertSame(0, (int) $region['occurrences_count']);
+    }
+
+    /**
+     * Retain a curated decision when incremental recomputation removes its last record.
+     *
+     * @return void
+     */
+    public function testIncrementalRebuildRetainsDecisionWhenScopeHasNoStats(): void
+    {
+        $this->db->table('taxon_stats')->insert([
+            'uuid' => '00000000-0000-4000-8000-000000000112',
+            'taxon_id' => 1,
+            'geographic_region_id' => 22,
+            'occurrences_count' => 5,
+            'grid_square_count' => 2,
+            'first_recorder' => '',
+            'last_recorder' => '',
+            'first_verified_recorder' => '',
+            'last_verified_recorder' => '',
+            'notable' => 1,
+            'notable_comment' => 'Keep after record removal',
+            'notable_decision_date' => '2026-01-04',
+        ]);
+        $this->db->table('import_offsets')->insert([
+            'source_key' => 'derived-stats:taxon_stats',
+            'next_checkpoint' => null,
+            'is_complete' => 1,
+        ]);
+        $this->db->table('stats_dirty_scopes')->insert([
+            'scope_key' => 'taxon|exact|1|22|all',
+            'stat_type' => 'taxon',
+            'projection' => 'exact',
+            'taxon_id' => 1,
+            'geographic_region_id' => 22,
+            'year' => null,
+        ]);
+
+        $counts = (new TaxonStatsService(new \App\Services\Stats\StatsDirtyScopeService()))->run();
+
+        $this->assertSame('success', $counts['status']);
+        $row = $this->findTaxonStatRow(1, 22);
+        $this->assertSame(1, (int) $row['notable']);
+        $this->assertSame('Keep after record removal', $row['notable_comment']);
+        $this->assertSame(0, (int) $row['occurrences_count']);
+    }
+
+    /**
+     * Keep current decisions when a user requests a clean full rebuild.
+     *
+     * @return void
+     */
+    public function testResetFullRebuildRetainsDecisionsAndClearsDerivedCounts(): void
+    {
+        $this->db->table('taxon_stats')->insert([
+            'uuid' => '00000000-0000-4000-8000-000000000113',
+            'taxon_id' => 1,
+            'geographic_region_id' => null,
+            'occurrences_count' => 8,
+            'grid_square_count' => 3,
+            'first_recorder' => '',
+            'last_recorder' => '',
+            'first_verified_recorder' => '',
+            'last_verified_recorder' => '',
+            'notable' => 1,
+            'notable_comment' => 'Retain through restart',
+            'notable_decision_date' => '2026-01-05',
+        ]);
+
+        (new TaxonStatsService())->resetFullRebuild();
+
+        $row = $this->findTaxonStatRow(1, null);
+        $this->assertNotNull($row);
+        $this->assertSame('00000000-0000-4000-8000-000000000113', $row['uuid']);
+        $this->assertSame(0, (int) $row['occurrences_count']);
+        $this->assertSame(0, (int) $row['grid_square_count']);
+        $this->assertSame(1, (int) $row['notable']);
+        $this->assertSame('Retain through restart', $row['notable_comment']);
+        $this->assertSame('2026-01-05', $row['notable_decision_date']);
     }
 
     /**

@@ -627,6 +627,80 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame('NHMSYS0021054498', $json['data'][0]['taxon_identifier']);
     }
 
+    /**
+     * Expose and filter regional and global key-species decisions through the API.
+     */
+    public function testTaxonStatsApiExposesAndFiltersRegionalAndGlobalKeySpeciesDecisions(): void
+    {
+        $db = db_connect();
+        $db->table('taxon_stats')->where('id', 1)->update([
+            'notable' => 1,
+            'notable_comment' => 'Regional rationale',
+            'notable_decision_date' => '2026-10-15',
+        ]);
+        $db->table('taxon_stats')->insert([
+            'id' => 3,
+            'uuid' => '77777777-7777-4777-8777-777777777777',
+            'taxon_id' => 1,
+            'geographic_region_id' => null,
+            'occurrences_count' => 0,
+            'grid_square_count' => 0,
+            'first_record_date' => '2026-10-15',
+            'last_record_date' => '2026-10-15',
+            'first_recorder' => '',
+            'last_recorder' => '',
+            'first_verified_record_date' => '2026-10-15',
+            'last_verified_record_date' => '2026-10-15',
+            'first_verified_recorder' => '',
+            'last_verified_recorder' => '',
+            'notable' => 1,
+            'notable_comment' => 'Global rationale',
+            'notable_decision_date' => '2026-10-15',
+        ]);
+
+        $regionalResult = $this->get(
+            'api/v1/taxon-stats?notable[eq]=1&higher_geography_identifier[eq]=SH',
+        );
+        $regionalResult->assertStatus(200);
+        $regional = json_decode((string) $regionalResult->response()->getBody(), true);
+        $this->assertSame(1, $regional['meta']['count']);
+        $this->assertSame('Regional rationale', $regional['data'][0]['notable_comment']);
+        $this->assertSame('2026-10-15', $regional['data'][0]['notable_decision_date']);
+        $this->assertSame(1, (int) $regional['data'][0]['notable']);
+
+        $db->table('geographic_regions')->where('id', 1)->update([
+            'deleted_at' => '2026-10-15 00:00:00',
+        ]);
+        $db->table('taxon_stats')->insert([
+            'id' => 4,
+            'uuid' => '88888888-8888-4888-8888-888888888888',
+            'taxon_id' => 1,
+            'geographic_region_id' => 1,
+            'occurrences_count' => 0,
+            'grid_square_count' => 0,
+            'first_record_date' => '2026-10-15',
+            'last_record_date' => '2026-10-15',
+            'first_recorder' => '',
+            'last_recorder' => '',
+            'first_verified_record_date' => '2026-10-15',
+            'last_verified_record_date' => '2026-10-15',
+            'first_verified_recorder' => '',
+            'last_verified_recorder' => '',
+            'notable' => 1,
+            'notable_comment' => 'Archived region rationale',
+            'notable_decision_date' => '2026-10-15',
+        ]);
+
+        $globalResult = $this->get(
+            'api/v1/taxon-stats?notable[eq]=1&higher_geography_identifier[eq]=null',
+        );
+        $globalResult->assertStatus(200);
+        $global = json_decode((string) $globalResult->response()->getBody(), true);
+        $this->assertSame(1, $global['meta']['count']);
+        $this->assertNull($global['data'][0]['higher_geography_identifier']);
+        $this->assertSame('Global rationale', $global['data'][0]['notable_comment']);
+    }
+
     public function testTaxonStatsShowReturnsNotFoundForBlockedTaxonStats(): void
     {
         $result = $this->get('api/v1/taxon-stats/44444444-4444-4444-8444-444444444444');
@@ -1409,6 +1483,20 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             first_verified_recorder VARCHAR(255) NOT NULL,
             last_verified_recorder VARCHAR(255) NOT NULL
         )');
+        $taxonStatsColumns = [
+            'notable' => 'BOOLEAN NULL DEFAULT NULL',
+            'notable_comment' => 'TEXT NULL DEFAULT NULL',
+            'notable_decision_date' => 'DATE NULL DEFAULT NULL',
+        ];
+        $existingTaxonStatsColumns = array_map(
+            static fn (object $field): string => (string) $field->name,
+            $db->getFieldData('taxon_stats'),
+        );
+        foreach ($taxonStatsColumns as $column => $definition) {
+            if (! in_array($column, $existingTaxonStatsColumns, true)) {
+                $db->query('ALTER TABLE ' . $prefix . 'taxon_stats ADD COLUMN ' . $column . ' ' . $definition);
+            }
+        }
 
         $db->query('CREATE TABLE IF NOT EXISTS ' . $prefix . 'taxon_year_stats (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -13,7 +13,8 @@ use CodeIgniter\Database\RawSql;
  * {@see ApiController} for the public-read/rate-limit model that applies to all endpoints
  * in this namespace. Every row is inner-joined to its owning {@see Taxa} row (blocked and
  * soft-deleted taxa excluded) and left-joined to {@see GeographicRegions} for the region key
- * column. Supports `?include=` expansions for `geographic-region`, `taxon` (base taxon
+ * column. Rows for deleted regions are excluded so a null region key uniquely identifies a
+ * global row. Supports `?include=` expansions for `geographic-region`, `taxon` (base taxon
  * fields, itself gating `parent-taxa`, `taxon-media`, `taxon-group`, and `taxon-rank`).
  */
 class TaxonStats extends ApiResourceController
@@ -88,6 +89,9 @@ class TaxonStats extends ApiResourceController
             'grid_square_count' => 'ts.grid_square_count',
             'frequency_trend' => 'ts.frequency_trend',
             'frequency_trend_state' => 'ts.frequency_trend_state',
+            'notable' => 'ts.notable',
+            'notable_comment' => 'ts.notable_comment',
+            'notable_decision_date' => 'ts.notable_decision_date',
             'first_record_date' => 'ts.first_record_date',
             'last_record_date' => 'ts.last_record_date',
             'first_recorder' => 'ts.first_recorder',
@@ -174,6 +178,7 @@ class TaxonStats extends ApiResourceController
             ->select($this->getFieldSql($includes), false)
             ->join('taxa t', 't.id = ts.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0')
             ->join('geographic_regions gr', 'gr.id = ts.geographic_region_id AND gr.deleted_at IS NULL', 'left');
+        $builder->where(new RawSql('(ts.geographic_region_id IS NULL OR gr.id IS NOT NULL)'));
 
         if ($this->hasInclude($includes, 'parent-taxon')) {
             $builder->join('taxa pt', 'pt.id = t.parent_taxon_id AND pt.deleted_at IS NULL AND pt.blocked = 0', 'left');

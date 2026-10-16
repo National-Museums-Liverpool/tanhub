@@ -71,8 +71,8 @@ class Taxa extends BaseController
      * Show taxon details with associated taxon names.
      *
      * Also resolves human-readable labels for classification foreign keys,
-     * loads associated media, and computes the current user's edit/moderate
-     * permissions for the view.
+     * loads associated media and scoped key-species decisions, and computes the
+     * current user's edit/moderate permissions for the view.
      *
      * @param int $id Taxon identifier.
      * @return string Rendered HTML for the taxon details view.
@@ -100,6 +100,8 @@ class Taxa extends BaseController
         $referenceLabels = $this->referenceLabels($taxon);
         $hierarchy = $this->hierarchyDetails($taxon);
         $taxonMedia = service('taxonMediaReadService')->getByTaxonId($id);
+        $notableRegions = $this->activeGeographicRegions();
+        $notableByScope = service('taxonNotableService')->getForTaxon($id);
         $user = auth()->user();
         $canEditDetails = $user !== null && $user->inGroup('admin', 'manager');
         $canModerate = $user !== null && $user->inGroup('admin');
@@ -111,6 +113,8 @@ class Taxa extends BaseController
             'taxon' => $taxon,
             'taxonNames' => $taxonNames,
             'taxonMedia' => $taxonMedia,
+            'notableRegions' => $notableRegions,
+            'notableByScope' => $notableByScope,
             'referenceLabels' => $referenceLabels,
             'hierarchy' => $hierarchy,
             'canEditDetails' => $canEditDetails,
@@ -269,11 +273,10 @@ class Taxa extends BaseController
      * Update admin moderation fields for a taxon.
      *
      * Which fields are accepted depends on the current user's role: managers
-     * (and admins) may update `rarity_group_name` and `taxon_remarks`;
-     * admins may additionally update `blocked`/`blocked_reason`. Only the
-     * fields actually present in the submitted data (and permitted for the
-     * user's role) are validated and written, so this single action serves
-     * both the details-edit and moderation forms.
+     * (and admins) may update `rarity_group_name`, `taxon_remarks`, and
+     * key-species decisions; admins may additionally update `blocked` and
+     * `blocked_reason`. Only fields present in the submitted data and
+     * permitted for the user's role are validated and written.
      *
      * @param int $id Taxon identifier.
      * @return RedirectResponse Redirect back to the taxon details page, or with validation errors.
@@ -292,6 +295,16 @@ class Taxa extends BaseController
         $postData = $this->request->getPost();
 
         $rules = [];
+        $notableScopes = null;
+        $notableError = null;
+
+        if ($canEditDetails && is_array($postData) && array_key_exists('notable', $postData)) {
+            try {
+                $notableScopes = $this->parseNotableScopes($postData, $this->activeGeographicRegions());
+            } catch (\InvalidArgumentException $exception) {
+                $notableError = $exception->getMessage();
+            }
+        }
 
         if ($canEditDetails && is_array($postData) && array_key_exists('rarity_group_name', $postData)) {
             $rules['rarity_group_name'] = 'permit_empty|max_length[100]';
@@ -306,8 +319,14 @@ class Taxa extends BaseController
             $rules['blocked_reason'] = 'permit_empty|max_length[2000]';
         }
 
-        if (! $this->validate($rules)) {
-            return redirect()->back()->withInput()->with('errors', $this->validator->getErrors());
+        $valid = $rules === [] || $this->validate($rules);
+        if (! $valid || $notableError !== null) {
+            $errors = $this->validator?->getErrors() ?? [];
+            if ($notableError !== null) {
+                $errors['notable'] = $notableError;
+            }
+
+            return redirect()->back()->withInput()->with('errors', $errors);
         }
 
         /** @var TaxonModel $model */
@@ -337,6 +356,14 @@ class Taxa extends BaseController
             $updateData['blocked_reason'] = $blocked ? ($blockedReason === '' ? null : $blockedReason) : null;
         }
 
+        if ($notableScopes !== null) {
+            try {
+                service('taxonNotableService')->saveForTaxon($id, $notableScopes);
+            } catch (\RuntimeException $exception) {
+                return redirect()->back()->withInput()->with('error', $exception->getMessage());
+            }
+        }
+
         if ($updateData !== []) {
             service('statsDirtyScopeService')->enqueueTaxonOccurrenceScopes($id);
             $model->update($id, $updateData);
@@ -344,6 +371,74 @@ class Taxa extends BaseController
         }
 
         return redirect()->to(site_url('taxa/' . $id))->with('message', 'Taxon details updated.');
+    }
+
+    /**
+     * Get the active geographic regions used for taxon-scoped editing.
+     *
+     * @return array<int, array{id: int, higher_geography_identifier: string, higher_geography: string}>
+     */
+    private function activeGeographicRegions(): array
+    {
+        return db_connect()
+            ->table('geographic_regions')
+            ->select('id, higher_geography_identifier, higher_geography')
+            ->where('deleted_at', null)
+            ->orderBy('higher_geography', 'ASC')
+            ->orderBy('higher_geography_identifier', 'ASC')
+            ->get()
+            ->getResultArray();
+    }
+
+    /**
+     * Validate and normalize submitted key-species decisions.
+     *
+     * @param array<string, mixed> $postData Submitted form data.
+     * @param array<int, array{id: int, higher_geography_identifier: string, higher_geography: string}> $regions
+     *        Active geographic regions.
+     * @return array<string|int, array{notable: bool|null, comment: string|null}> Normalized scope values.
+     * @throws \InvalidArgumentException If a scope or submitted value is invalid.
+     */
+    private function parseNotableScopes(array $postData, array $regions): array
+    {
+        $notable = $postData['notable'] ?? null;
+        $comments = $postData['notable_comment'] ?? [];
+        if (! is_array($notable) || ! is_array($comments)) {
+            throw new \InvalidArgumentException('Enter a valid key-species decision for each scope.');
+        }
+
+        $allowedScopes = ['global' => true];
+        foreach ($regions as $region) {
+            $allowedScopes[(string) $region['id']] = true;
+        }
+
+        foreach (array_keys($comments) as $scopeKey) {
+            if (! array_key_exists($scopeKey, $allowedScopes) || ! array_key_exists($scopeKey, $notable)) {
+                throw new \InvalidArgumentException('A comment was submitted for an invalid key-species scope.');
+            }
+        }
+
+        $scopes = [];
+        foreach ($notable as $scopeKey => $value) {
+            if (! array_key_exists($scopeKey, $allowedScopes)) {
+                throw new \InvalidArgumentException('An invalid key-species scope was submitted.');
+            }
+            if (! is_string($value) || ! in_array($value, ['', '0', '1'], true)) {
+                throw new \InvalidArgumentException('Choose Yes, No, or Not set for each key-species decision.');
+            }
+
+            $comment = $comments[$scopeKey] ?? '';
+            if (! is_string($comment) || mb_strlen($comment) > 65535) {
+                throw new \InvalidArgumentException('Key-species comments must be text no longer than 65535 characters.');
+            }
+
+            $scopes[$scopeKey] = [
+                'notable' => $value === '' ? null : $value === '1',
+                'comment' => trim($comment) === '' ? null : trim($comment),
+            ];
+        }
+
+        return $scopes;
     }
 
     /**

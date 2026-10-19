@@ -89,7 +89,9 @@ class DerivedImportRunner
                 ? 'success'
                 : 'failed';
 
-            if (! $dryRun) {
+            // TaxonStatsService owns rebuild completion; dirty-scope batches must not
+            // make an already-populated stats table incomplete.
+            if (! $dryRun && $sourceKey !== 'derived-stats:taxon_stats') {
                 $importOffsetModel->setCompletion(
                     $sourceKey,
                     $status === 'success' && (($result['has_more'] ?? false) !== true),
@@ -110,7 +112,7 @@ class DerivedImportRunner
 
             return $result;
         } catch (Throwable $exception) {
-            if (! $dryRun) {
+            if (! $dryRun && $sourceKey !== 'derived-stats:taxon_stats') {
                 $importOffsetModel->setCompletion($sourceKey, false);
             }
 

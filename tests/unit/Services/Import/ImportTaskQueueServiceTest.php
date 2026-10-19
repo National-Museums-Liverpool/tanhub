@@ -61,6 +61,7 @@ final class ImportTaskQueueServiceTest extends CIUnitTestCase
     {
         $queue = service('importTaskQueueService');
         $queue->enqueue('derived-stats:taxon_stats');
+        model(ImportOffsetModel::class)->setCompletion('derived-stats:taxon_stats', true);
         model(ImportOffsetModel::class)->setCheckpoint('derived-stats:taxon_stats', '4');
         $stats = $this->createMock(TaxonStatsService::class);
         $stats->expects($this->exactly(2))->method('run')->with(false)->willReturnOnConsecutiveCalls(
@@ -79,7 +80,7 @@ final class ImportTaskQueueServiceTest extends CIUnitTestCase
         $this->assertCount(1, $rows);
         $this->assertSame('queued', $rows[0]['status']);
         $this->assertNotEmpty($rows[0]['run_id']);
-        $this->assertFalse(model(ImportOffsetModel::class)->isComplete('derived-stats:taxon_stats'));
+        $this->assertTrue(model(ImportOffsetModel::class)->isComplete('derived-stats:taxon_stats'));
 
         $command->run([]);
         $this->assertSame([], $queue->rows());

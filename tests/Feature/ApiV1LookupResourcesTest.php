@@ -603,7 +603,10 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 
     public function testTaxonStatsListSupportsTaxonFilterAndExcludesBlockedTaxa(): void
     {
-        $result = $this->get('api/v1/taxon-stats?taxon_identifier[eq]=NHMSYS0021054498');
+        $result = $this->get(
+            'api/v1/taxon-stats?taxon_identifier[eq]=NHMSYS0021054498'
+            . '&mean_squares_per_year[gte]=0&mean_occurrences_per_year[gte]=0',
+        );
 
         $result->assertStatus(200);
 
@@ -613,6 +616,8 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame('NHMSYS0021054498', $json['data'][0]['taxon_identifier']);
         $this->assertArrayHasKey('frequency_trend', $json['data'][0]);
         $this->assertArrayHasKey('frequency_trend_state', $json['data'][0]);
+        $this->assertArrayHasKey('mean_squares_per_year', $json['data'][0]);
+        $this->assertArrayHasKey('mean_occurrences_per_year', $json['data'][0]);
     }
 
     public function testTaxonStatsListSupportsTaxonRankFilter(): void
@@ -1484,6 +1489,8 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             last_verified_recorder VARCHAR(255) NOT NULL
         )');
         $taxonStatsColumns = [
+            'mean_squares_per_year' => 'DECIMAL(16,4) NOT NULL DEFAULT 0',
+            'mean_occurrences_per_year' => 'DECIMAL(16,4) NOT NULL DEFAULT 0',
             'notable' => 'BOOLEAN NULL DEFAULT NULL',
             'notable_comment' => 'TEXT NULL DEFAULT NULL',
             'notable_decision_date' => 'DATE NULL DEFAULT NULL',

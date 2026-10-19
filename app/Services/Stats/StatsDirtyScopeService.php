@@ -223,6 +223,12 @@ class StatsDirtyScopeService
             return 0;
         }
 
+        $offsetModel = model(\App\Models\ImportOffsetModel::class);
+        if (! $offsetModel->isComplete('indicia-occurrences:occurrences')
+            || ! $offsetModel->isComplete('nbn-occurrences:occurrences')) {
+            return 0;
+        }
+
         $model = $this->model();
         $scopesByKey = [];
         foreach ($scopes as $scope) {
@@ -320,7 +326,7 @@ class StatsDirtyScopeService
         $currentYear = (int) date('Y');
         $historyYears = config(TaxonYearStats::class)->historyYears;
 
-        return $year < $currentYear
+        return $year <= $currentYear
             && ($historyYears === 0 || $year >= $currentYear - $historyYears);
     }
 

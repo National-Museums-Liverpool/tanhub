@@ -526,6 +526,8 @@ access stats across the dataset or region filtered.
 | geographic_region_id       | BIGINT       | YES  | FK, UQ* |                | Region, or null if applies to all regions                                              |
 | occurrences_count          | INT          | NO   |         |                | Number of occurrences for the taxon and region scope                                   |
 | grid_square_count          | INT          | NO   |         |                | Number of grid squares for the taxon and region scope                                  |
+| mean_squares_per_year     | DECIMAL(16,4) | NO  |         | 0              | Mean yearly grid-square count within the configured completed-year window              |
+| mean_occurrences_per_year | DECIMAL(16,4) | NO  |         | 0              | Mean yearly occurrence count within the configured completed-year window               |
 | frequency_trend            | INT          | YES  |         | NULL           | Relative frequency trend from 0 (most declining) to 100 (most increasing)              |
 | frequency_trend_state      | VARCHAR(32)  | YES  |         | NULL           | Trend classification: increasing, decreasing, stable, insufficient_data, or unclear    |
 | notable                    | BOOLEAN      | YES  |         | NULL           | Curated key-species decision for this scope: true, false, or not set                    |
@@ -544,6 +546,12 @@ Key-species decisions are manually maintained alongside derived statistics. Glob
 the row whose `geographic_region_id` is null; regional decisions use that region's row. When a
 decision scope has no statistics yet, the admin UI can create a zero-count row. Full and incremental
 statistics rebuilds preserve these curated fields and any decision-only scope rows.
+
+The yearly mean fields are calculated from `taxon_year_stats` for the same taxon and region scope.
+Their denominator is the number of completed calendar years in the configured history window;
+years without a row count as zero. The current year is excluded because its occurrence data is
+incomplete. A full yearly-statistics rebuild refreshes these fields after publishing its completed
+build.
 
 ### taxon_year_stats
 

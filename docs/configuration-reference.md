@@ -143,6 +143,12 @@ taxonSearch.classificationRanks = 'Family,Genus'
 
 ## Incremental derived statistics
 
+- `taxonStats.taxaPerBatch`: distinct taxon IDs included in one full-rebuild query; defaults to
+  `100`.
+- `taxonStats.maxTaxaPerRun`: distinct taxon IDs processed per full-rebuild invocation at most;
+  defaults to `500`.
+- `taxonStats.maxRuntimeSeconds`: maximum full-rebuild runtime per invocation; defaults to `20`
+  seconds and is capped five seconds below PHP's `max_execution_time` when PHP has a limit.
 - `taxonYearStats.historyYears`: completed years retained by the yearly statistics rebuild; zero
   means all available history.
 - `taxonYearStats.yearsPerRun`: number of years processed by one staged rebuild invocation.

@@ -353,7 +353,7 @@ class TaxonYearStatsService
     {
         $currentYear = (int) date('Y');
         if ($historyYears > 0) {
-            return range($currentYear - $historyYears, $currentYear - 1);
+            return range($currentYear - $historyYears, $currentYear);
         }
         $db = db_connect();
         $sqlite = strtoupper((string) ($db->DBDriver ?? '')) === 'SQLITE3';
@@ -363,7 +363,7 @@ class TaxonYearStatsService
             . 'occurrences WHERE deleted_at IS NULL AND blocked = 0 AND from_date IS NOT NULL AND to_date IS NOT NULL AND '
             . $yearExpression . ' = ' . $toYearExpression)->getRowArray();
         $firstYear = (int) ($row['year'] ?? 0);
-        return $firstYear > 0 && $firstYear < $currentYear ? range($firstYear, $currentYear - 1) : [];
+        return $firstYear > 0 && $firstYear <= $currentYear ? range($firstYear, $currentYear) : [];
     }
 
     /** @return array<int, string> */
@@ -403,7 +403,7 @@ class TaxonYearStatsService
     }
 
     /**
-     * Replace live yearly statistics with one completed staged build.
+     * Replace live yearly statistics and refresh dependent taxon averages.
      *
      * @param string $buildId Staging build identifier.
      * @return void
@@ -418,6 +418,8 @@ class TaxonYearStatsService
         if (! $db->transStatus()) {
             throw new \RuntimeException('Failed to publish taxon year stats.');
         }
+
+        service('taxonStatsService')->refreshYearlyAverages();
     }
 
     /**

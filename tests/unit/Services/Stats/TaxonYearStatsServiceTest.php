@@ -29,6 +29,7 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
 
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_year_stats');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_year_stats_build');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_stats');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'stats_dirty_scopes');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'import_offsets');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'geographic_regions_occurrences');
@@ -96,6 +97,14 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             UNIQUE (build_id, projection, taxon_id, geographic_region_id, year)
         )');
 
+        $this->db->query('CREATE TABLE ' . $prefix . 'taxon_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            taxon_id INTEGER NOT NULL,
+            geographic_region_id INTEGER NULL,
+            mean_squares_per_year DECIMAL(16,4) NOT NULL DEFAULT 0,
+            mean_occurrences_per_year DECIMAL(16,4) NOT NULL DEFAULT 0
+        )');
+
         $this->db->query('CREATE TABLE ' . $prefix . 'import_offsets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             source_key VARCHAR(255) NOT NULL UNIQUE,
@@ -117,6 +126,10 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
             created_at DATETIME NULL,
             updated_at DATETIME NULL
         )');
+
+        $offsets = model(\App\Models\ImportOffsetModel::class);
+        $offsets->setCompletion('indicia-occurrences:occurrences', true);
+        $offsets->setCompletion('nbn-occurrences:occurrences', true);
 
         foreach ([
             ['id' => 1, 'is_reporting' => 0],
@@ -210,6 +223,49 @@ final class TaxonYearStatsServiceTest extends CIUnitTestCase
 
         foreach ($this->db->table('taxon_year_stats')->get()->getResultArray() as $row) {
             $this->assertSame(36, strlen((string) $row['uuid']));
+        }
+    }
+
+    /**
+     * Refresh existing taxon averages after publishing yearly stats, excluding partial current-year data.
+     *
+     * @return void
+     */
+    public function testFullRebuildRefreshesTaxonAveragesAfterPublishing(): void
+    {
+        $yearStatsConfig = config(\Config\TaxonYearStats::class);
+        $originalHistoryYears = $yearStatsConfig->historyYears;
+        $yearStatsConfig->historyYears = 3;
+
+        try {
+            $currentYear = (int) date('Y');
+            $this->db->table('occurrences')->insertBatch([
+                ['id' => 101, 'taxon_id' => 1, 'from_date' => ($currentYear - 1) . '-01-01', 'to_date' => ($currentYear - 1) . '-01-01', 'grid_ref_2km' => 'SU01A', 'blocked' => 0, 'deleted_at' => null],
+                ['id' => 102, 'taxon_id' => 1, 'from_date' => ($currentYear - 1) . '-02-01', 'to_date' => ($currentYear - 1) . '-02-01', 'grid_ref_2km' => 'SU02B', 'blocked' => 0, 'deleted_at' => null],
+                ['id' => 103, 'taxon_id' => 1, 'from_date' => $currentYear . '-01-01', 'to_date' => $currentYear . '-01-01', 'grid_ref_2km' => 'SU03C', 'blocked' => 0, 'deleted_at' => null],
+            ]);
+            $this->db->table('taxon_stats')->insert([
+                'id' => 1,
+                'taxon_id' => 1,
+                'geographic_region_id' => null,
+                'mean_squares_per_year' => 99,
+                'mean_occurrences_per_year' => 99,
+            ]);
+
+            $counts = $this->runToCompletion(new TaxonYearStatsService());
+
+            $this->assertSame('success', $counts['status']);
+            $this->assertNotNull($this->findTaxonYearStatRow(1, null, $currentYear));
+            $row = $this->db->table('taxon_stats')
+                ->where('taxon_id', 1)
+                ->where('geographic_region_id', null)
+                ->get()
+                ->getRowArray();
+            $this->assertNotNull($row);
+            $this->assertEqualsWithDelta(2 / 3, (float) $row['mean_squares_per_year'], 0.0001);
+            $this->assertEqualsWithDelta(2 / 3, (float) $row['mean_occurrences_per_year'], 0.0001);
+        } finally {
+            $yearStatsConfig->historyYears = $originalHistoryYears;
         }
     }
 

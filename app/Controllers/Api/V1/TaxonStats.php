@@ -76,6 +76,7 @@ class TaxonStats extends ApiResourceController
     /**
      * Retrieve included fields array.
      *
+     * @param array<int, string> $includes Requested includes.
      * @return array<string, string>
      *   Array of field identifiers and their corresponding query columns.
      */
@@ -87,6 +88,8 @@ class TaxonStats extends ApiResourceController
             'higher_geography_identifier' => 'gr.higher_geography_identifier',
             'occurrences_count' => 'ts.occurrences_count',
             'grid_square_count' => 'ts.grid_square_count',
+            'mean_squares_per_year' => 'ts.mean_squares_per_year',
+            'mean_occurrences_per_year' => 'ts.mean_occurrences_per_year',
             'frequency_trend' => 'ts.frequency_trend',
             'frequency_trend_state' => 'ts.frequency_trend_state',
             'notable' => 'ts.notable',

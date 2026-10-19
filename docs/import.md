@@ -145,10 +145,11 @@ The remaining stats related imports are for processing the already collected int
 reporting outputs, e.g. count occurrence data per grid square or year. They should be run after
 any modification of the occurrence data using the `occurrences` imports.
 
-The `taxon_stats` task processes one configured reporting rank per invocation, followed by the
-exact non-reporting taxon batch. Its progress is stored in `import_offsets`, so repeated automatic
-invocations continue where the previous one stopped. Each completed batch replaces only its own
-taxon rows, leaving other completed ranks available while the refresh continues.
+The `taxon_stats` task processes configured reporting ranks and the exact non-reporting taxa in
+small, resumable chunks. It stops at its configured runtime budget, which is capped below PHP's
+execution limit when PHP has a limit. Its checkpoint stores both the current projection and the
+last taxon ID processed, so repeated UI or automatic invocations continue from the last saved
+chunk. Existing numeric checkpoints resume at the start of their saved projection.
 
 The admin Imports page queue holds explicit requests until completion or removal. Scheduled
 `php spark import:auto` invocations process these requests before routine automatic work. Each
@@ -480,17 +481,20 @@ task is complete. The taxon-year task must complete before the taxon-stats task 
 trends have their source data.
 
 Occurrence inserts and statistics-relevant updates enqueue deduplicated dirty scopes for the
-affected exact taxon, configured reporting taxa, year, and geographic regions. Old scopes are
+affected exact taxon, configured reporting taxa, year, and geographic regions only after both
+occurrence imports are complete. The initial statistics rebuild already covers changes made during
+the initial imports, so collecting those scopes would repeat unnecessary work. Old scopes are
 queued before an update and current region scopes after geographic membership reassignment, so
 taxon moves, date changes, and region changes remove stale aggregates as well as adding new ones.
-Identical occurrence replays do not enqueue work. After the initial staged population (or a
-deliberate reconciliation rebuild), subsequent runs process dirty scopes only, bounded by
-`taxonYearStats.maxScopes` and `taxonYearStats.maxRuntimeSeconds`.
+Identical occurrence replays do not enqueue work. A completed full `taxon_stats` rebuild clears
+pending taxon scopes because it has recomputed the whole table. Subsequent incremental runs keep
+the task complete while processing dirty scopes; a scope batch remains queued until its aggregates
+and whole-rank frequency trends have both refreshed successfully.
 
 The base `taxon_stats` task uses the same dirty queue where possible. Frequency trends remain
 calculated with the existing whole-rank dense-ranking routine; this is intentionally conservative
 because a single scope change can alter the relative score of every taxon in that rank and region.
-The task therefore preserves current trend behavior while processing aggregate rows incrementally.
+Trend updates are written in batches while preserving the existing trend behavior.
 
 ### Derived taxon frequency trends
 

@@ -3,7 +3,9 @@
 namespace App\Services\Stats;
 
 use Config\TaxonFrequencyTrend;
+use Config\TaxonStats;
 use Config\TaxonYearStats;
+use RuntimeException;
 
 /**
  * Recomputes taxon_stats derived aggregates from active occurrences.
@@ -14,9 +16,12 @@ class TaxonStatsService
      * Create the taxon statistics service.
      *
      * @param StatsDirtyScopeService|null $dirtyScopeService Dirty queue service.
+     * @param TaxonStats|null             $config Taxon statistics runtime limits.
      */
-    public function __construct(private readonly ?StatsDirtyScopeService $dirtyScopeService = null)
-    {
+    public function __construct(
+        private readonly ?StatsDirtyScopeService $dirtyScopeService = null,
+        private readonly ?TaxonStats $config = null,
+    ) {
     }
 
     /**
@@ -24,7 +29,7 @@ class TaxonStatsService
      *
      * @param bool $dryRun Whether persistence is disabled for this run.
      *
-     * @return array<string, int|string>
+     * @return array<string, int|string|bool>
      */
     public function run(bool $dryRun = false): array
     {
@@ -53,6 +58,21 @@ class TaxonStatsService
             ];
         }
 
+        return $this->runFullRebuild($dryRun, $offsetModel);
+    }
+
+    /**
+     * Populate one or more resumable taxon-ID chunks without exceeding the PHP time budget.
+     *
+     * Older numeric checkpoints still identify the next reporting projection. New checkpoints
+     * also store the last taxon ID processed within that projection.
+     *
+     * @param bool                            $dryRun Whether persistence is disabled.
+     * @param \App\Models\ImportOffsetModel   $offsetModel Statistics checkpoint model.
+     * @return array<string, int|string|bool> Batch result and continuation state.
+     */
+    private function runFullRebuild(bool $dryRun, \App\Models\ImportOffsetModel $offsetModel): array
+    {
         $counts = [
             'status' => 'success',
             'fetched' => 0,
@@ -62,64 +82,94 @@ class TaxonStatsService
             'not changed' => 0,
             'skipped' => 0,
             'errors' => 0,
+            'has_more' => false,
         ];
 
         try {
-            $db = db_connect();
+            $config = $this->config ?? config(TaxonStats::class);
             $batches = $this->statBatches();
-            $batchIndex = (int) ($offsetModel->getCheckpoint('derived-stats:taxon_stats') ?? 0);
-            $batchIndex = max(0, min($batchIndex, count($batches) - 1));
-            $rows = $this->buildRows($batches[$batchIndex]);
-            $hasMore = $batchIndex < count($batches) - 1;
+            [$batchIndex, $afterTaxonId] = $this->parseRebuildCheckpoint(
+                $offsetModel->getCheckpoint('derived-stats:taxon_stats'),
+                count($batches),
+            );
+            $startedAt = microtime(true);
+            $runtimeBudget = $this->runtimeBudget($config->maxRuntimeSeconds);
+            $taxaProcessed = 0;
+            $frequencyTrends = null;
 
-            $counts['fetched'] = count($rows);
-            $counts['processed'] = $counts['fetched'];
-            $counts['has_more'] = $hasMore;
+            while ($batchIndex < count($batches)) {
+                if ($taxaProcessed >= $config->maxTaxaPerRun
+                    || ($taxaProcessed > 0 && microtime(true) - $startedAt >= $runtimeBudget)) {
+                    break;
+                }
 
-            if ($dryRun) {
-                return $counts;
+                $batch = $batches[$batchIndex];
+                [$taxonIds, $hasMoreTaxa] = $this->nextTaxonIds(
+                    $batch,
+                    $afterTaxonId,
+                    min($config->taxaPerBatch, $config->maxTaxaPerRun - $taxaProcessed),
+                );
+
+                if ($taxonIds === []) {
+                    $batchIndex++;
+                    $afterTaxonId = 0;
+                    continue;
+                }
+
+                $rows = $this->buildRows($batch, null, $taxonIds);
+                $counts['fetched'] += count($rows);
+                $counts['processed'] += count($rows);
+                $counts['inserted'] += count($rows);
+
+                $projectionHasMore = $hasMoreTaxa || $batchIndex < count($batches) - 1;
+                if ($dryRun) {
+                    $counts['has_more'] = $projectionHasMore;
+
+                    return $counts;
+                }
+
+                if ($rows !== [] && $frequencyTrends === null) {
+                    $frequencyTrends = $this->frequencyTrends();
+                }
+                $this->replaceFullRebuildRows($taxonIds, $rows, $frequencyTrends);
+                $taxaProcessed += count($taxonIds);
+
+                if ($hasMoreTaxa) {
+                    $afterTaxonId = (int) end($taxonIds);
+                } else {
+                    $batchIndex++;
+                    $afterTaxonId = 0;
+                }
+
+                $hasMore = $batchIndex < count($batches);
+                if ($hasMore) {
+                    $offsetModel->setCheckpoint(
+                        'derived-stats:taxon_stats',
+                        $afterTaxonId > 0 ? $batchIndex . ':' . $afterTaxonId : (string) $batchIndex,
+                    );
+                    $offsetModel->setCompletion('derived-stats:taxon_stats', false);
+                }
+
+                $counts['has_more'] = true;
             }
 
-            $taxonIds = array_values(array_unique(array_map(
-                static fn (array $row): int => (int) ($row['taxon_id'] ?? 0),
-                $rows,
-            )));
+            $hasMore = $batchIndex < count($batches);
+            $counts['has_more'] = $hasMore;
 
-            if ($taxonIds !== []) {
-                $db->transException(true)->transBegin();
-                try {
-                    $existingRows = $db->table('taxon_stats')
-                        ->select('taxon_id, geographic_region_id, notable, notable_comment, notable_decision_date')
-                        ->whereIn('taxon_id', $taxonIds)
-                        ->get()
-                        ->getResultArray();
-                    $rows = $this->mergeNotableFields($rows, $existingRows);
-                    $db->table('taxon_stats')->whereIn('taxon_id', $taxonIds)->delete();
-
-                    if ($rows !== []) {
-                        $this->insertRows($rows);
-                    }
-
-                    if (! $db->transStatus() || ! $db->transCommit()) {
-                        throw new \RuntimeException('Taxon statistics could not be replaced.');
-                    }
-                } catch (\Throwable $exception) {
-                    $db->transRollback();
-                    throw $exception;
+            if (! $dryRun) {
+                if (! $hasMore) {
+                    ($this->dirtyScopeService ?? service('statsDirtyScopeService'))
+                        ->clear(StatsDirtyScopeService::TAXON);
+                    $offsetModel->setCheckpoint('derived-stats:taxon_stats', null);
+                    $offsetModel->setCompletion('derived-stats:taxon_stats', true);
+                } else {
+                    $offsetModel->setCheckpoint(
+                        'derived-stats:taxon_stats',
+                        $afterTaxonId > 0 ? $batchIndex . ':' . $afterTaxonId : (string) $batchIndex,
+                    );
+                    $offsetModel->setCompletion('derived-stats:taxon_stats', false);
                 }
             }
-
-            if ($taxonIds === [] && $rows !== []) {
-                $this->insertRows($rows);
-            }
-            $counts['inserted'] = count($rows);
-
-            $offsetModel->setCheckpoint(
-                'derived-stats:taxon_stats',
-                $hasMore ? (string) ($batchIndex + 1) : null,
-            );
-            $offsetModel->setCompletion('derived-stats:taxon_stats', ! $hasMore);
-            $counts['has_more'] = $hasMore;
         } catch (\Throwable $exception) {
             log_message('error', $exception->getMessage());
             $counts['status'] = 'failed';
@@ -159,6 +209,8 @@ class TaxonStatsService
                         : (int) $row['geographic_region_id'],
                     'occurrences_count' => 0,
                     'grid_square_count' => 0,
+                    'mean_squares_per_year' => 0,
+                    'mean_occurrences_per_year' => 0,
                     'frequency_trend' => null,
                     'frequency_trend_state' => null,
                     'first_record_date' => null,
@@ -209,6 +261,7 @@ class TaxonStatsService
         $dirty = $this->dirtyScopeService ?? service('statsDirtyScopeService');
         $config = config(TaxonYearStats::class);
         $startedAt = microtime(true);
+        $processedScopeIds = [];
 
         try {
             $scopes = $dirty->next(StatsDirtyScopeService::TAXON, $config->maxScopes);
@@ -225,7 +278,7 @@ class TaxonStatsService
                 $rows = $this->buildRows($batch, $scope);
                 $this->replaceDirtyRows($scope, $rows, $dryRun);
                 if (! $dryRun) {
-                    $dirty->acknowledge([(int) $scope['id']]);
+                    $processedScopeIds[] = (int) $scope['id'];
                 }
                 $counts['processed']++;
                 $counts['updated']++;
@@ -233,6 +286,9 @@ class TaxonStatsService
             }
             if (! $dryRun && $counts['processed'] > 0) {
                 $this->refreshFrequencyTrends();
+            }
+            if (! $dryRun && $processedScopeIds !== []) {
+                $dirty->acknowledge($processedScopeIds);
             }
             $counts['has_more'] = $dirty->hasDirtyScopes(StatsDirtyScopeService::TAXON);
         } catch (\Throwable $exception) {
@@ -254,16 +310,22 @@ class TaxonStatsService
         $db = db_connect();
         $trends = $this->frequencyTrends();
         $rows = $db->table('taxon_stats')->select('id, taxon_id, geographic_region_id')->get()->getResultArray();
+        $updates = [];
 
         foreach ($rows as $row) {
             $trend = $trends[$this->scopeKey(
                 (int) $row['taxon_id'],
                 $this->nullableInt($row['geographic_region_id'] ?? null),
             )] ?? ['score' => null, 'state' => null];
-            $db->table('taxon_stats')->where('id', (int) $row['id'])->update([
+            $updates[] = [
                 'frequency_trend' => $trend['score'],
                 'frequency_trend_state' => $trend['state'],
-            ]);
+                'id' => (int) $row['id'],
+            ];
+        }
+
+        foreach (array_chunk($updates, 500) as $chunk) {
+            $db->table('taxon_stats')->updateBatch($chunk, 'id');
         }
     }
 
@@ -307,11 +369,50 @@ class TaxonStatsService
             }
             $deleteBuilder->delete();
             if ($rows !== []) {
-                $this->insertRows($rows);
+                $this->insertRows($rows, []);
             }
 
             if (! $db->transStatus() || ! $db->transCommit()) {
                 throw new \RuntimeException('Taxon statistics scope could not be replaced.');
+            }
+        } catch (\Throwable $exception) {
+            $db->transRollback();
+            throw $exception;
+        }
+    }
+
+    /**
+     * Replace full-rebuild rows for a bounded set of taxon IDs.
+     *
+     * @param array<int, int>              $taxonIds Taxa covered by this rebuild chunk.
+     * @param array<int, array<string,mixed>> $rows Computed statistics.
+     * @param array<string, array{score: int|null, state: string}>|null $frequencyTrends
+     *        Whole-rank trend results shared by chunks in this invocation.
+     * @return void
+     */
+    private function replaceFullRebuildRows(
+        array $taxonIds,
+        array $rows,
+        ?array $frequencyTrends,
+    ): void
+    {
+        $db = db_connect();
+        $db->transException(true)->transBegin();
+        try {
+            $existingRows = $db->table('taxon_stats')
+                ->select('taxon_id, geographic_region_id, notable, notable_comment, notable_decision_date')
+                ->whereIn('taxon_id', $taxonIds)
+                ->get()
+                ->getResultArray();
+            $rows = $this->mergeNotableFields($rows, $existingRows);
+            $db->table('taxon_stats')->whereIn('taxon_id', $taxonIds)->delete();
+
+            if ($rows !== []) {
+                $this->insertRows($rows, $frequencyTrends);
+            }
+
+            if (! $db->transStatus() || ! $db->transCommit()) {
+                throw new \RuntimeException('Taxon statistics chunk could not be replaced.');
             }
         } catch (\Throwable $exception) {
             $db->transRollback();
@@ -368,6 +469,8 @@ class TaxonStatsService
                     : (int) $existingRow['geographic_region_id'],
                 'occurrences_count' => 0,
                 'grid_square_count' => 0,
+                'mean_squares_per_year' => 0,
+                'mean_occurrences_per_year' => 0,
                 'first_record_date' => null,
                 'last_record_date' => null,
                 'first_recorder' => '',
@@ -388,14 +491,26 @@ class TaxonStatsService
     /**
      * Build recomputed taxon stats rows.
      *
-     * @return array<int, array<string, mixed>>
+     * @param array{columns: array<int, string>, include_exact: bool} $batch Projection definition.
+     * @param array<string, mixed>|null $scope Optional single dirty scope.
+     * @param array<int, int> $taxonIds Optional taxon chunk for a full rebuild.
+     * @return array<int, array<string, mixed>> Recomputed aggregate rows.
      */
-    private function buildRows(array $batch, ?array $scope = null): array
+    private function buildRows(array $batch, ?array $scope = null, array $taxonIds = []): array
     {
         $db = db_connect();
         $prefix = $db->getPrefix();
         $reportingColumns = $batch['columns'];
         $projectionColumns = $reportingColumns === [] ? '' : ",\n                    " . implode(",\n                    ", array_map(static fn (string $column): string => 'o.' . $column, $reportingColumns));
+        $taxonFilter = '';
+        if ($taxonIds !== []) {
+            $taxonColumn = $batch['include_exact'] ? 'o.taxon_id' : 'o.' . $reportingColumns[0];
+            $taxonIds = array_values(array_unique(array_filter(
+                array_map('intval', $taxonIds),
+                static fn (int $id): bool => $id > 0,
+            )));
+            $taxonFilter = ' AND ' . $taxonColumn . ' IN (' . implode(',', $taxonIds) . ')';
+        }
         $scopedOccurrences = $this->scopedOccurrenceSql($prefix, $reportingColumns, $batch['include_exact']);
         $scopedTable = 'scoped_occurrences';
         $scopeCte = '';
@@ -430,7 +545,7 @@ class TaxonStatsService
                 INNER JOIN ' . $prefix . 'taxon_ranks tr
                     ON tr.id = t.taxon_rank_id
                 WHERE o.deleted_at IS NULL
-                    AND o.blocked = 0
+                    AND o.blocked = 0' . $taxonFilter . '
             ),
             scoped_occurrences AS (' . $scopedOccurrences . ')' . $scopeCte . ',
             aggregates AS (
@@ -477,7 +592,142 @@ class TaxonStatsService
                 a.last_verified_record_date'
         )->getResultArray();
 
+        $rows = $this->addYearlyAverages($rows);
+
         return $this->addBoundaryOccurrenceDetails($rows);
+    }
+
+    /**
+     * Refresh yearly averages for existing taxon-stat rows after yearly stats are published.
+     *
+     * @return void
+     */
+    public function refreshYearlyAverages(): void
+    {
+        $db = db_connect();
+        [$firstYear, $currentYear, $yearCount] = $this->yearlyAverageWindow();
+        $statsTable = $db->getPrefix() . 'taxon_stats';
+
+        if ($yearCount === 0) {
+            $db->query(
+                'UPDATE ' . $statsTable . '
+                SET mean_squares_per_year = 0, mean_occurrences_per_year = 0'
+            );
+
+            return;
+        }
+
+        $yearTable = $db->getPrefix() . 'taxon_year_stats';
+        $scopeCondition = '(yearly.geographic_region_id = ' . $statsTable . '.geographic_region_id
+            OR (yearly.geographic_region_id IS NULL AND '
+                . $statsTable . '.geographic_region_id IS NULL))';
+        $db->query(
+            'UPDATE ' . $statsTable . '
+            SET mean_squares_per_year = COALESCE((
+                    SELECT ROUND(1.0 * SUM(yearly.grid_square_count) / ?, 4)
+                    FROM ' . $yearTable . ' yearly
+                    WHERE yearly.taxon_id = ' . $statsTable . '.taxon_id
+                        AND ' . $scopeCondition . '
+                        AND yearly.year >= ? AND yearly.year < ?
+                ), 0),
+                mean_occurrences_per_year = COALESCE((
+                    SELECT ROUND(1.0 * SUM(yearly.occurrences_count) / ?, 4)
+                    FROM ' . $yearTable . ' yearly
+                    WHERE yearly.taxon_id = ' . $statsTable . '.taxon_id
+                        AND ' . $scopeCondition . '
+                        AND yearly.year >= ? AND yearly.year < ?
+                ), 0)',
+            [$yearCount, $firstYear, $currentYear, $yearCount, $firstYear, $currentYear],
+        );
+    }
+
+    /**
+     * Add annual averages from the configured completed-year window to aggregate rows.
+     *
+     * Missing taxon-year rows contribute zero because the divisor is the full year-window
+     * length, not the number of rows present.
+     *
+     * @param array<int, array<string, mixed>> $rows Taxon and optional region scopes.
+     * @return array<int, array<string, mixed>> Rows with both yearly averages.
+     */
+    private function addYearlyAverages(array $rows): array
+    {
+        if ($rows === []) {
+            return [];
+        }
+
+        [$firstYear, $currentYear, $yearCount] = $this->yearlyAverageWindow();
+        $taxonIds = array_values(array_unique(array_map(
+            static fn (array $row): int => (int) $row['taxon_id'],
+            $rows,
+        )));
+        $averages = [];
+
+        if ($yearCount > 0) {
+            $yearRows = db_connect()->table('taxon_year_stats')
+                ->select(
+                    'taxon_id, geographic_region_id, SUM(grid_square_count) AS squares_total, '
+                        . 'SUM(occurrences_count) AS occurrences_total',
+                    false,
+                )
+                ->whereIn('taxon_id', $taxonIds)
+                ->where('year >=', $firstYear)
+                ->where('year <', $currentYear)
+                ->groupBy('taxon_id, geographic_region_id')
+                ->get()
+                ->getResultArray();
+
+            foreach ($yearRows as $yearRow) {
+                $averages[$this->scopeKey(
+                    (int) $yearRow['taxon_id'],
+                    $this->nullableInt($yearRow['geographic_region_id'] ?? null),
+                )] = [
+                    'squares' => (float) ($yearRow['squares_total'] ?? 0),
+                    'occurrences' => (float) ($yearRow['occurrences_total'] ?? 0),
+                ];
+            }
+        }
+
+        foreach ($rows as &$row) {
+            $totals = $averages[$this->scopeKey(
+                (int) $row['taxon_id'],
+                $this->nullableInt($row['geographic_region_id'] ?? null),
+            )] ?? ['squares' => 0.0, 'occurrences' => 0.0];
+
+            $row['mean_squares_per_year'] = $yearCount > 0
+                ? round($totals['squares'] / $yearCount, 4)
+                : 0;
+            $row['mean_occurrences_per_year'] = $yearCount > 0
+                ? round($totals['occurrences'] / $yearCount, 4)
+                : 0;
+        }
+        unset($row);
+
+        return $rows;
+    }
+
+    /**
+     * Resolve the configured completed-year range, excluding the current year.
+     *
+     * @return array{0: int, 1: int, 2: int} First year, current year and completed-year count.
+     */
+    private function yearlyAverageWindow(): array
+    {
+        $currentYear = (int) date('Y');
+        $historyYears = (int) config(TaxonYearStats::class)->historyYears;
+
+        if ($historyYears > 0) {
+            $firstYear = $currentYear - $historyYears;
+        } else {
+            $row = db_connect()->table('taxon_year_stats')
+                ->selectMin('year', 'first_year')
+                ->where('year <', $currentYear)
+                ->get()
+                ->getRowArray();
+            $firstYear = (int) ($row['first_year'] ?? $currentYear);
+        }
+
+        return [$firstYear, $currentYear, max(0, $currentYear - $firstYear)];
     }
 
     /**
@@ -577,6 +827,91 @@ class TaxonStatsService
     }
 
     /**
+     * Parse a compatible full-rebuild checkpoint.
+     *
+     * Numeric checkpoints were written by earlier versions and point to the start of a rank
+     * projection. New checkpoints add the last completed taxon ID after a colon.
+     *
+     * @param string|null $checkpoint Persisted task checkpoint.
+     * @param int          $batchCount Number of reporting projections.
+     * @return array{0: int, 1: int} Projection index and last processed taxon ID.
+     *
+     * @throws RuntimeException When the checkpoint is not a supported format.
+     */
+    private function parseRebuildCheckpoint(?string $checkpoint, int $batchCount): array
+    {
+        if ($checkpoint === null) {
+            return [0, 0];
+        }
+
+        if (preg_match('/^(\d+)(?::(\d+))?$/', $checkpoint, $matches) !== 1) {
+            throw new RuntimeException('Taxon statistics checkpoint is invalid.');
+        }
+
+        $batchIndex = max(0, min((int) $matches[1], $batchCount - 1));
+        $afterTaxonId = isset($matches[2]) ? (int) $matches[2] : 0;
+
+        return [$batchIndex, $afterTaxonId];
+    }
+
+    /**
+     * Find the next ordered set of active occurrence taxon IDs for one projection.
+     *
+     * @param array{columns: array<int, string>, include_exact: bool} $batch Projection definition.
+     * @param int   $afterTaxonId Only return IDs greater than this cursor.
+     * @param int   $limit Maximum IDs to return.
+     * @return array{0: array<int, int>, 1: bool} IDs and whether more IDs remain.
+     */
+    private function nextTaxonIds(array $batch, int $afterTaxonId, int $limit): array
+    {
+        $builder = db_connect()->table('occurrences o');
+        if ($batch['include_exact']) {
+            $builder->select('o.taxon_id AS taxon_id')
+                ->join('taxa t', 't.id = o.taxon_id')
+                ->join('taxon_ranks tr', 'tr.id = t.taxon_rank_id')
+                ->where('tr.is_reporting', 0)
+                ->where('o.taxon_id >', $afterTaxonId)
+                ->groupBy('o.taxon_id')
+                ->orderBy('o.taxon_id', 'ASC');
+        } else {
+            $column = $batch['columns'][0];
+            $builder->select('o.' . $column . ' AS taxon_id', false)
+                ->where('o.' . $column . ' >', $afterTaxonId)
+                ->where('o.' . $column . ' IS NOT NULL', null, false)
+                ->groupBy('o.' . $column)
+                ->orderBy('o.' . $column, 'ASC');
+        }
+
+        $rows = $builder
+            ->where('o.deleted_at', null)
+            ->where('o.blocked', 0)
+            ->limit($limit + 1)
+            ->get()
+            ->getResultArray();
+        $hasMore = count($rows) > $limit;
+        $rows = array_slice($rows, 0, $limit);
+        $taxonIds = array_map(static fn (array $row): int => (int) $row['taxon_id'], $rows);
+
+        return [$taxonIds, $hasMore];
+    }
+
+    /**
+     * Keep a rebuild invocation below both its configured budget and PHP's execution limit.
+     *
+     * @param int $configuredSeconds Configured maximum runtime.
+     * @return float Effective runtime budget in seconds.
+     */
+    private function runtimeBudget(int $configuredSeconds): float
+    {
+        $phpLimit = (int) ini_get('max_execution_time');
+        if ($phpLimit <= 0) {
+            return (float) $configuredSeconds;
+        }
+
+        return max(1.0, min((float) $configuredSeconds, (float) ($phpLimit - 5)));
+    }
+
+    /**
      * Calculate frequency trends for species in each global or regional scope.
      *
     * @return array<string, array{score: int|null, state: string}> Trend results keyed by taxon and region.
@@ -588,6 +923,8 @@ class TaxonStatsService
         $config = config(TaxonFrequencyTrend::class);
         $currentYear = (int) date('Y');
         $firstYear = $currentYear - (int) $config->analysisYears;
+        // Note the query must limit to < $currentYear to avoid including
+        // incomplete data for the current year.
         $rows = $db->query(
             'SELECT
                 tys.taxon_id,
@@ -926,14 +1263,16 @@ class TaxonStatsService
      * Insert computed rows into taxon_stats.
      *
      * @param array<int, array<string, mixed>> $rows Computed rows.
+     * @param array<string, array{score: int|null, state: string}>|null $frequencyTrends
+     *        Precomputed trend map, or null to calculate it for this insert.
      *
      * @return void
      */
-    private function insertRows(array $rows): void
+    private function insertRows(array $rows, ?array $frequencyTrends = null): void
     {
         $db = db_connect();
         $payload = [];
-        $frequencyTrends = $this->frequencyTrends();
+        $frequencyTrends ??= $this->frequencyTrends();
 
         foreach ($rows as $row) {
             $taxonId = (int) ($row['taxon_id'] ?? 0);
@@ -951,6 +1290,8 @@ class TaxonStatsService
                 'frequency_trend_state' => $frequencyTrends[$this->scopeKey($taxonId, $geographicRegionId)]['state'] ?? null,
                 'occurrences_count' => max(0, (int) ($row['occurrences_count'] ?? 0)),
                 'grid_square_count' => max(0, (int) ($row['grid_square_count'] ?? 0)),
+                'mean_squares_per_year' => max(0, (float) ($row['mean_squares_per_year'] ?? 0)),
+                'mean_occurrences_per_year' => max(0, (float) ($row['mean_occurrences_per_year'] ?? 0)),
                 'first_record_date' => $row['first_record_date'] ?? null,
                 'last_record_date' => $row['last_record_date'] ?? null,
                 'first_recorder' => substr((string) ($row['first_recorder'] ?? ''), 0, 255),

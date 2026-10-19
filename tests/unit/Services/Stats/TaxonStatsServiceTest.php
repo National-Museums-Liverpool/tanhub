@@ -91,6 +91,8 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             geographic_region_id INTEGER NULL,
             occurrences_count INTEGER NOT NULL DEFAULT 0,
             grid_square_count INTEGER NOT NULL DEFAULT 0,
+            mean_squares_per_year DECIMAL(16,4) NOT NULL DEFAULT 0,
+            mean_occurrences_per_year DECIMAL(16,4) NOT NULL DEFAULT 0,
             frequency_trend INTEGER NULL DEFAULT NULL,
             frequency_trend_state VARCHAR(32) NULL DEFAULT NULL,
             first_record_date DATE NULL,
@@ -237,6 +239,164 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
     }
 
     /**
+     * Verify annual means zero-fill missing years and exclude the current year.
+     *
+     * @return void
+     */
+    public function testRunCalculatesYearlyMeansForGlobalAndRegionalScopes(): void
+    {
+        $yearStatsConfig = config(\Config\TaxonYearStats::class);
+        $originalHistoryYears = $yearStatsConfig->historyYears;
+        $yearStatsConfig->historyYears = 3;
+
+        try {
+            $currentYear = (int) date('Y');
+            $this->db->table('taxon_year_stats')->insertBatch([
+                ['taxon_id' => 1, 'geographic_region_id' => null, 'year' => $currentYear - 3, 'occurrences_count' => 6, 'grid_square_count' => 3],
+                ['taxon_id' => 1, 'geographic_region_id' => 11, 'year' => $currentYear - 3, 'occurrences_count' => 4, 'grid_square_count' => 2],
+                ['taxon_id' => 1, 'geographic_region_id' => null, 'year' => $currentYear - 1, 'occurrences_count' => 8, 'grid_square_count' => 4],
+                ['taxon_id' => 1, 'geographic_region_id' => 11, 'year' => $currentYear - 1, 'occurrences_count' => 6, 'grid_square_count' => 3],
+                ['taxon_id' => 1, 'geographic_region_id' => null, 'year' => $currentYear, 'occurrences_count' => 100, 'grid_square_count' => 100],
+                ['taxon_id' => 1, 'geographic_region_id' => 11, 'year' => $currentYear, 'occurrences_count' => 80, 'grid_square_count' => 80],
+            ]);
+            $this->db->table('occurrences')->insert([
+                'id' => 100,
+                'taxon_id' => 1,
+                'from_date' => $currentYear . '-01-01',
+                'to_date' => $currentYear . '-01-01',
+                'grid_ref_2km' => 'SU01A',
+                'recorded_by' => 'Average test',
+                'identification_verification_status' => 'V',
+                'blocked' => 0,
+                'deleted_at' => null,
+            ]);
+            $this->db->table('geographic_regions_occurrences')->insert([
+                'geographic_region_id' => 11,
+                'occurrence_id' => 100,
+            ]);
+
+            $counts = $this->runAllTaxonStatBatches(new TaxonStatsService());
+
+            $this->assertSame('success', $counts['status']);
+            $global = $this->findTaxonStatRow(1, null);
+            $regional = $this->findTaxonStatRow(1, 11);
+            $this->assertNotNull($global);
+            $this->assertNotNull($regional);
+            $this->assertEqualsWithDelta(7 / 3, (float) $global['mean_squares_per_year'], 0.0001);
+            $this->assertEqualsWithDelta(14 / 3, (float) $global['mean_occurrences_per_year'], 0.0001);
+            $this->assertEqualsWithDelta(5 / 3, (float) $regional['mean_squares_per_year'], 0.0001);
+            $this->assertEqualsWithDelta(10 / 3, (float) $regional['mean_occurrences_per_year'], 0.0001);
+        } finally {
+            $yearStatsConfig->historyYears = $originalHistoryYears;
+        }
+    }
+
+    /**
+     * Verify an unbounded history window uses all available completed years.
+     *
+     * @return void
+     */
+    public function testRunCalculatesYearlyMeansAcrossAllAvailableHistory(): void
+    {
+        $yearStatsConfig = config(\Config\TaxonYearStats::class);
+        $originalHistoryYears = $yearStatsConfig->historyYears;
+        $yearStatsConfig->historyYears = 0;
+
+        try {
+            $currentYear = (int) date('Y');
+            $this->db->table('taxon_year_stats')->insertBatch([
+                ['taxon_id' => 1, 'geographic_region_id' => null, 'year' => $currentYear - 4, 'occurrences_count' => 3, 'grid_square_count' => 1],
+                ['taxon_id' => 1, 'geographic_region_id' => null, 'year' => $currentYear - 1, 'occurrences_count' => 5, 'grid_square_count' => 2],
+                ['taxon_id' => 1, 'geographic_region_id' => null, 'year' => $currentYear, 'occurrences_count' => 50, 'grid_square_count' => 50],
+            ]);
+            $this->db->table('occurrences')->insert([
+                'id' => 102,
+                'taxon_id' => 1,
+                'from_date' => $currentYear . '-01-01',
+                'to_date' => $currentYear . '-01-01',
+                'grid_ref_2km' => 'SU01A',
+                'recorded_by' => 'Unbounded average test',
+                'identification_verification_status' => 'V',
+                'blocked' => 0,
+                'deleted_at' => null,
+            ]);
+
+            $counts = $this->runAllTaxonStatBatches(new TaxonStatsService());
+
+            $this->assertSame('success', $counts['status']);
+            $row = $this->findTaxonStatRow(1, null);
+            $this->assertNotNull($row);
+            $this->assertEqualsWithDelta(0.75, (float) $row['mean_squares_per_year'], 0.0001);
+            $this->assertEqualsWithDelta(2, (float) $row['mean_occurrences_per_year'], 0.0001);
+        } finally {
+            $yearStatsConfig->historyYears = $originalHistoryYears;
+        }
+    }
+
+    /**
+     * Verify dirty-scope rebuilds calculate averages from the same yearly window.
+     *
+     * @return void
+     */
+    public function testIncrementalRebuildCalculatesYearlyMeans(): void
+    {
+        $yearStatsConfig = config(\Config\TaxonYearStats::class);
+        $originalHistoryYears = $yearStatsConfig->historyYears;
+        $yearStatsConfig->historyYears = 2;
+
+        try {
+            $currentYear = (int) date('Y');
+            $this->db->table('taxon_year_stats')->insertBatch([
+                ['taxon_id' => 1, 'geographic_region_id' => null, 'year' => $currentYear - 1, 'occurrences_count' => 8, 'grid_square_count' => 4],
+                ['taxon_id' => 1, 'geographic_region_id' => null, 'year' => $currentYear, 'occurrences_count' => 100, 'grid_square_count' => 100],
+            ]);
+            $this->db->table('occurrences')->insert([
+                'id' => 101,
+                'taxon_id' => 1,
+                'from_date' => $currentYear . '-01-01',
+                'to_date' => $currentYear . '-01-01',
+                'grid_ref_2km' => 'SU01A',
+                'recorded_by' => 'Incremental average test',
+                'identification_verification_status' => 'V',
+                'blocked' => 0,
+                'deleted_at' => null,
+            ]);
+            $this->db->table('taxon_stats')->insert([
+                'uuid' => '00000000-0000-4000-8000-000000000101',
+                'taxon_id' => 1,
+                'geographic_region_id' => null,
+                'first_recorder' => '',
+                'last_recorder' => '',
+                'first_verified_recorder' => '',
+                'last_verified_recorder' => '',
+            ]);
+            $this->db->table('import_offsets')->insert([
+                'source_key' => 'derived-stats:taxon_stats',
+                'next_checkpoint' => null,
+                'is_complete' => 1,
+            ]);
+            $this->db->table('stats_dirty_scopes')->insert([
+                'scope_key' => 'taxon|exact|1|global|all',
+                'stat_type' => 'taxon',
+                'projection' => 'exact',
+                'taxon_id' => 1,
+                'geographic_region_id' => null,
+                'year' => null,
+            ]);
+
+            $counts = (new TaxonStatsService(new \App\Services\Stats\StatsDirtyScopeService()))->run();
+
+            $this->assertSame('success', $counts['status']);
+            $row = $this->findTaxonStatRow(1, null);
+            $this->assertNotNull($row);
+            $this->assertEqualsWithDelta(2, (float) $row['mean_squares_per_year'], 0.0001);
+            $this->assertEqualsWithDelta(4, (float) $row['mean_occurrences_per_year'], 0.0001);
+        } finally {
+            $yearStatsConfig->historyYears = $originalHistoryYears;
+        }
+    }
+
+    /**
      * Preserve curated decisions and decision-only scopes during a full rebuild.
      *
      * @return void
@@ -249,6 +409,17 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             'from_date' => '2020-01-01',
             'to_date' => '2020-01-01',
             'grid_ref_2km' => 'SU110A',
+            'blocked' => 0,
+            'deleted_at' => null,
+        ]);
+        $this->db->table('occurrences')->insert([
+            'id' => 111,
+            'taxon_id' => 2,
+            'superfamily_id' => 2,
+            'species_id' => 2,
+            'from_date' => '2020-01-01',
+            'to_date' => '2020-01-01',
+            'grid_ref_2km' => 'SU111A',
             'blocked' => 0,
             'deleted_at' => null,
         ]);
@@ -335,6 +506,26 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $this->assertSame(1, (int) $row['notable']);
         $this->assertSame('Keep after record removal', $row['notable_comment']);
         $this->assertSame(0, (int) $row['occurrences_count']);
+    }
+
+    /**
+     * Skip incremental scope collection until both initial occurrence imports finish.
+     *
+     * @return void
+     */
+    public function testOccurrenceChangesAreNotQueuedBeforeInitialImportsComplete(): void
+    {
+        $dirty = new \App\Services\Stats\StatsDirtyScopeService();
+        $changes = [['new' => ['taxon_id' => 1]]];
+
+        $this->assertSame(0, $dirty->enqueueOccurrenceChanges($changes));
+        $this->assertSame(0, $this->db->table('stats_dirty_scopes')->countAllResults());
+
+        $offsets = model(\App\Models\ImportOffsetModel::class);
+        $offsets->setCompletion('indicia-occurrences:occurrences', true);
+        $offsets->setCompletion('nbn-occurrences:occurrences', true);
+
+        $this->assertGreaterThan(0, $dirty->enqueueOccurrenceChanges($changes));
     }
 
     /**
@@ -563,7 +754,9 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             'year' => null,
         ]);
 
-        $service = new TaxonStatsService(new \App\Services\Stats\StatsDirtyScopeService());
+        $config = new \Config\TaxonStats();
+        $config->maxTaxaPerRun = 1;
+        $service = new TaxonStatsService(new \App\Services\Stats\StatsDirtyScopeService(), $config);
         $counts = $service->run();
 
         $this->assertSame('success', $counts['status']);
@@ -599,6 +792,100 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $this->assertSame(0, (int) $counts['fetched']);
         $this->assertSame(0, (int) $counts['inserted']);
         $this->assertFalse((bool) $counts['has_more']);
+    }
+
+    /**
+     * Resume a legacy projection checkpoint from the last taxon ID after each bounded chunk.
+     *
+     * @return void
+     */
+    public function testFullRebuildResumesWithinProjectionChunks(): void
+    {
+        foreach ([1, 2] as $taxonId) {
+            $taxonId += 3;
+            $this->db->table('taxa')->insert([
+                'id' => $taxonId,
+                'taxon_identifier' => 'TX-' . $taxonId,
+                'taxon_rank_id' => 1,
+                'blocked' => 0,
+                'deleted_at' => null,
+            ]);
+            $this->db->table('occurrences')->insert([
+                'id' => 200 + $taxonId,
+                'taxon_id' => $taxonId,
+                'from_date' => '2024-01-01',
+                'to_date' => '2024-01-01',
+                'grid_ref_2km' => 'SU20A',
+                'blocked' => 0,
+                'deleted_at' => null,
+            ]);
+        }
+
+        $ranks = config('Import')->taxonRanks ?? [];
+        $finalBatch = is_array($ranks) ? count($ranks) : count(explode(',', (string) $ranks));
+        $this->db->table('import_offsets')->insert([
+            'source_key' => 'derived-stats:taxon_stats',
+            'next_checkpoint' => (string) $finalBatch,
+            'is_complete' => 0,
+        ]);
+        $config = new \Config\TaxonStats();
+        $config->taxaPerBatch = 1;
+        $config->maxTaxaPerRun = 1;
+        $service = new TaxonStatsService(new \App\Services\Stats\StatsDirtyScopeService(), $config);
+
+        $first = $service->run();
+        $this->assertSame('success', $first['status']);
+        $this->assertTrue((bool) $first['has_more']);
+        $this->assertSame($finalBatch . ':4', model(\App\Models\ImportOffsetModel::class)
+            ->getCheckpoint('derived-stats:taxon_stats'));
+
+        $second = $service->run();
+        $this->assertSame('success', $second['status']);
+        $this->assertFalse((bool) $second['has_more']);
+        $this->assertTrue(model(\App\Models\ImportOffsetModel::class)->isComplete('derived-stats:taxon_stats'));
+        $this->assertSame(2, $this->db->table('taxon_stats')->countAllResults());
+    }
+
+    /**
+     * Clear queued changes once the full rebuild has recomputed every taxon scope.
+     *
+     * @return void
+     */
+    public function testFinalFullRebuildBatchClearsCoveredDirtyScopes(): void
+    {
+        $this->db->table('taxon_stats')->insert([
+            'uuid' => '00000000-0000-4000-8000-000000000003',
+            'taxon_id' => 1,
+            'occurrences_count' => 0,
+            'grid_square_count' => 0,
+            'first_recorder' => '',
+            'last_recorder' => '',
+            'first_verified_recorder' => '',
+            'last_verified_recorder' => '',
+        ]);
+        $this->db->table('stats_dirty_scopes')->insert([
+            'scope_key' => 'taxon|exact|1|global|all',
+            'stat_type' => 'taxon',
+            'projection' => 'exact',
+            'taxon_id' => 1,
+            'geographic_region_id' => null,
+            'year' => null,
+        ]);
+        $ranks = config('Import')->taxonRanks ?? [];
+        $finalBatch = is_array($ranks) ? count($ranks) : count(explode(',', (string) $ranks));
+        $this->db->table('import_offsets')->insert([
+            'source_key' => 'derived-stats:taxon_stats',
+            'next_checkpoint' => (string) $finalBatch,
+            'is_complete' => 0,
+        ]);
+
+        $counts = (new TaxonStatsService(new \App\Services\Stats\StatsDirtyScopeService()))->run();
+
+        $this->assertSame('success', $counts['status']);
+        $this->assertSame(0, $this->db->table('stats_dirty_scopes')
+            ->where('stat_type', 'taxon')
+            ->countAllResults());
+        $this->assertTrue(model(\App\Models\ImportOffsetModel::class)->isComplete('derived-stats:taxon_stats'));
     }
 
     /**

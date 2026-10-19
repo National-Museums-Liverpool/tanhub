@@ -1275,12 +1275,17 @@ Examples:
 - Unique identifier: `uuid`
 - Exposed fields:
 	- `uuid`, `taxon_identifier`, `higher_geography_identifier`,
-	  `occurrences_count`, `grid_square_count`, `frequency_trend`, `frequency_trend_state`,
+	  `occurrences_count`, `grid_square_count`, `mean_squares_per_year`,
+	  `mean_occurrences_per_year`, `frequency_trend`, `frequency_trend_state`,
 	  `notable`, `notable_comment`, `notable_decision_date`,
 	  `first_record_date`,
 	  `last_record_date`,
 		`first_recorder`, `last_recorder`, `first_verified_record_date`, `last_verified_record_date`,
 		`first_verified_recorder`, `last_verified_recorder`
+
+`mean_squares_per_year` and `mean_occurrences_per_year` are means over the completed calendar years
+in the configured `taxon_year_stats` history window. Years without a row count as zero, and the
+current year is excluded because its data is incomplete.
 
 `notable` is nullable: `true` means key species, `false` means not key species, and `null` means
 no decision is set. `notable_comment` and `notable_decision_date` are also nullable. The date and

@@ -503,6 +503,7 @@ class TaxonStatsService
         $reportingColumns = $batch['columns'];
         $projectionColumns = $reportingColumns === [] ? '' : ",\n                    " . implode(",\n                    ", array_map(static fn (string $column): string => 'o.' . $column, $reportingColumns));
         $taxonFilter = '';
+        $scopeFilter = '';
         if ($taxonIds !== []) {
             $taxonColumn = $batch['include_exact'] ? 'o.taxon_id' : 'o.' . $reportingColumns[0];
             $taxonIds = array_values(array_unique(array_filter(
@@ -511,11 +512,23 @@ class TaxonStatsService
             )));
             $taxonFilter = ' AND ' . $taxonColumn . ' IN (' . implode(',', $taxonIds) . ')';
         }
+        if ($scope !== null) {
+            $scopeTaxonId = (int) ($scope['taxon_id'] ?? 0);
+            $scopeTaxonColumn = $batch['include_exact'] ? 'o.taxon_id' : 'o.' . $reportingColumns[0];
+            $scopeFilter = ' AND ' . $scopeTaxonColumn . ' = ' . $scopeTaxonId;
+            if ($scope['geographic_region_id'] !== null) {
+                $scopeFilter .= ' AND EXISTS (
+                    SELECT 1
+                    FROM ' . $prefix . 'geographic_regions_occurrences scope_gro
+                    WHERE scope_gro.occurrence_id = o.id
+                        AND scope_gro.geographic_region_id = ' . (int) $scope['geographic_region_id'] . '
+                )';
+            }
+        }
         $scopedOccurrences = $this->scopedOccurrenceSql($prefix, $reportingColumns, $batch['include_exact']);
         $scopedTable = 'scoped_occurrences';
         $scopeCte = '';
         if ($scope !== null) {
-            $scopeTaxonId = (int) ($scope['taxon_id'] ?? 0);
             $scopeRegion = $scope['geographic_region_id'] === null ? 'IS NULL' : '= ' . (int) $scope['geographic_region_id'];
             $scopedTable = 'filtered_scoped_occurrences';
             $scopeCte = ', filtered_scoped_occurrences AS (
@@ -545,7 +558,7 @@ class TaxonStatsService
                 INNER JOIN ' . $prefix . 'taxon_ranks tr
                     ON tr.id = t.taxon_rank_id
                 WHERE o.deleted_at IS NULL
-                    AND o.blocked = 0' . $taxonFilter . '
+                    AND o.blocked = 0' . $taxonFilter . $scopeFilter . '
             ),
             scoped_occurrences AS (' . $scopedOccurrences . ')' . $scopeCte . ',
             aggregates AS (
@@ -783,15 +796,15 @@ class TaxonStatsService
         foreach ($rows as &$row) {
             $first = $details[(int) ($row['first_occurrence_id'] ?? 0)] ?? [];
             $last = $details[(int) ($row['last_occurrence_id'] ?? 0)] ?? [];
-            $firstVerified = $details[(int) ($row['first_verified_occurrence_id'] ?? 0)] ?? $first;
-            $lastVerified = $details[(int) ($row['last_verified_occurrence_id'] ?? 0)] ?? $last;
+            $firstVerified = $details[(int) ($row['first_verified_occurrence_id'] ?? 0)] ?? [];
+            $lastVerified = $details[(int) ($row['last_verified_occurrence_id'] ?? 0)] ?? [];
 
             $row['first_recorder'] = (string) ($first['recorded_by'] ?? '');
             $row['last_recorder'] = (string) ($last['recorded_by'] ?? '');
-            $row['first_verified_record_date'] = $firstVerified['first_record_date'] ?? $row['first_record_date'];
-            $row['last_verified_record_date'] = $lastVerified['last_record_date'] ?? $row['last_record_date'];
-            $row['first_verified_recorder'] = (string) ($firstVerified['recorded_by'] ?? $row['first_recorder']);
-            $row['last_verified_recorder'] = (string) ($lastVerified['recorded_by'] ?? $row['last_recorder']);
+            $row['first_verified_record_date'] = $firstVerified['first_record_date'] ?? null;
+            $row['last_verified_record_date'] = $lastVerified['last_record_date'] ?? null;
+            $row['first_verified_recorder'] = (string) ($firstVerified['recorded_by'] ?? '');
+            $row['last_verified_recorder'] = (string) ($lastVerified['recorded_by'] ?? '');
 
             unset(
                 $row['first_occurrence_id'],

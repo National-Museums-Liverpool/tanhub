@@ -46,6 +46,7 @@ final class IndiciaOccurrencesAdapterTest extends CIUnitTestCase
     {
         $record = [
             '_id' => 'remote-1',
+            'id' => 12345,
             'taxon' => [
                 'accepted_taxon_id' => 'TVK-1',
                 'taxon_id' => 'GIVEN-1',
@@ -95,6 +96,7 @@ final class IndiciaOccurrencesAdapterTest extends CIUnitTestCase
             'meta' => ['count' => 1, 'total' => 2, 'offset' => 0],
             'records' => [[
                 '_id' => 'remote-1',
+                'id' => 12345,
                 'metadata' => ['tracking' => 'track-1'],
                 'taxon' => ['accepted_taxon_id' => 'TVK-1', 'taxon_id' => 'GIVEN-1'],
                 'location' => [
@@ -138,7 +140,7 @@ final class IndiciaOccurrencesAdapterTest extends CIUnitTestCase
         $this->assertCount(1, $page->records);
         $this->assertTrue($page->hasMore);
         $this->assertSame('track-1', $page->nextCheckpoint);
-        $this->assertSame('remote-1', $page->records[0]['remote_id']);
+        $this->assertSame('12345', $page->records[0]['remote_id']);
         $this->assertSame('TVK-1', $page->records[0]['scientific_name_identifier']);
     }
 

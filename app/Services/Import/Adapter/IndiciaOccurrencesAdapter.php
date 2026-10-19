@@ -340,8 +340,11 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
     }
 
     /**
-     * @param array<string, mixed> $record
-     * @return array<string, mixed>
+     * Normalize an Indicia occurrence record for persistence.
+     *
+     * @param array<string, mixed> $record Raw Indicia occurrence record.
+     *
+     * @return array<string, mixed> Normalized occurrence record.
      */
     private function normalizeRecord(array $record): array
     {
@@ -350,7 +353,7 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         $gridRefSystem = (string) ($this->stringFromPath($record, 'location.output_sref_system'));
         $gridRef2km = $this->osgbGridReferenceBuilder->calculateDintyTetrad($gridRef);
         return [
-            'remote_id' => (string) $record['_id'],
+            'remote_id' => (string) ($record['id'] ?? ''),
             // Indicia ES data doesn't currently hold the organism key.
             'taxon_identifier' => null,
             // So we can use the accepted name TVK as a unique ID instead.

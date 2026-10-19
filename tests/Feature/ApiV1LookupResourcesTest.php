@@ -671,7 +671,51 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame(1, $regional['meta']['count']);
         $this->assertSame('Regional rationale', $regional['data'][0]['key_species_comment']);
         $this->assertSame('2026-10-15', $regional['data'][0]['key_species_decision_date']);
-        $this->assertSame(1, (int) $regional['data'][0]['key_species']);
+        $this->assertSame('yes', $regional['data'][0]['key_species']);
+
+        $mappedYesResult = $this->get(
+            'api/v1/taxon-stats?key_species[eq]=yes&higher_geography_identifier[eq]=SH',
+        );
+        $mappedYesResult->assertStatus(200);
+        $mappedYes = json_decode((string) $mappedYesResult->response()->getBody(), true);
+        $this->assertSame(1, $mappedYes['meta']['count']);
+
+        $db->table('taxon_stats')->where('id', 1)->update(['key_species' => 0]);
+        $notKeyResult = $this->get(
+            'api/v1/taxon-stats?key_species[eq]=0&higher_geography_identifier[eq]=SH',
+        );
+        $notKeyResult->assertStatus(200);
+        $notKey = json_decode((string) $notKeyResult->response()->getBody(), true);
+        $this->assertSame(1, $notKey['meta']['count']);
+        $this->assertSame('no', $notKey['data'][0]['key_species']);
+
+        $mappedNoResult = $this->get(
+            'api/v1/taxon-stats?key_species[eq]=no&higher_geography_identifier[eq]=SH',
+        );
+        $mappedNoResult->assertStatus(200);
+        $mappedNo = json_decode((string) $mappedNoResult->response()->getBody(), true);
+        $this->assertSame(1, $mappedNo['meta']['count']);
+
+        $db->table('taxon_stats')->where('id', 1)->update(['key_species' => null]);
+        $notSetResult = $this->get(
+            'api/v1/taxon-stats?key_species[eq]=null&higher_geography_identifier[eq]=SH',
+        );
+        $notSetResult->assertStatus(200);
+        $notSet = json_decode((string) $notSetResult->response()->getBody(), true);
+        $this->assertSame(1, $notSet['meta']['count']);
+        $this->assertSame('not set', $notSet['data'][0]['key_species']);
+
+        $mappedNotSetResult = $this->get(
+            'api/v1/taxon-stats?key_species[eq]=not%20set&higher_geography_identifier[eq]=SH',
+        );
+        $mappedNotSetResult->assertStatus(200);
+        $mappedNotSet = json_decode((string) $mappedNotSetResult->response()->getBody(), true);
+        $this->assertSame(1, $mappedNotSet['meta']['count']);
+
+        $showResult = $this->get('api/v1/taxon-stats/33333333-3333-4333-8333-333333333333');
+        $showResult->assertStatus(200);
+        $show = json_decode((string) $showResult->response()->getBody(), true);
+        $this->assertSame('not set', $show['key_species']);
 
         $db->table('geographic_regions')->where('id', 1)->update([
             'deleted_at' => '2026-10-15 00:00:00',
@@ -686,7 +730,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertNull($global['data'][0]['higher_geography_identifier']);
         $this->assertSame('Global rationale', $global['data'][0]['key_species_comment']);
         $this->assertSame('2026-10-15', $global['data'][0]['key_species_decision_date']);
-        $this->assertSame(1, (int) $global['data'][0]['key_species']);
+        $this->assertSame('yes', $global['data'][0]['key_species']);
     }
 
     public function testTaxonStatsShowReturnsNotFoundForBlockedTaxonStats(): void

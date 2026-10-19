@@ -1287,19 +1287,20 @@ Examples:
 in the configured `taxon_year_stats` history window. Years without a row count as zero, and the
 current year is excluded because its data is incomplete.
 
-`key_species` is nullable: `true` means key species, `false` means not key species, and `null`
-means no decision is set. `key_species_comment` and `key_species_decision_date` are also nullable.
-The date and comment describe the current decision; changing the decision updates the date, while
-**Not set** clears both fields.
+`key_species` returns `yes`, `no`, or `not set` for a positive, negative, or unset decision.
+`key_species_comment` and `key_species_decision_date` are also nullable. The date and comment
+describe the current decision; changing the decision updates the date, while **Not set** clears
+both fields.
 
 - Filterable fields:
 	- all exposed taxon-stats fields above
 	- `taxon_rank` (for example, `taxon_rank=species`); filter by rank when reviewing trends,
 	  rather than comparing scores across different taxonomic levels
 	- rows for blocked taxa are always excluded
-	- `key_species` accepts `1` or `0`; use `higher_geography_identifier[eq]=null` to select the
-	  global row rather than a region. Rows for deleted regions are excluded, so this null filter
-	  selects only global rows.
+	- Equality filters on `key_species` accept raw `1`, `0`, or `null` values, or the mapped
+	  `yes`, `no`, or `not set` values (case-insensitive). Use
+	  `higher_geography_identifier[eq]=null` to select the global row rather than a region. Rows
+	  for deleted regions are excluded, so this null filter selects only global rows.
 - Include:
 	- query parameter: `include`
 	- supported values and added fields:

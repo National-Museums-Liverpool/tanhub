@@ -4,6 +4,7 @@ namespace App\Controllers\Api\V1;
 
 use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\RawSql;
+use CodeIgniter\HTTP\ResponseInterface;
 
 /**
  * API endpoints for the `taxon_stats` resource (per-taxon, per-region occurrence aggregates).
@@ -61,13 +62,22 @@ class TaxonStats extends ApiResourceController
     }
 
     /**
-     * Add include-dependent nested data to each response row.
+     * Format key-species decisions and add include-dependent nested data to each response row.
      *
      * @param array<int, array<string, mixed>> $data
      * @return void
      */
     protected function augmentResponseData(array &$data, array $includes = []): void
     {
+        foreach ($data as &$row) {
+            $row['key_species'] = match ($row['key_species']) {
+                null => 'not set',
+                true, 1, '1', 't', 'true' => 'yes',
+                false, 0, '0', 'f', 'false' => 'no',
+            };
+        }
+        unset($row);
+
         if ($this->hasInclude($includes, 'taxon-media')) {
             $this->hydrateTaxonMedia($data);
         }
@@ -149,6 +159,41 @@ class TaxonStats extends ApiResourceController
         }
 
         return $fields;
+    }
+
+    /**
+     * Normalize mapped key-species filter values to the stored boolean values.
+     *
+     * @param array<string, string> $allowedFilters API filter fields and their SQL columns.
+     * @return array<int, array{column: string, operator: string, value: mixed}>|ResponseInterface
+     *         Parsed filters, or a problem response for an invalid filter.
+     */
+    protected function getFilters(array $allowedFilters): array|ResponseInterface
+    {
+        $filters = parent::getFilters($allowedFilters);
+        if (! is_array($filters)) {
+            return $filters;
+        }
+
+        foreach ($filters as &$filter) {
+            if (
+                $filter['column'] !== 'ts.key_species'
+                || $filter['operator'] !== 'eq'
+                || ! is_string($filter['value'])
+            ) {
+                continue;
+            }
+
+            $filter['value'] = match (strtolower(trim($filter['value']))) {
+                'yes' => 1,
+                'no' => 0,
+                'not set' => 'null',
+                default => $filter['value'],
+            };
+        }
+        unset($filter);
+
+        return $filters;
     }
 
     /**

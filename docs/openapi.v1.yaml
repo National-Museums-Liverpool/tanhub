@@ -294,10 +294,11 @@ paths:
         frequency_trend_state identifies increasing, decreasing, stable, insufficient_data, or
         unclear. Responses also include key_species, key_species_comment, and
         key_species_decision_date for the current key-species decision, rationale, and decision
-        date. Key species is nullable: true means key species, false means not key species, and
-        null means no decision is set. The comment and date describe current state; Not set clears
-        both. Filter key_species with 1 or 0 and use higher_geography_identifier[eq]=null for the
-        separate global scope. For example,
+        date. key_species returns yes, no, or not set for a positive, negative, or unset decision.
+        The comment and date describe current state; Not set clears both. Equality filters on
+        key_species accept raw 1, 0, or null values, or the mapped yes, no, or not set values
+        (case-insensitive). Use higher_geography_identifier[eq]=null for the separate global
+        scope. For example,
         `/api/v1/taxon-stats?key_species[eq]=1&higher_geography_identifier[eq]=13` lists key
         species for active region 13. Rows for deleted regions are excluded, so the null geography
         filter selects only global rows.

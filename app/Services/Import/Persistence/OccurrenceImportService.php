@@ -223,7 +223,7 @@ class OccurrenceImportService
                     'locality' => $this->nullableString($record['locality'] ?? null, 255),
                     'recorded_by' => $this->nullableString($record['recorded_by'] ?? null, 255) ?? 'Unknown',
                     'identified_by' => $this->nullableString($record['identified_by'] ?? null, 255),
-                    'identification_verification_status' => substr((string) ($record['identification_verification_status'] ?? 'UN'), 0, 2),
+                    'identification_verification_status' => substr((string) ($record['identification_verification_status'] ?? NULL), 0, 2),
                     'sex' => $this->nullableString($record['sex'] ?? null, 20),
                     'life_stage' => $this->nullableString($record['life_stage'] ?? null, 20),
                     'organism_quantity' => $this->nullableString($record['organism_quantity'] ?? null, 20),

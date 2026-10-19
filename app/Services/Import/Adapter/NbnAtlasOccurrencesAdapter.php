@@ -337,6 +337,12 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
 
         $eventDate = $record['eventDate'] ?? $record['event']['eventDate'] ?? $this->eventDateFromParts($record);
         [$fromDate, $toDate] = $this->normalizeEventDate($eventDate);
+        $verificationStatus = $record['identification_verification_status'] ?? $record['identificationVerificationStatus'] ?? null;
+        if ($verificationStatus === 'Ac') {
+            $verificationStatus = 'V';
+        } elseif ($verificationStatus === 'Un') {
+            $verificationStatus = null;
+        }
 
         return [
             'remote_id' => $remoteId,
@@ -353,7 +359,7 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             'locality' => $record['locality'] ?? null,
             'recorded_by' => $record['recorded_by'] ?? $record['recordedBy'] ?? null,
             'identified_by' => $record['identified_by'] ?? $record['identifiedBy'] ?? null,
-            'identification_verification_status' => $record['identification_verification_status'] ?? $record['identificationVerificationStatus'] ?? 'UN',
+            'identification_verification_status' => $verificationStatus,
             'sex' => $record['sex'] ?? null,
             'life_stage' => $record['life_stage'] ?? null,
             'organism_quantity' => $record['organism_quantity'] ?? null,

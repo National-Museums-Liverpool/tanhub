@@ -591,6 +591,44 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
     }
 
     /**
+     * Verify verified metadata is null when a taxon has no verified records.
+     *
+     * @return void
+     */
+    public function testRunDoesNotUseUnverifiedRecordsForVerifiedMetadata(): void
+    {
+        $this->db->table('taxa')->insert([
+            'id' => 4,
+            'taxon_identifier' => 'TX-4',
+            'taxon_rank_id' => 1,
+            'blocked' => 0,
+            'deleted_at' => null,
+        ]);
+        $this->db->table('occurrences')->insert([
+            'id' => 104,
+            'taxon_id' => 4,
+            'from_date' => '2024-01-01',
+            'to_date' => '2024-01-01',
+            'grid_ref_2km' => 'SU104A',
+            'recorded_by' => 'Unverified recorder',
+            'identification_verification_status' => null,
+            'blocked' => 0,
+            'deleted_at' => null,
+        ]);
+
+        $counts = $this->runAllTaxonStatBatches(new TaxonStatsService());
+
+        $this->assertSame('success', $counts['status']);
+        $row = $this->findTaxonStatRow(4, null);
+        $this->assertNotNull($row);
+        $this->assertSame('2024-01-01', $row['first_record_date']);
+        $this->assertNull($row['first_verified_record_date']);
+        $this->assertNull($row['last_verified_record_date']);
+        $this->assertSame('', $row['first_verified_recorder']);
+        $this->assertSame('', $row['last_verified_recorder']);
+    }
+
+    /**
      * Verify frequency trend direction and classification for aggregate rows.
      *
      * @return void

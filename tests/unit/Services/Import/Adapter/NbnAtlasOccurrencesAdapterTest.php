@@ -106,10 +106,40 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         $this->assertSame('2024-05-01', $record['from_date']);
         $this->assertSame('2024-05-01', $record['to_date']);
         $this->assertSame('SU123456', $record['grid_ref']);
-        $this->assertSame('SU123', $record['grid_ref_2km']);
+        $this->assertSame('SU14H', $record['grid_ref_2km']);
         $this->assertSame('EPSG:4326', $record['grid_ref_system']);
         $this->assertSame('V', $record['identification_verification_status']);
         $this->assertSame(1500.0, $record['coordinate_uncertainty_in_meters']);
+    }
+
+    /**
+     * Verify NBN verification status values are standardized for stats.
+     *
+     * @return void
+     */
+    public function testFetchPageNormalizesNbnVerificationStatuses(): void
+    {
+        $response = $this->createMock(ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn(200);
+        $response->method('getBody')->willReturn((string) json_encode([
+            'totalRecords' => 2,
+            'occurrences' => [
+                ['uuid' => 'accepted', 'identificationVerificationStatus' => 'Ac'],
+                ['uuid' => 'unknown', 'identificationVerificationStatus' => 'Un'],
+            ],
+        ], JSON_THROW_ON_ERROR));
+
+        $client = $this->createMock(CURLRequest::class);
+        $client->method('get')->willReturn($response);
+
+        $page = (new NbnAtlasOccurrencesAdapter(
+            $client,
+            ['endpoint' => 'https://example.test/nbn'],
+            10,
+        ))->fetchPage(null, 10);
+
+        $this->assertSame('V', $page->records[0]['identification_verification_status']);
+        $this->assertNull($page->records[1]['identification_verification_status']);
     }
 
     /**

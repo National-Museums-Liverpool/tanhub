@@ -292,14 +292,15 @@ paths:
         non-species, insufficient-data, and unclear rows and ranges from 0 for the most declining
         taxa in the rank and scope to 100 for the most increasing taxon; stable taxa receive 50.
         frequency_trend_state identifies increasing, decreasing, stable, insufficient_data, or
-        unclear. Responses also include notable, notable_comment, and notable_decision_date for the
-        current key-species decision, rationale, and decision date. Notable is nullable: true
-        means key species, false means not key species, and null means no decision is set. The
-        comment and date describe current state; Not set clears both. Filter notable with 1 or 0
-        and use higher_geography_identifier[eq]=null for the separate global scope. For example,
-        `/api/v1/taxon-stats?notable[eq]=1&higher_geography_identifier[eq]=13` lists key species
-        for active region 13. Rows for deleted regions are excluded, so the null geography filter
-        selects only global rows.
+        unclear. Responses also include key_species, key_species_comment, and
+        key_species_decision_date for the current key-species decision, rationale, and decision
+        date. Key species is nullable: true means key species, false means not key species, and
+        null means no decision is set. The comment and date describe current state; Not set clears
+        both. Filter key_species with 1 or 0 and use higher_geography_identifier[eq]=null for the
+        separate global scope. For example,
+        `/api/v1/taxon-stats?key_species[eq]=1&higher_geography_identifier[eq]=13` lists key
+        species for active region 13. Rows for deleted regions are excluded, so the null geography
+        filter selects only global rows.
         Use the taxon_rank query filter, such as taxon_rank=species, when reviewing one level.
       parameters:
         - $ref: '#/components/parameters/TaxonStatsInclude'

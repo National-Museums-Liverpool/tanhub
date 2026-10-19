@@ -9,19 +9,19 @@ use Throwable;
 /**
  * Reads and saves curated key-species decisions in taxon statistics rows.
  */
-class TaxonNotableService
+class TaxonKeySpeciesService
 {
     /**
      * Get the saved key-species values for each scope of a taxon.
      *
      * @param int $taxonId Taxon identifier.
-     * @return array<string, array{notable: bool|null, notable_comment: string|null, notable_decision_date: string|null}>
+     * @return array<string, array{key_species: bool|null, key_species_comment: string|null, key_species_decision_date: string|null}>
      */
     public function getForTaxon(int $taxonId): array
     {
         $rows = db_connect()
             ->table('taxon_stats')
-            ->select('geographic_region_id, notable, notable_comment, notable_decision_date')
+            ->select('geographic_region_id, key_species, key_species_comment, key_species_decision_date')
             ->where('taxon_id', $taxonId)
             ->get()
             ->getResultArray();
@@ -33,13 +33,13 @@ class TaxonNotableService
                 : (string) (int) $row['geographic_region_id'];
 
             $scopes[$scopeKey] = [
-                'notable' => $row['notable'] === null ? null : (bool) $row['notable'],
-                'notable_comment' => $row['notable_comment'] === null
+                'key_species' => $row['key_species'] === null ? null : (bool) $row['key_species'],
+                'key_species_comment' => $row['key_species_comment'] === null
                     ? null
-                    : (string) $row['notable_comment'],
-                'notable_decision_date' => $row['notable_decision_date'] === null
+                    : (string) $row['key_species_comment'],
+                'key_species_decision_date' => $row['key_species_decision_date'] === null
                     ? null
-                    : (string) $row['notable_decision_date'],
+                    : (string) $row['key_species_decision_date'],
             ];
         }
 
@@ -50,7 +50,7 @@ class TaxonNotableService
      * Save decisions for the supplied global and regional scopes atomically.
      *
      * @param int $taxonId Taxon identifier.
-     * @param array<string|int, array{notable: bool|null, comment: string|null}> $scopes Scope
+     * @param array<string|int, array{key_species: bool|null, key_species_comment: string|null}> $scopes Scope
      *        decisions keyed by `global` or geographic region ID.
      * @return void
      * @throws RuntimeException If a scope is invalid or duplicate statistics rows exist.
@@ -72,27 +72,27 @@ class TaxonNotableService
                 }
 
                 $existing = $rows[0] ?? null;
-                $notable = $scope['notable'];
-                $comment = $notable === null ? null : $scope['comment'];
-                $existingNotable = $existing === null || $existing['notable'] === null
+                $keySpecies = $scope['key_species'];
+                $comment = $keySpecies === null ? null : $scope['key_species_comment'];
+                $existingKeySpecies = $existing === null || $existing['key_species'] === null
                     ? null
-                    : (bool) $existing['notable'];
-                $decisionDate = $notable === null
+                    : (bool) $existing['key_species'];
+                $decisionDate = $keySpecies === null
                     ? null
-                    : ($existingNotable === $notable
-                        ? ($existing['notable_decision_date'] ?? null)
+                    : ($existingKeySpecies === $keySpecies
+                        ? ($existing['key_species_decision_date'] ?? null)
                         : date('Y-m-d'));
 
                 if ($existing !== null) {
                     $db->table('taxon_stats')
                         ->where('id', (int) $existing['id'])
                         ->update([
-                            'notable' => $notable === null ? null : (int) $notable,
-                            'notable_comment' => $comment,
-                            'notable_decision_date' => $decisionDate,
+                            'key_species' => $keySpecies === null ? null : (int) $keySpecies,
+                            'key_species_comment' => $comment,
+                            'key_species_decision_date' => $decisionDate,
                         ]);
-                } elseif ($notable !== null) {
-                    $this->insertDecisionRow($db, $taxonId, $regionId, $notable, $comment, $decisionDate);
+                } elseif ($keySpecies !== null) {
+                    $this->insertDecisionRow($db, $taxonId, $regionId, $keySpecies, $comment, $decisionDate);
                 }
             }
 
@@ -149,7 +149,7 @@ class TaxonNotableService
      * @param BaseConnection $db Database connection.
      * @param int $taxonId Taxon identifier.
      * @param int|null $regionId Geographic region identifier, or null for global.
-     * @param bool $notable Key-species decision.
+     * @param bool $keySpecies Key-species decision.
      * @param string|null $comment Current decision rationale.
      * @param string|null $decisionDate Date of the current decision.
      * @return void
@@ -158,7 +158,7 @@ class TaxonNotableService
         BaseConnection $db,
         int $taxonId,
         ?int $regionId,
-        bool $notable,
+        bool $keySpecies,
         ?string $comment,
         ?string $decisionDate,
     ): void {
@@ -178,9 +178,9 @@ class TaxonNotableService
             'last_verified_record_date' => null,
             'first_verified_recorder' => '',
             'last_verified_recorder' => '',
-            'notable' => (int) $notable,
-            'notable_comment' => $comment,
-            'notable_decision_date' => $decisionDate,
+            'key_species' => (int) $keySpecies,
+            'key_species_comment' => $comment,
+            'key_species_decision_date' => $decisionDate,
         ]);
     }
 

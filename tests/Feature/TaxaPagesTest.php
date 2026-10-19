@@ -169,11 +169,11 @@ final class TaxaPagesTest extends CIUnitTestCase
         $details->assertSee('Key species test region');
 
         $result = $this->post('taxa/1', [
-            'notable' => [
+            'key_species' => [
                 'global' => '1',
                 (string) $regionId => '0',
             ],
-            'notable_comment' => [
+            'key_species_comment' => [
                 'global' => 'Important across all regions',
                 (string) $regionId => 'Regional decision',
             ],
@@ -194,12 +194,12 @@ final class TaxaPagesTest extends CIUnitTestCase
             ->get()
             ->getRowArray();
 
-        $this->assertSame(1, (int) $global['notable']);
-        $this->assertSame('Important across all regions', $global['notable_comment']);
-        $this->assertSame(date('Y-m-d'), $global['notable_decision_date']);
-        $this->assertSame(0, (int) $regional['notable']);
-        $this->assertSame('Regional decision', $regional['notable_comment']);
-        $this->assertSame(date('Y-m-d'), $regional['notable_decision_date']);
+        $this->assertSame(1, (int) $global['key_species']);
+        $this->assertSame('Important across all regions', $global['key_species_comment']);
+        $this->assertSame(date('Y-m-d'), $global['key_species_decision_date']);
+        $this->assertSame(0, (int) $regional['key_species']);
+        $this->assertSame('Regional decision', $regional['key_species_comment']);
+        $this->assertSame(date('Y-m-d'), $regional['key_species_decision_date']);
         $this->assertSame(0, (int) $global['occurrences_count']);
         $this->assertSame(0, (int) $regional['occurrences_count']);
     }
@@ -211,19 +211,19 @@ final class TaxaPagesTest extends CIUnitTestCase
     {
         $this->authenticateAs('taxa-manager-key-species-date@example.com', 'manager');
         $this->post('taxa/1', [
-            'notable' => ['global' => '1'],
-            'notable_comment' => ['global' => 'Initial rationale'],
+            'key_species' => ['global' => '1'],
+            'key_species_comment' => ['global' => 'Initial rationale'],
         ])->assertStatus(302);
 
         $db = db_connect();
         $db->table('taxon_stats')
             ->where('taxon_id', 1)
             ->where('geographic_region_id', null)
-            ->update(['notable_decision_date' => '2000-01-01']);
+            ->update(['key_species_decision_date' => '2000-01-01']);
 
         $this->post('taxa/1', [
-            'notable' => ['global' => '1'],
-            'notable_comment' => ['global' => 'Updated rationale'],
+            'key_species' => ['global' => '1'],
+            'key_species_comment' => ['global' => 'Updated rationale'],
         ])->assertStatus(302);
 
         $row = $db->table('taxon_stats')
@@ -231,12 +231,12 @@ final class TaxaPagesTest extends CIUnitTestCase
             ->where('geographic_region_id', null)
             ->get()
             ->getRowArray();
-        $this->assertSame('Updated rationale', $row['notable_comment']);
-        $this->assertSame('2000-01-01', $row['notable_decision_date']);
+        $this->assertSame('Updated rationale', $row['key_species_comment']);
+        $this->assertSame('2000-01-01', $row['key_species_decision_date']);
 
         $this->post('taxa/1', [
-            'notable' => ['global' => '0'],
-            'notable_comment' => ['global' => 'Changed to not key'],
+            'key_species' => ['global' => '0'],
+            'key_species_comment' => ['global' => 'Changed to not key'],
         ])->assertStatus(302);
 
         $row = $db->table('taxon_stats')
@@ -244,13 +244,13 @@ final class TaxaPagesTest extends CIUnitTestCase
             ->where('geographic_region_id', null)
             ->get()
             ->getRowArray();
-        $this->assertSame(0, (int) $row['notable']);
-        $this->assertSame('Changed to not key', $row['notable_comment']);
-        $this->assertSame(date('Y-m-d'), $row['notable_decision_date']);
+        $this->assertSame(0, (int) $row['key_species']);
+        $this->assertSame('Changed to not key', $row['key_species_comment']);
+        $this->assertSame(date('Y-m-d'), $row['key_species_decision_date']);
 
         $this->post('taxa/1', [
-            'notable' => ['global' => ''],
-            'notable_comment' => ['global' => 'This must be cleared'],
+            'key_species' => ['global' => ''],
+            'key_species_comment' => ['global' => 'This must be cleared'],
         ])->assertStatus(302);
 
         $row = $db->table('taxon_stats')
@@ -258,9 +258,9 @@ final class TaxaPagesTest extends CIUnitTestCase
             ->where('geographic_region_id', null)
             ->get()
             ->getRowArray();
-        $this->assertNull($row['notable']);
-        $this->assertNull($row['notable_comment']);
-        $this->assertNull($row['notable_decision_date']);
+        $this->assertNull($row['key_species']);
+        $this->assertNull($row['key_species_comment']);
+        $this->assertNull($row['key_species_decision_date']);
     }
 
     /**
@@ -271,13 +271,13 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->authenticateAs('taxa-manager-key-species-invalid@example.com', 'manager');
 
         $result = $this->post('taxa/1', [
-            'notable' => ['999999' => '1'],
-            'notable_comment' => ['999999' => 'Invalid scope'],
+            'key_species' => ['999999' => '1'],
+            'key_species_comment' => ['999999' => 'Invalid scope'],
         ]);
 
         $result->assertStatus(302);
         $this->assertSame(0, db_connect()->table('taxon_stats')->countAllResults());
-        $this->assertStringContainsString('invalid key-species scope', session('errors')['notable']);
+        $this->assertStringContainsString('invalid key-species scope', session('errors')['key_species']);
     }
 
     /**
@@ -288,8 +288,8 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->authenticateAs('taxa-standard-key-species@example.com', 'user');
 
         $this->post('taxa/1', [
-            'notable' => ['global' => '1'],
-            'notable_comment' => ['global' => 'Should not save'],
+            'key_species' => ['global' => '1'],
+            'key_species_comment' => ['global' => 'Should not save'],
         ])->assertStatus(302);
 
         $this->assertSame(0, db_connect()->table('taxon_stats')->countAllResults());

@@ -190,11 +190,11 @@ class TaxonStatsService
         $db->transException(true)->transBegin();
         try {
             $existingRows = $db->table('taxon_stats')
-                ->select('uuid, taxon_id, geographic_region_id, notable, notable_comment, notable_decision_date')
+                ->select('uuid, taxon_id, geographic_region_id, key_species, key_species_comment, key_species_decision_date')
                 ->groupStart()
-                ->where('notable IS NOT NULL', null, false)
-                ->orWhere('notable_comment IS NOT NULL', null, false)
-                ->orWhere('notable_decision_date IS NOT NULL', null, false)
+                ->where('key_species IS NOT NULL', null, false)
+                ->orWhere('key_species_comment IS NOT NULL', null, false)
+                ->orWhere('key_species_decision_date IS NOT NULL', null, false)
                 ->groupEnd()
                 ->get()
                 ->getResultArray();
@@ -221,9 +221,9 @@ class TaxonStatsService
                     'last_verified_record_date' => null,
                     'first_verified_recorder' => '',
                     'last_verified_recorder' => '',
-                    'notable' => $row['notable'],
-                    'notable_comment' => $row['notable_comment'],
-                    'notable_decision_date' => $row['notable_decision_date'],
+                    'key_species' => $row['key_species'],
+                    'key_species_comment' => $row['key_species_comment'],
+                    'key_species_decision_date' => $row['key_species_decision_date'],
                 ]);
             }
 
@@ -355,10 +355,10 @@ class TaxonStatsService
         $db->transException(true)->transBegin();
         try {
             $existingRows = $builder
-                ->select('taxon_id, geographic_region_id, notable, notable_comment, notable_decision_date')
+                ->select('taxon_id, geographic_region_id, key_species, key_species_comment, key_species_decision_date')
                 ->get()
                 ->getResultArray();
-            $rows = $this->mergeNotableFields($rows, $existingRows);
+            $rows = $this->mergeKeySpeciesFields($rows, $existingRows);
 
             $deleteBuilder = $db->table('taxon_stats')
                 ->where('taxon_id', (int) $scope['taxon_id']);
@@ -400,11 +400,11 @@ class TaxonStatsService
         $db->transException(true)->transBegin();
         try {
             $existingRows = $db->table('taxon_stats')
-                ->select('taxon_id, geographic_region_id, notable, notable_comment, notable_decision_date')
+                ->select('taxon_id, geographic_region_id, key_species, key_species_comment, key_species_decision_date')
                 ->whereIn('taxon_id', $taxonIds)
                 ->get()
                 ->getResultArray();
-            $rows = $this->mergeNotableFields($rows, $existingRows);
+            $rows = $this->mergeKeySpeciesFields($rows, $existingRows);
             $db->table('taxon_stats')->whereIn('taxon_id', $taxonIds)->delete();
 
             if ($rows !== []) {
@@ -427,7 +427,7 @@ class TaxonStatsService
      * @param array<int, array<string, mixed>> $existingRows Previous rows with curated fields.
      * @return array<int, array<string, mixed>> Rows ready for replacement.
      */
-    private function mergeNotableFields(array $rows, array $existingRows): array
+    private function mergeKeySpeciesFields(array $rows, array $existingRows): array
     {
         $existingByScope = [];
         foreach ($existingRows as $existingRow) {
@@ -446,9 +446,9 @@ class TaxonStatsService
             );
             $computedScopes[$key] = true;
             $existingRow = $existingByScope[$key] ?? [];
-            $row['notable'] = $existingRow['notable'] ?? null;
-            $row['notable_comment'] = $existingRow['notable_comment'] ?? null;
-            $row['notable_decision_date'] = $existingRow['notable_decision_date'] ?? null;
+            $row['key_species'] = $existingRow['key_species'] ?? null;
+            $row['key_species_comment'] = $existingRow['key_species_comment'] ?? null;
+            $row['key_species_decision_date'] = $existingRow['key_species_decision_date'] ?? null;
         }
         unset($row);
 
@@ -456,9 +456,9 @@ class TaxonStatsService
             if (isset($computedScopes[$key])) {
                 continue;
             }
-            if ($existingRow['notable'] === null
-                && $existingRow['notable_comment'] === null
-                && $existingRow['notable_decision_date'] === null) {
+            if ($existingRow['key_species'] === null
+                && $existingRow['key_species_comment'] === null
+                && $existingRow['key_species_decision_date'] === null) {
                 continue;
             }
 
@@ -479,9 +479,9 @@ class TaxonStatsService
                 'last_verified_record_date' => null,
                 'first_verified_recorder' => '',
                 'last_verified_recorder' => '',
-                'notable' => $existingRow['notable'],
-                'notable_comment' => $existingRow['notable_comment'],
-                'notable_decision_date' => $existingRow['notable_decision_date'],
+                'key_species' => $existingRow['key_species'],
+                'key_species_comment' => $existingRow['key_species_comment'],
+                'key_species_decision_date' => $existingRow['key_species_decision_date'],
             ];
         }
 
@@ -1313,9 +1313,9 @@ class TaxonStatsService
                 'last_verified_record_date' => $row['last_verified_record_date'] ?? null,
                 'first_verified_recorder' => substr((string) ($row['first_verified_recorder'] ?? ''), 0, 255),
                 'last_verified_recorder' => substr((string) ($row['last_verified_recorder'] ?? ''), 0, 255),
-                'notable' => $row['notable'] ?? null,
-                'notable_comment' => $row['notable_comment'] ?? null,
-                'notable_decision_date' => $row['notable_decision_date'] ?? null,
+                'key_species' => $row['key_species'] ?? null,
+                'key_species_comment' => $row['key_species_comment'] ?? null,
+                'key_species_decision_date' => $row['key_species_decision_date'] ?? null,
             ];
         }
 

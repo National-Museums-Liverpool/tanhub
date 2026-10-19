@@ -202,32 +202,32 @@ Occurrence data stored in the system, imported from a source such as iRecord or 
 reference to the original record is held in the unique_key field, constructed from the data_source
 abbreviation, then a colon, then the unique ID of the record as loaded from the remote system.
 
-| Column                             | Type          | Null | Key | Default           | Description                                                                                            |
-| ---------------------------------- | ------------- | ---- | --- | ----------------- | ------------------------------------------------------------------------------------------------------ |
-| id                                 | BIGINT        | NO   | PK  | AUTO_INCREMENT    | Primary key                                                                                            |
-| unique_key                         | VARCHAR(100)  | NO   | UQ  |                   | Unique key for the API                                                                                 |
-| taxon_id                           | BIGINT        | NO   | FK  |                   | ID of the exact taxon this is a record of                                                              |
-| <rank>_id                          | BIGINT        | YES  | FK  |                   | Dynamic taxon-rank FK (for each configured rank), references `taxa.id` and points to a reporting taxon |
-| taxon_name_id                      | BIGINT        | NO   | FK  |                   | ID of the name given for this occurrence which may be accepted, synonym or vernacular                  |
-| from_date                          | DATE          | YES  |     |                   | Start of the date range that covers the record                                                         |
-| to_date                            | DATE          | YES  |     |                   | End of the date range that covers the record                                                           |
-| grid_ref                           | VARCHAR(20)   | NO   |     |                   | OSGB grid reference                                                                                    |
-| grid_ref_2km                       | CHAR(5)       | YES  |     |                   | 2km (DINTY) grid ref that best fits the record, null for less precise records                          |
-| locality                           | VARCHAR(255)  | YES  |     |                   | Site name associated with the record                                                                   |
-| recorded_by                        | VARCHAR(255)  | NO   |     |                   | Name of the person or agent that recorded the occurrence                                               |
-| identified_by                      | VARCHAR(255)  | YES  |     |                   | Name of person or agent that made the identification                                                   |
-| identification_verification_status | VARCHAR(2)    | NO   |     |                   | Verification status code, compatible with iRecord codes                                                |
-| sex                                | VARCHAR(20)   | YES  |     |                   | Sex of the organism if known                                                                           |
-| life_stage                         | VARCHAR(20)   | YES  |     |                   | Life stage of the organism if known                                                                    |
-| organism_quantity                  | VARCHAR(20)   | YES  |     |                   | A number or enumeration value for the quantity of organisms                                            |
-| data_source_id                     | BIGINT        | NO   | FK  |                   | ID of the source of the data (iRecord, NBN Atlas etc)                                                  |
-| latitude                           | DECIMAL(10,7) | YES  |     |                   | Latitude of the occurrence, when supplied                                                              |
-| longitude                          | DECIMAL(10,7) | YES  |     |                   | Longitude of the occurrence, when supplied                                                             |
-| blocked                            | TINYINT(1)    | NO   |     |                   | 1 = occurrence is blocked from reports, 0 otherwise                                                    |
-| blocked_reason                     | TEXT          | YES  |     |                   | Reason given for blocking the record                                                                   |
-| created_at                         | DATETIME      | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                                          |
-| updated_at                         | DATETIME      | YES  |     |                   | Update date                                                                                            |
-| deleted_at                         | DATETIME      | YES  |     |                   | Deletion date                                                                                          |
+| Column                             | Type          | Null | Key | Default           | Description                                                                                                                         |
+| ---------------------------------- | ------------- | ---- | --- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| id                                 | BIGINT        | NO   | PK  | AUTO_INCREMENT    | Primary key                                                                                                                         |
+| unique_key                         | VARCHAR(100)  | NO   | UQ  |                   | Unique key for the API                                                                                                              |
+| taxon_id                           | BIGINT        | NO   | FK  |                   | ID of the exact taxon this is a record of                                                                                           |
+| <rank>_id                          | BIGINT        | YES  | FK  |                   | Dynamic taxon-rank FK (for each configured rank), references `taxa.id` and points to a reporting taxon                              |
+| taxon_name_id                      | BIGINT        | NO   | FK  |                   | ID of the name given for this occurrence which may be accepted, synonym or vernacular                                               |
+| from_date                          | DATE          | YES  |     |                   | Start of the date range that covers the record                                                                                      |
+| to_date                            | DATE          | YES  |     |                   | End of the date range that covers the record                                                                                        |
+| grid_ref                           | VARCHAR(20)   | NO   |     |                   | OSGB grid reference                                                                                                                 |
+| grid_ref_2km                       | CHAR(5)       | YES  |     |                   | 2km (DINTY) grid ref that best fits the record, null for less precise records                                                       |
+| locality                           | VARCHAR(255)  | YES  |     |                   | Site name associated with the record                                                                                                |
+| recorded_by                        | VARCHAR(255)  | NO   |     |                   | Name of the person or agent that recorded the occurrence                                                                            |
+| identified_by                      | VARCHAR(255)  | YES  |     |                   | Name of person or agent that made the identification                                                                                |
+| identification_verification_status | VARCHAR(2)    | NO   |     |                   | Verification status code, compatible with iRecord codes (V=Verified, C=Data entry complete pending verification, plus Un = unknown) |
+| sex                                | VARCHAR(20)   | YES  |     |                   | Sex of the organism if known                                                                                                        |
+| life_stage                         | VARCHAR(20)   | YES  |     |                   | Life stage of the organism if known                                                                                                 |
+| organism_quantity                  | VARCHAR(20)   | YES  |     |                   | A number or enumeration value for the quantity of organisms                                                                         |
+| data_source_id                     | BIGINT        | NO   | FK  |                   | ID of the source of the data (iRecord, NBN Atlas etc)                                                                               |
+| latitude                           | DECIMAL(10,7) | YES  |     |                   | Latitude of the occurrence, when supplied                                                                                           |
+| longitude                          | DECIMAL(10,7) | YES  |     |                   | Longitude of the occurrence, when supplied                                                                                          |
+| blocked                            | TINYINT(1)    | NO   |     |                   | 1 = occurrence is blocked from reports, 0 otherwise                                                                                 |
+| blocked_reason                     | TEXT          | YES  |     |                   | Reason given for blocking the record                                                                                                |
+| created_at                         | DATETIME      | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                                                                       |
+| updated_at                         | DATETIME      | YES  |     |                   | Update date                                                                                                                         |
+| deleted_at                         | DATETIME      | YES  |     |                   | Deletion date                                                                                                                       |
 
 ### recording_schemes
 
@@ -518,29 +518,29 @@ A table with statistics for each taxon, both in the context of a region and acro
 Contains a row per taxon for the full dataset, plus a row per taxon per region, so it is easy to
 access stats across the dataset or region filtered.
 
-| Column                     | Type         | Null | Key     | Default        | Description                                                                            |
-| -------------------------- | ------------ | ---- | ------- | -------------- | -------------------------------------------------------------------------------------- |
-| id                         | BIGINT       | NO   | PK      | AUTO_INCREMENT | Primary key                                                                            |
-| uuid                       | CHAR(36)     | NO   | UQ      |                | Unique key for the API                                                                 |
-| taxon_id                   | BIGINT       | NO   | FK, UQ* |                | Foreign key to the taxon                                                               |
-| geographic_region_id       | BIGINT       | YES  | FK, UQ* |                | Region, or null if applies to all regions                                              |
-| occurrences_count          | INT          | NO   |         |                | Number of occurrences for the taxon and region scope                                   |
-| grid_square_count          | INT          | NO   |         |                | Number of grid squares for the taxon and region scope                                  |
-| mean_squares_per_year     | DECIMAL(16,4) | NO  |         | 0              | Mean yearly grid-square count within the configured completed-year window              |
-| mean_occurrences_per_year | DECIMAL(16,4) | NO  |         | 0              | Mean yearly occurrence count within the configured completed-year window               |
-| frequency_trend            | INT          | YES  |         | NULL           | Relative frequency trend from 0 (most declining) to 100 (most increasing)              |
-| frequency_trend_state      | VARCHAR(32)  | YES  |         | NULL           | Trend classification: increasing, decreasing, stable, insufficient_data, or unclear    |
-| notable                    | BOOLEAN      | YES  |         | NULL           | Curated key-species decision for this scope: true, false, or not set                    |
-| notable_comment            | TEXT         | YES  |         | NULL           | Current rationale for the key-species decision; cleared when the decision is not set    |
-| notable_decision_date      | DATE         | YES  |         | NULL           | Date the current true/false decision was made; updated when the decision changes       |
-| first_record_date          | DATE         | YES  |         | NULL           | Date of the first record, or null when all records are undated                          |
-| last_record_date           | DATE         | YES  |         | NULL           | Date of the last record, or null when all records are undated                           |
-| first_recorder             | VARCHAR(255) | NO   |         |                | Recorder name of the first record of this taxon (in the region or across all)          |
-| last_recorder              | VARCHAR(255) | NO   |         |                | Recorder name of the last record of this taxon (in the region or across all)           |
-| first_verified_record_date | DATE         | YES  |         | NULL           | Date of the first verified record, or null when no verified record has a date          |
-| last_verified_record_date  | DATE         | YES  |         | NULL           | Date of the last verified record, or null when no verified record has a date           |
-| first_verified_recorder    | VARCHAR(255) | NO   |         |                | Recorder name of the first verified record of this taxon (in the region or across all) |
-| last_verified_recorder     | VARCHAR(255) | NO   |         |                | Recorder name of the last verified record of this taxon (in the region or across all)  |
+| Column                     | Type          | Null | Key     | Default        | Description                                                                            |
+| -------------------------- | ------------- | ---- | ------- | -------------- | -------------------------------------------------------------------------------------- |
+| id                         | BIGINT        | NO   | PK      | AUTO_INCREMENT | Primary key                                                                            |
+| uuid                       | CHAR(36)      | NO   | UQ      |                | Unique key for the API                                                                 |
+| taxon_id                   | BIGINT        | NO   | FK, UQ* |                | Foreign key to the taxon                                                               |
+| geographic_region_id       | BIGINT        | YES  | FK, UQ* |                | Region, or null if applies to all regions                                              |
+| occurrences_count          | INT           | NO   |         |                | Number of occurrences for the taxon and region scope                                   |
+| grid_square_count          | INT           | NO   |         |                | Number of grid squares for the taxon and region scope                                  |
+| mean_squares_per_year      | DECIMAL(16,4) | NO   |         | 0              | Mean yearly grid-square count within the configured completed-year window              |
+| mean_occurrences_per_year  | DECIMAL(16,4) | NO   |         | 0              | Mean yearly occurrence count within the configured completed-year window               |
+| frequency_trend            | INT           | YES  |         | NULL           | Relative frequency trend from 0 (most declining) to 100 (most increasing)              |
+| frequency_trend_state      | VARCHAR(32)   | YES  |         | NULL           | Trend classification: increasing, decreasing, stable, insufficient_data, or unclear    |
+| key_species                | BOOLEAN       | YES  |         | NULL           | Curated key-species decision for this scope: true, false, or not set                   |
+| key_species_comment        | TEXT          | YES  |         | NULL           | Current rationale for the key-species decision; cleared when the decision is not set   |
+| key_species_decision_date  | DATE          | YES  |         | NULL           | Date the current true/false decision was made; updated when the decision changes       |
+| first_record_date          | DATE          | YES  |         | NULL           | Date of the first record, or null when all records are undated                         |
+| last_record_date           | DATE          | YES  |         | NULL           | Date of the last record, or null when all records are undated                          |
+| first_recorder             | VARCHAR(255)  | NO   |         |                | Recorder name of the first record of this taxon (in the region or across all)          |
+| last_recorder              | VARCHAR(255)  | NO   |         |                | Recorder name of the last record of this taxon (in the region or across all)           |
+| first_verified_record_date | DATE          | YES  |         | NULL           | Date of the first verified record, or null when no verified record has a date          |
+| last_verified_record_date  | DATE          | YES  |         | NULL           | Date of the last verified record, or null when no verified record has a date           |
+| first_verified_recorder    | VARCHAR(255)  | NO   |         |                | Recorder name of the first verified record of this taxon (in the region or across all) |
+| last_verified_recorder     | VARCHAR(255)  | NO   |         |                | Recorder name of the last verified record of this taxon (in the region or across all)  |
 
 Key-species decisions are manually maintained alongside derived statistics. Global decisions use
 the row whose `geographic_region_id` is null; regional decisions use that region's row. When a

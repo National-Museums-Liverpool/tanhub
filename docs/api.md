@@ -1277,7 +1277,7 @@ Examples:
 	- `uuid`, `taxon_identifier`, `higher_geography_identifier`,
 	  `occurrences_count`, `grid_square_count`, `mean_squares_per_year`,
 	  `mean_occurrences_per_year`, `frequency_trend`, `frequency_trend_state`,
-	  `notable`, `notable_comment`, `notable_decision_date`,
+	  `key_species`, `key_species_comment`, `key_species_decision_date`,
 	  `first_record_date`,
 	  `last_record_date`,
 		`first_recorder`, `last_recorder`, `first_verified_record_date`, `last_verified_record_date`,
@@ -1287,17 +1287,17 @@ Examples:
 in the configured `taxon_year_stats` history window. Years without a row count as zero, and the
 current year is excluded because its data is incomplete.
 
-`notable` is nullable: `true` means key species, `false` means not key species, and `null` means
-no decision is set. `notable_comment` and `notable_decision_date` are also nullable. The date and
-comment describe the current decision; changing the decision updates the date, while **Not set**
-clears both fields.
+`key_species` is nullable: `true` means key species, `false` means not key species, and `null`
+means no decision is set. `key_species_comment` and `key_species_decision_date` are also nullable.
+The date and comment describe the current decision; changing the decision updates the date, while
+**Not set** clears both fields.
 
 - Filterable fields:
 	- all exposed taxon-stats fields above
 	- `taxon_rank` (for example, `taxon_rank=species`); filter by rank when reviewing trends,
 	  rather than comparing scores across different taxonomic levels
 	- rows for blocked taxa are always excluded
-	- `notable` accepts `1` or `0`; use `higher_geography_identifier[eq]=null` to select the
+	- `key_species` accepts `1` or `0`; use `higher_geography_identifier[eq]=null` to select the
 	  global row rather than a region. Rows for deleted regions are excluded, so this null filter
 	  selects only global rows.
 - Include:
@@ -1342,7 +1342,7 @@ clears both fields.
 
 Examples:
 
-- Request: `/api/v1/taxon-stats?notable[eq]=1&higher_geography_identifier[eq]=13&include=taxon`
+- Request: `/api/v1/taxon-stats?key_species[eq]=1&higher_geography_identifier[eq]=13&include=taxon`
   Returns taxa marked as key species for the region with higher-geography identifier `13`.
   The global decision is independent; filter `higher_geography_identifier[eq]=null` to request
   global key species instead.

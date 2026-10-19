@@ -13,6 +13,11 @@ use RuntimeException;
  */
 final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
 {
+    /**
+     * Verify missing endpoint configuration is rejected.
+     *
+     * @return void
+     */
     public function testFetchPageThrowsWhenEndpointMissing(): void
     {
         $adapter = new NbnAtlasOccurrencesAdapter(
@@ -27,6 +32,11 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         $adapter->fetchPage(null, 10);
     }
 
+    /**
+     * Verify records and pagination checkpoints are normalized.
+     *
+     * @return void
+     */
     public function testFetchPageNormalizesRecordsAndCheckpoint(): void
     {
         $response = $this->createMock(ResponseInterface::class);
@@ -291,6 +301,11 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         ];
     }
 
+    /**
+     * Verify HTTP errors are reported to the caller.
+     *
+     * @return void
+     */
     public function testFetchPageThrowsForHttpErrors(): void
     {
         $response = $this->createMock(ResponseInterface::class);
@@ -311,6 +326,11 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         $adapter->fetchPage(null, 50);
     }
 
+    /**
+     * Verify malformed JSON responses are rejected.
+     *
+     * @return void
+     */
     public function testFetchPageThrowsForInvalidJson(): void
     {
         $response = $this->createMock(ResponseInterface::class);
@@ -332,6 +352,11 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         $adapter->fetchPage(null, 50);
     }
 
+    /**
+     * Verify alternate payload record keys are supported.
+     *
+     * @return void
+     */
     public function testFetchPageSupportsAlternatePayloadRecordsKey(): void
     {
         $response = $this->createMock(ResponseInterface::class);
@@ -372,6 +397,11 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         $this->assertSame('1', $page->nextCheckpoint);
     }
 
+    /**
+     * Verify legacy offset checkpoints transition to occurrence cursors.
+     *
+     * @return void
+     */
     public function testFetchPageUsesOccurrenceIdCursorAfterLegacyOffsetWindow(): void
     {
         $response = $this->createMock(ResponseInterface::class);
@@ -406,6 +436,11 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         $this->assertSame('occurrenceID:5000', $page->nextCheckpoint);
     }
 
+    /**
+     * Verify occurrence cursor filters are exclusive.
+     *
+     * @return void
+     */
     public function testFetchPageAddsExclusiveOccurrenceIdCursorFilter(): void
     {
         $response = $this->createMock(ResponseInterface::class);
@@ -442,6 +477,11 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         $this->assertTrue($page->hasMore);
     }
 
+    /**
+     * Verify whitespace in occurrence cursor filters is preserved safely.
+     *
+     * @return void
+     */
     public function testFetchPageEscapesWhitespaceInOccurrenceIdCursorFilter(): void
     {
         $response = $this->createMock(ResponseInterface::class);
@@ -476,6 +516,11 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
         $this->assertTrue($page->hasMore);
     }
 
+    /**
+     * Verify a single configured raw filter clause is supported.
+     *
+     * @return void
+     */
     public function testFetchPageSupportsSingleRawConfiguredFilterClause(): void
     {
         $response = $this->createMock(ResponseInterface::class);

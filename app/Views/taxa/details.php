@@ -115,28 +115,28 @@
                         <div class="col-12">
                             <h2 class="h5 mb-1">Key species by scope</h2>
                             <p class="form-text mb-2">Set a separate decision for each active region or for the global scope.</p>
-                            <?php if (isset($errors['notable'])): ?>
-                                <div class="alert alert-danger" role="alert"><?= esc($errors['notable']) ?></div>
+                            <?php if (isset($errors['key_species'])): ?>
+                                <div class="alert alert-danger" role="alert"><?= esc($errors['key_species']) ?></div>
                             <?php endif; ?>
                             <?php
-                            $notableRows = [[
+                            $keySpeciesRows = [[
                                 'key' => 'global',
                                 'label' => 'Global',
                             ]];
-                            foreach ($page['notableRegions'] as $region) {
-                                $notableRows[] = [
+                            foreach ($page['keySpeciesRegions'] as $region) {
+                                $keySpeciesRows[] = [
                                     'key' => (string) $region['id'],
                                     'label' => (string) $region['higher_geography']
                                         . ' (' . (string) $region['higher_geography_identifier'] . ')',
                                 ];
                             }
-                            $oldNotable = old('notable', []);
-                            $oldNotableComments = old('notable_comment', []);
-                            if (! is_array($oldNotable)) {
-                                $oldNotable = [];
+                            $oldKeySpecies = old('key_species', []);
+                            $oldKeySpeciesComments = old('key_species_comment', []);
+                            if (! is_array($oldKeySpecies)) {
+                                $oldKeySpecies = [];
                             }
-                            if (! is_array($oldNotableComments)) {
-                                $oldNotableComments = [];
+                            if (! is_array($oldKeySpeciesComments)) {
+                                $oldKeySpeciesComments = [];
                             }
                             ?>
                             <div class="table-responsive">
@@ -149,25 +149,25 @@
                                     </tr>
                                     </thead>
                                     <tbody>
-                                    <?php foreach ($notableRows as $notableRow): ?>
+                                    <?php foreach ($keySpeciesRows as $keySpeciesRow): ?>
                                         <?php
-                                        $scopeKey = $notableRow['key'];
-                                        $savedDecision = $page['notableByScope'][$scopeKey]['notable'] ?? null;
-                                        $decisionValue = array_key_exists($scopeKey, $oldNotable)
-                                            ? (string) $oldNotable[$scopeKey]
+                                        $scopeKey = $keySpeciesRow['key'];
+                                        $savedDecision = $page['keySpeciesByScope'][$scopeKey]['key_species'] ?? null;
+                                        $decisionValue = array_key_exists($scopeKey, $oldKeySpecies)
+                                            ? (string) $oldKeySpecies[$scopeKey]
                                             : ($savedDecision === null ? '' : ((bool) $savedDecision ? '1' : '0'));
-                                        $savedComment = $page['notableByScope'][$scopeKey]['notable_comment'] ?? '';
-                                        $commentValue = array_key_exists($scopeKey, $oldNotableComments)
-                                            ? (string) $oldNotableComments[$scopeKey]
+                                        $savedComment = $page['keySpeciesByScope'][$scopeKey]['key_species_comment'] ?? '';
+                                        $commentValue = array_key_exists($scopeKey, $oldKeySpeciesComments)
+                                            ? (string) $oldKeySpeciesComments[$scopeKey]
                                             : (string) $savedComment;
-                                        $decisionDate = $page['notableByScope'][$scopeKey]['notable_decision_date'] ?? null;
-                                        $controlId = 'notable_' . str_replace('-', '_', $scopeKey);
+                                        $decisionDate = $page['keySpeciesByScope'][$scopeKey]['key_species_decision_date'] ?? null;
+                                        $controlId = 'key_species_' . str_replace('-', '_', $scopeKey);
                                         ?>
                                         <tr>
-                                            <th scope="row"><?= esc($notableRow['label']) ?></th>
+                                            <th scope="row"><?= esc($keySpeciesRow['label']) ?></th>
                                             <td>
-                                                <label class="visually-hidden" for="<?= esc($controlId) ?>"><?= esc($notableRow['label']) ?> decision</label>
-                                                <select class="form-select" id="<?= esc($controlId) ?>" name="notable[<?= esc($scopeKey) ?>]" <?= $page['canEditDetails'] ? '' : 'disabled' ?>>
+                                                <label class="visually-hidden" for="<?= esc($controlId) ?>"><?= esc($keySpeciesRow['label']) ?> decision</label>
+                                                <select class="form-select" id="<?= esc($controlId) ?>" name="key_species[<?= esc($scopeKey) ?>]" <?= $page['canEditDetails'] ? '' : 'disabled' ?>>
                                                     <option value="" <?= $decisionValue === '' ? 'selected' : '' ?>>Not set</option>
                                                     <option value="1" <?= $decisionValue === '1' ? 'selected' : '' ?>>Yes</option>
                                                     <option value="0" <?= $decisionValue === '0' ? 'selected' : '' ?>>No</option>
@@ -177,8 +177,8 @@
                                                 <?php endif; ?>
                                             </td>
                                             <td>
-                                                <label class="visually-hidden" for="<?= esc($controlId) ?>_comment"><?= esc($notableRow['label']) ?> comment</label>
-                                                <textarea class="form-control" id="<?= esc($controlId) ?>_comment" name="notable_comment[<?= esc($scopeKey) ?>]" rows="2" maxlength="65535" <?= $page['canEditDetails'] ? '' : 'disabled' ?>><?= esc($commentValue) ?></textarea>
+                                                <label class="visually-hidden" for="<?= esc($controlId) ?>_comment"><?= esc($keySpeciesRow['label']) ?> comment</label>
+                                                <textarea class="form-control" id="<?= esc($controlId) ?>_comment" name="key_species_comment[<?= esc($scopeKey) ?>]" rows="2" maxlength="65535" <?= $page['canEditDetails'] ? '' : 'disabled' ?>><?= esc($commentValue) ?></textarea>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>

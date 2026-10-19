@@ -5,29 +5,29 @@ namespace App\Database\Migrations;
 use CodeIgniter\Database\Migration;
 
 /**
- * Adds curated key-species decisions to taxon statistics.
+ * Adds curated key-species fields to taxon statistics.
  */
-class AddTaxonNotableFields extends Migration
+class AddTaxonKeySpeciesFields extends Migration
 {
     /**
-     * Add nullable decision, rationale, and decision-date fields.
+     * Add nullable key-species decision, rationale, and decision-date fields.
      *
      * @return void
      */
     public function up(): void
     {
         $this->forge->addColumn('taxon_stats', [
-            'notable' => [
+            'key_species' => [
                 'type'    => 'BOOLEAN',
                 'null'    => true,
                 'default' => null,
             ],
-            'notable_comment' => [
+            'key_species_comment' => [
                 'type'    => 'TEXT',
                 'null'    => true,
                 'default' => null,
             ],
-            'notable_decision_date' => [
+            'key_species_decision_date' => [
                 'type'    => 'DATE',
                 'null'    => true,
                 'default' => null,
@@ -43,9 +43,9 @@ class AddTaxonNotableFields extends Migration
     public function down(): void
     {
         $this->forge->dropColumn('taxon_stats', [
-            'notable',
-            'notable_comment',
-            'notable_decision_date',
+            'key_species',
+            'key_species_comment',
+            'key_species_decision_date',
         ]);
     }
 }

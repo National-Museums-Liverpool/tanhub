@@ -100,8 +100,8 @@ class Taxa extends BaseController
         $referenceLabels = $this->referenceLabels($taxon);
         $hierarchy = $this->hierarchyDetails($taxon);
         $taxonMedia = service('taxonMediaReadService')->getByTaxonId($id);
-        $notableRegions = $this->activeGeographicRegions();
-        $notableByScope = service('taxonNotableService')->getForTaxon($id);
+        $keySpeciesRegions = $this->activeGeographicRegions();
+        $keySpeciesByScope = service('taxonKeySpeciesService')->getForTaxon($id);
         $user = auth()->user();
         $canEditDetails = $user !== null && $user->inGroup('admin', 'manager');
         $canModerate = $user !== null && $user->inGroup('admin');
@@ -113,8 +113,8 @@ class Taxa extends BaseController
             'taxon' => $taxon,
             'taxonNames' => $taxonNames,
             'taxonMedia' => $taxonMedia,
-            'notableRegions' => $notableRegions,
-            'notableByScope' => $notableByScope,
+            'keySpeciesRegions' => $keySpeciesRegions,
+            'keySpeciesByScope' => $keySpeciesByScope,
             'referenceLabels' => $referenceLabels,
             'hierarchy' => $hierarchy,
             'canEditDetails' => $canEditDetails,
@@ -295,14 +295,14 @@ class Taxa extends BaseController
         $postData = $this->request->getPost();
 
         $rules = [];
-        $notableScopes = null;
-        $notableError = null;
+        $keySpeciesScopes = null;
+        $keySpeciesError = null;
 
-        if ($canEditDetails && is_array($postData) && array_key_exists('notable', $postData)) {
+        if ($canEditDetails && is_array($postData) && array_key_exists('key_species', $postData)) {
             try {
-                $notableScopes = $this->parseNotableScopes($postData, $this->activeGeographicRegions());
+                $keySpeciesScopes = $this->parseKeySpeciesScopes($postData, $this->activeGeographicRegions());
             } catch (\InvalidArgumentException $exception) {
-                $notableError = $exception->getMessage();
+                $keySpeciesError = $exception->getMessage();
             }
         }
 
@@ -320,10 +320,10 @@ class Taxa extends BaseController
         }
 
         $valid = $rules === [] || $this->validate($rules);
-        if (! $valid || $notableError !== null) {
+        if (! $valid || $keySpeciesError !== null) {
             $errors = $this->validator?->getErrors() ?? [];
-            if ($notableError !== null) {
-                $errors['notable'] = $notableError;
+            if ($keySpeciesError !== null) {
+                $errors['key_species'] = $keySpeciesError;
             }
 
             return redirect()->back()->withInput()->with('errors', $errors);
@@ -356,9 +356,9 @@ class Taxa extends BaseController
             $updateData['blocked_reason'] = $blocked ? ($blockedReason === '' ? null : $blockedReason) : null;
         }
 
-        if ($notableScopes !== null) {
+        if ($keySpeciesScopes !== null) {
             try {
-                service('taxonNotableService')->saveForTaxon($id, $notableScopes);
+                service('taxonKeySpeciesService')->saveForTaxon($id, $keySpeciesScopes);
             } catch (\RuntimeException $exception) {
                 return redirect()->back()->withInput()->with('error', $exception->getMessage());
             }
@@ -396,14 +396,14 @@ class Taxa extends BaseController
      * @param array<string, mixed> $postData Submitted form data.
      * @param array<int, array{id: int, higher_geography_identifier: string, higher_geography: string}> $regions
      *        Active geographic regions.
-     * @return array<string|int, array{notable: bool|null, comment: string|null}> Normalized scope values.
+     * @return array<string|int, array{key_species: bool|null, comment: string|null}> Normalized scope values.
      * @throws \InvalidArgumentException If a scope or submitted value is invalid.
      */
-    private function parseNotableScopes(array $postData, array $regions): array
+    private function parseKeySpeciesScopes(array $postData, array $regions): array
     {
-        $notable = $postData['notable'] ?? null;
-        $comments = $postData['notable_comment'] ?? [];
-        if (! is_array($notable) || ! is_array($comments)) {
+        $keySpecies = $postData['key_species'] ?? null;
+        $comments = $postData['key_species_comment'] ?? [];
+        if (! is_array($keySpecies) || ! is_array($comments)) {
             throw new \InvalidArgumentException('Enter a valid key-species decision for each scope.');
         }
 
@@ -413,13 +413,13 @@ class Taxa extends BaseController
         }
 
         foreach (array_keys($comments) as $scopeKey) {
-            if (! array_key_exists($scopeKey, $allowedScopes) || ! array_key_exists($scopeKey, $notable)) {
+            if (! array_key_exists($scopeKey, $allowedScopes) || ! array_key_exists($scopeKey, $keySpecies)) {
                 throw new \InvalidArgumentException('A comment was submitted for an invalid key-species scope.');
             }
         }
 
         $scopes = [];
-        foreach ($notable as $scopeKey => $value) {
+        foreach ($keySpecies as $scopeKey => $value) {
             if (! array_key_exists($scopeKey, $allowedScopes)) {
                 throw new \InvalidArgumentException('An invalid key-species scope was submitted.');
             }
@@ -433,8 +433,8 @@ class Taxa extends BaseController
             }
 
             $scopes[$scopeKey] = [
-                'notable' => $value === '' ? null : $value === '1',
-                'comment' => trim($comment) === '' ? null : trim($comment),
+                'key_species' => $value === '' ? null : $value === '1',
+                'key_species_comment' => trim($comment) === '' ? null : trim($comment),
             ];
         }
 

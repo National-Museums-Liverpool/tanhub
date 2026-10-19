@@ -337,7 +337,7 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
 
         $eventDate = $record['eventDate'] ?? $record['event']['eventDate'] ?? $this->eventDateFromParts($record);
         [$fromDate, $toDate] = $this->normalizeEventDate($eventDate);
-        $verificationStatus = $record['identification_verification_status'] ?? $record['identificationVerificationStatus'] ?? null;
+        $verificationStatus = $record['identification_verification_status'] ?? $record['identificationVerificationStatus'] ?? 'Un';
         if ($verificationStatus === 'Ac') {
             $verificationStatus = 'V';
         } elseif ($verificationStatus === 'Un') {

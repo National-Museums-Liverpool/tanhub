@@ -103,9 +103,9 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             last_verified_record_date DATE NULL,
             first_verified_recorder VARCHAR(255) NOT NULL,
             last_verified_recorder VARCHAR(255) NOT NULL,
-            notable BOOLEAN NULL DEFAULT NULL,
-            notable_comment TEXT NULL,
-            notable_decision_date DATE NULL
+            key_species BOOLEAN NULL DEFAULT NULL,
+            key_species_comment TEXT NULL,
+            key_species_decision_date DATE NULL
         )');
 
         $this->db->query('CREATE TABLE ' . $prefix . 'import_offsets (
@@ -401,7 +401,7 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
      *
      * @return void
      */
-    public function testFullRebuildPreservesNotableDecisionsAndScopesWithoutStats(): void
+    public function testFullRebuildPreservesKeySpeciesDecisionsAndScopesWithoutStats(): void
     {
         $this->db->table('occurrences')->insert([
             'id' => 110,
@@ -432,9 +432,9 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
                 'last_recorder' => '',
                 'first_verified_recorder' => '',
                 'last_verified_recorder' => '',
-                'notable' => 1,
-                'notable_comment' => 'Global decision',
-                'notable_decision_date' => '2026-01-02',
+                'key_species' => 1,
+                'key_species_comment' => 'Global decision',
+                'key_species_decision_date' => '2026-01-02',
             ],
             [
                 'uuid' => '00000000-0000-4000-8000-000000000111',
@@ -444,9 +444,9 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
                 'last_recorder' => '',
                 'first_verified_recorder' => '',
                 'last_verified_recorder' => '',
-                'notable' => 0,
-                'notable_comment' => 'Decision without regional records',
-                'notable_decision_date' => '2026-01-03',
+                'key_species' => 0,
+                'key_species_comment' => 'Decision without regional records',
+                'key_species_decision_date' => '2026-01-03',
             ],
         ]);
 
@@ -455,12 +455,12 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $this->assertSame('success', $counts['status']);
         $global = $this->findTaxonStatRow(1, null);
         $region = $this->findTaxonStatRow(1, 22);
-        $this->assertSame(1, (int) $global['notable']);
-        $this->assertSame('Global decision', $global['notable_comment']);
-        $this->assertSame('2026-01-02', $global['notable_decision_date']);
-        $this->assertSame(0, (int) $region['notable']);
-        $this->assertSame('Decision without regional records', $region['notable_comment']);
-        $this->assertSame('2026-01-03', $region['notable_decision_date']);
+        $this->assertSame(1, (int) $global['key_species']);
+        $this->assertSame('Global decision', $global['key_species_comment']);
+        $this->assertSame('2026-01-02', $global['key_species_decision_date']);
+        $this->assertSame(0, (int) $region['key_species']);
+        $this->assertSame('Decision without regional records', $region['key_species_comment']);
+        $this->assertSame('2026-01-03', $region['key_species_decision_date']);
         $this->assertSame(0, (int) $region['occurrences_count']);
     }
 
@@ -481,9 +481,9 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             'last_recorder' => '',
             'first_verified_recorder' => '',
             'last_verified_recorder' => '',
-            'notable' => 1,
-            'notable_comment' => 'Keep after record removal',
-            'notable_decision_date' => '2026-01-04',
+            'key_species' => 1,
+            'key_species_comment' => 'Keep after record removal',
+            'key_species_decision_date' => '2026-01-04',
         ]);
         $this->db->table('import_offsets')->insert([
             'source_key' => 'derived-stats:taxon_stats',
@@ -503,8 +503,8 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
 
         $this->assertSame('success', $counts['status']);
         $row = $this->findTaxonStatRow(1, 22);
-        $this->assertSame(1, (int) $row['notable']);
-        $this->assertSame('Keep after record removal', $row['notable_comment']);
+        $this->assertSame(1, (int) $row['key_species']);
+        $this->assertSame('Keep after record removal', $row['key_species_comment']);
         $this->assertSame(0, (int) $row['occurrences_count']);
     }
 
@@ -545,9 +545,9 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             'last_recorder' => '',
             'first_verified_recorder' => '',
             'last_verified_recorder' => '',
-            'notable' => 1,
-            'notable_comment' => 'Retain through restart',
-            'notable_decision_date' => '2026-01-05',
+            'key_species' => 1,
+            'key_species_comment' => 'Retain through restart',
+            'key_species_decision_date' => '2026-01-05',
         ]);
 
         (new TaxonStatsService())->resetFullRebuild();
@@ -557,9 +557,9 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $this->assertSame('00000000-0000-4000-8000-000000000113', $row['uuid']);
         $this->assertSame(0, (int) $row['occurrences_count']);
         $this->assertSame(0, (int) $row['grid_square_count']);
-        $this->assertSame(1, (int) $row['notable']);
-        $this->assertSame('Retain through restart', $row['notable_comment']);
-        $this->assertSame('2026-01-05', $row['notable_decision_date']);
+        $this->assertSame(1, (int) $row['key_species']);
+        $this->assertSame('Retain through restart', $row['key_species_comment']);
+        $this->assertSame('2026-01-05', $row['key_species_decision_date']);
     }
 
     /**

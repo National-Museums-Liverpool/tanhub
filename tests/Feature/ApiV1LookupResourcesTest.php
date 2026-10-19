@@ -639,9 +639,9 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
     {
         $db = db_connect();
         $db->table('taxon_stats')->where('id', 1)->update([
-            'notable' => 1,
-            'notable_comment' => 'Regional rationale',
-            'notable_decision_date' => '2026-10-15',
+            'key_species' => 1,
+            'key_species_comment' => 'Regional rationale',
+            'key_species_decision_date' => '2026-10-15',
         ]);
         $db->table('taxon_stats')->insert([
             'id' => 3,
@@ -658,52 +658,35 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             'last_verified_record_date' => '2026-10-15',
             'first_verified_recorder' => '',
             'last_verified_recorder' => '',
-            'notable' => 1,
-            'notable_comment' => 'Global rationale',
-            'notable_decision_date' => '2026-10-15',
+            'key_species' => 1,
+            'key_species_comment' => 'Global rationale',
+            'key_species_decision_date' => '2026-10-15',
         ]);
 
         $regionalResult = $this->get(
-            'api/v1/taxon-stats?notable[eq]=1&higher_geography_identifier[eq]=SH',
+            'api/v1/taxon-stats?key_species[eq]=1&higher_geography_identifier[eq]=SH',
         );
         $regionalResult->assertStatus(200);
         $regional = json_decode((string) $regionalResult->response()->getBody(), true);
         $this->assertSame(1, $regional['meta']['count']);
-        $this->assertSame('Regional rationale', $regional['data'][0]['notable_comment']);
-        $this->assertSame('2026-10-15', $regional['data'][0]['notable_decision_date']);
-        $this->assertSame(1, (int) $regional['data'][0]['notable']);
+        $this->assertSame('Regional rationale', $regional['data'][0]['key_species_comment']);
+        $this->assertSame('2026-10-15', $regional['data'][0]['key_species_decision_date']);
+        $this->assertSame(1, (int) $regional['data'][0]['key_species']);
 
         $db->table('geographic_regions')->where('id', 1)->update([
             'deleted_at' => '2026-10-15 00:00:00',
         ]);
-        $db->table('taxon_stats')->insert([
-            'id' => 4,
-            'uuid' => '88888888-8888-4888-8888-888888888888',
-            'taxon_id' => 1,
-            'geographic_region_id' => 1,
-            'occurrences_count' => 0,
-            'grid_square_count' => 0,
-            'first_record_date' => '2026-10-15',
-            'last_record_date' => '2026-10-15',
-            'first_recorder' => '',
-            'last_recorder' => '',
-            'first_verified_record_date' => '2026-10-15',
-            'last_verified_record_date' => '2026-10-15',
-            'first_verified_recorder' => '',
-            'last_verified_recorder' => '',
-            'notable' => 1,
-            'notable_comment' => 'Archived region rationale',
-            'notable_decision_date' => '2026-10-15',
-        ]);
 
         $globalResult = $this->get(
-            'api/v1/taxon-stats?notable[eq]=1&higher_geography_identifier[eq]=null',
+            'api/v1/taxon-stats?key_species[eq]=1&higher_geography_identifier[eq]=null',
         );
         $globalResult->assertStatus(200);
         $global = json_decode((string) $globalResult->response()->getBody(), true);
         $this->assertSame(1, $global['meta']['count']);
         $this->assertNull($global['data'][0]['higher_geography_identifier']);
-        $this->assertSame('Global rationale', $global['data'][0]['notable_comment']);
+        $this->assertSame('Global rationale', $global['data'][0]['key_species_comment']);
+        $this->assertSame('2026-10-15', $global['data'][0]['key_species_decision_date']);
+        $this->assertSame(1, (int) $global['data'][0]['key_species']);
     }
 
     public function testTaxonStatsShowReturnsNotFoundForBlockedTaxonStats(): void
@@ -1491,9 +1474,9 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $taxonStatsColumns = [
             'mean_squares_per_year' => 'DECIMAL(16,4) NOT NULL DEFAULT 0',
             'mean_occurrences_per_year' => 'DECIMAL(16,4) NOT NULL DEFAULT 0',
-            'notable' => 'BOOLEAN NULL DEFAULT NULL',
-            'notable_comment' => 'TEXT NULL DEFAULT NULL',
-            'notable_decision_date' => 'DATE NULL DEFAULT NULL',
+            'key_species' => 'BOOLEAN NULL DEFAULT NULL',
+            'key_species_comment' => 'TEXT NULL DEFAULT NULL',
+            'key_species_decision_date' => 'DATE NULL DEFAULT NULL',
         ];
         $existingTaxonStatsColumns = array_map(
             static fn (object $field): string => (string) $field->name,

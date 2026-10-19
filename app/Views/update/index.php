@@ -26,6 +26,12 @@
                 <?php endif; ?>
                 <?php if ($page['migrationCount'] > 0): ?>
                     <div class="alert alert-info" role="alert"><?= esc($page['migrationCount']) ?> database update<?= $page['migrationCount'] === 1 ? '' : 's' ?> available.</div>
+                    <ul>
+                        <?php foreach ($page['migrations'] as $migration): ?>
+                            <li><?= esc($migration->name) ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+
                 <?php else: ?>
                     <div class="alert alert-success" role="alert">No database updates available.</div>
                 <?php endif; ?>

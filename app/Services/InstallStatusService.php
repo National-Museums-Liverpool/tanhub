@@ -34,16 +34,16 @@ class InstallStatusService
     }
 
     /**
-     * Count migrations that have not yet been applied.
+     * Find migrations that have not yet been applied.
      *
      * Compares every migration file discoverable on the default namespace
      * against the migration history table, removing any migration whose
      * unique object ID already appears in history. What remains is the set
      * of pending (not-yet-run) migrations.
      *
-     * @return int Number of pending migrations.
+     * @return array List of pending migrations.
      */
-    public function getPendingMigrationCount(): int
+    public function getPendingMigrations(): array
     {
         $runner = service('migrations');
         $runner->setNamespace(null);
@@ -54,7 +54,18 @@ class InstallStatusService
             unset($migrations[$runner->getObjectUid($history)]);
         }
 
-        return count($migrations);
+        // Return the list of pending migrations.
+        return $migrations;
+    }
+
+    /**
+     * Return a count of the pending migrations.
+     *
+     * @return int
+     */
+    public function getPendingMigrationCount(): int
+    {
+        return count($this->getPendingMigrations());
     }
 
     /**

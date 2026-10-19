@@ -39,6 +39,7 @@ class Update extends BaseController
             'bodyClass' => 'app-shell auth-shell',
             'navItems' => [],
             'migrationCount' => $installStatus->getPendingMigrationCount(),
+            'migrations' => $installStatus->getPendingMigrations(),
             'showInstallWelcome' => ! $installStatus->isSetupComplete(),
         ]);
     }
@@ -82,6 +83,7 @@ class Update extends BaseController
             'bodyClass' => 'app-shell auth-shell',
             'navItems' => [],
             'migrationCount' => 0,
+            'migrations' => [],
             'showInstallWelcome' => false,
         ]);
     }

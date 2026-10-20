@@ -8,6 +8,7 @@ use App\Services\Import\Adapter\OccurrenceSourceAdapterFactory;
 use CodeIgniter\Test\CIUnitTestCase;
 use Config\Import as ImportConfig;
 use InvalidArgumentException;
+use ReflectionProperty;
 
 /**
  * @internal
@@ -15,13 +16,34 @@ use InvalidArgumentException;
 final class OccurrenceSourceAdapterFactoryTest extends CIUnitTestCase
 {
     /**
+     * Resolve optional NBN names only for the explicitly selected stream.
+     */
+    public function testSelectedNbnGroupResolvesNamesAndField(): void
+    {
+        $config = new ImportConfig();
+        $config->geographicRegions['lrc'] = [
+            'indiciaLocationType' => 'LRC Boundary',
+            'nbnField' => 'cl1012',
+            'locations' => [
+                ['irecordName' => 'RECORD', 'nbnName' => 'RECORD.'],
+                ['irecordName' => 'Merseyside BioBank'],
+            ],
+        ];
+        $adapter = (new OccurrenceSourceAdapterFactory($config))->make('nbn', 'lrc');
+        $resolved = (new ReflectionProperty($adapter, 'config'))->getValue($adapter);
+
+        $this->assertSame('cl1012', $resolved['geographic_region_field']);
+        $this->assertSame(['RECORD.', 'Merseyside BioBank'], $resolved['geographic_regions']);
+    }
+
+    /**
      * Verify NBN source keys are case-insensitive and produce an NBN adapter.
      */
     public function testMakeCreatesNbnAdapterWithResolvedConfiguration(): void
     {
         $config = new ImportConfig();
         $config->taxonRanks = ['Species'];
-        $config->geographicRegions = ['Cheshire'];
+        $config->geographicRegions['vice-counties']['locations'] = [['irecordName' => 'Cheshire']];
         $config->nbnMinTaxonRankId = 123;
         $config->nbnApiFilterQuery = 'kingdom:Animalia';
 

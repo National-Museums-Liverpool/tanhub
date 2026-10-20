@@ -23,6 +23,8 @@ class GeographicRegionsImportService implements EntityImportServiceInterface
      * cached per-batch to avoid repeated queries). Matching rows are
      * identified solely by `higher_geography_identifier`; matches are
      * updated in place, everything else is inserted.
+     * Conflicting type/name identities for the same source identifier stop
+     * the batch with an error rather than overwrite a different region.
      *
      * @param array<int, array<string, mixed>> $rows   Normalized region rows. Expected
      *                                                  keys: `higher_geography_identifier`,
@@ -72,13 +74,13 @@ class GeographicRegionsImportService implements EntityImportServiceInterface
 
         foreach ($rows as $row) {
             try {
-                $higherGeographyIdentifier = (string) ($row['higher_geography_identifier'] ?? '');
+                $higherGeographyIdentifier = trim((string) ($row['higher_geography_identifier'] ?? ''));
                 $higherGeography = trim((string) ($row['higher_geography'] ?? ''));
                 $locationType = trim((string) ($row['location_type'] ?? ''));
                 $dataSourceAbbr = strtoupper(trim((string) ($row['data_source_abbr'] ?? 'IREC')));
                 $footprintGeometry = $this->nullableString($row['footprint_geometry'] ?? null);
 
-                if ($higherGeographyIdentifier <= 0 || $higherGeography === '' || $locationType === '') {
+                if ($higherGeographyIdentifier === '' || $higherGeography === '' || $locationType === '') {
                     log_message('debug', 'Geographic region row skipped due to missing required fields: ' . json_encode($row));
                     $counts['skipped']++;
                     $counts['processed']++;
@@ -108,6 +110,12 @@ class GeographicRegionsImportService implements EntityImportServiceInterface
                 ];
 
                 $existing = $existingRows[$higherGeographyIdentifier] ?? null;
+                if ($existing !== null
+                    && ($existing['location_type'] !== $locationType
+                        || $existing['higher_geography'] !== $payload['higher_geography'])) {
+                    throw new \RuntimeException('Geographic region identifier collision: ' . $higherGeographyIdentifier
+                        . '. Each configured region must have a unique warehouse location code or fallback ID.');
+                }
 
                 if ($existing === null) {
                     $counts['inserted']++;

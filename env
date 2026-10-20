@@ -130,10 +130,10 @@ Config\Import.indiciaOccurrencesEsEndpoint= 'es'
 # group names that contain commas.
 # import.taxonGroups = 'insect - moth,insect - caddis fly (Trichoptera)'
 
-# Uncomment to alter the geographic regions to import data for. They will be
-# loaded from Indicia's locations table.
-# import.geographicRegions = 'Cheshire,South Lancashire,West Lancashire'
-# import.geographicRegionLocationType = 'Vice County'
+# Configure geography groups before initial population. Every iRecord location needs a
+# usable boundary polygon. See docs/configuration-reference.md for a VC + LRC example.
+# Names are unencoded; optional nbnName overrides irecordName for NBN Atlas only.
+# import.geographicRegions = '{"vice-counties":{"indiciaLocationType":"Vice County","nbnField":"cl254","locations":[{"irecordName":"Cheshire"},{"irecordName":"South Lancashire"},{"irecordName":"West Lancashire"}]}}'
 
 # Uncomment to changed default limit which is genus or lower.
 # import.indiciaMinTaxonRankSortOrder = 230

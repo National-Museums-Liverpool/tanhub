@@ -146,10 +146,11 @@ cp env .env
       data. Should align with UKSI group names. Note that other group names may also be imported
       into the taxon_groups table if required to complete the taxonomic hierarchy for imported
       taxa (a higher taxon may have a group called "unassigned" for example).
-   - `import.geographicRegions` - set to the names of the regions you want to include in tanhub.
-      These should be indexed locations in the Indicia warehouse.
-   - `import.geographicRegionLocationType` - set to the name of the Location Type in Indicia that
-     the regions belong to, for example "Vice County".
+   - `import.geographicRegions` - a JSON object of geography groups containing the iRecord type,
+     NBN filter field and location names. See the
+     [VC and LRC example](configuration-reference.md#geographic-regions). Each configured location
+     must already exist in iRecord with the exact name/type, be indexed for occurrence filtering,
+     and have a usable boundary polygon. A centroid alone cannot provide region membership.
    - `import.indiciaMinTaxonRankSortOrder` - the minimum Indicia taxon rank to import. The default
      is `230`, which corresponds to genus or lower in the standard configuration.
    - `import.nbnMinTaxonRankId` - the minimum NBN Atlas taxon rank ID to import. The default is
@@ -358,6 +359,11 @@ CORS_ALLOWED_HEADERS=Origin,Content-Type,Accept,Authorization,X-Requested-With
    projects/tanhub/taxon_names.xml
    projects/tanhub/taxon_ranks.xml
    ```
+
+   Copy the matching XML reports from this project's
+   `indicia-warehouse-module/tanhub/reports/projects/tanhub/` to the warehouse before importing.
+   Local XML edits do not change the running warehouse. Both geography reports must use the same
+   region identifiers. For upgrades, see the [v1.1.0 changelog](../CHANGELOG.md#110).
 
 7. Tick "Allow sensitive records" if you want sensitive records at blurred precision. Do not
    tick "Allow confidential records" or "Full precision sensitive records" as the API for tanhub

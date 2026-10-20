@@ -5,7 +5,6 @@ namespace App\Commands;
 use App\Commands\Support\UsesImportLock;
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
-use Config\Import as ImportConfig;
 use Throwable;
 
 /**
@@ -71,7 +70,10 @@ class ImportAuto extends BaseCommand
      */
     public function run(array $params)
     {
-        $config = config(ImportConfig::class);
+        $config = $this->loadImportConfig();
+        if ($config === null) {
+            return;
+        }
         $limit = (int) ($params['limit'] ?? CLI::getOption('limit') ?? $config->defaultLimit);
         $pageSize = (int) ($params['page-size'] ?? CLI::getOption('page-size') ?? $config->defaultPageSize);
         $dryRun = array_key_exists('dry-run', $params) || (bool) CLI::getOption('dry-run');

@@ -14,6 +14,33 @@ use RuntimeException;
 final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
 {
     /**
+     * Send the full LRC name with punctuation and encode it exactly once.
+     */
+    public function testLrcFilterUsesFullNameAndSingleUrlEncoding(): void
+    {
+        $name = 'RECORD - Biodiversity Information Centre for Cheshire, Halton, Warrington & Wirral.';
+        $client = $this->createMock(CURLRequest::class);
+        $response = $this->createMock(ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn(200);
+        $response->method('getBody')->willReturn('{"occurrences":[],"totalRecords":0}');
+        $client->expects($this->once())->method('get')->with($this->callback(function (string $url) use ($name): bool {
+            preg_match_all('/(?:\\?|&)fq=([^&]*)/', $url, $matches);
+            $filters = array_map('urldecode', $matches[1]);
+            $this->assertContains('cl1012:("' . $name . '")', $filters);
+            $this->assertStringNotContainsString('cl254', $url);
+            $this->assertStringNotContainsString('%2526', $url);
+
+            return true;
+        }))->willReturn($response);
+        $adapter = new NbnAtlasOccurrencesAdapter($client, [
+            'endpoint' => 'https://nbn.test/search',
+            'geographic_region_field' => 'cl1012',
+            'geographic_regions' => [$name],
+        ], 1);
+        $this->assertFalse($adapter->fetchPage('0', 10)->hasMore);
+    }
+
+    /**
      * Verify missing endpoint configuration is rejected.
      *
      * @return void

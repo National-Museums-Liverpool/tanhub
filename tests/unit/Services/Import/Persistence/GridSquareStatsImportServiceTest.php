@@ -111,4 +111,33 @@ final class GridSquareStatsImportServiceTest extends CIUnitTestCase
         $this->assertSame(0, $counts['errors']);
         $this->assertSame([], $this->db->table('grid_square_stats')->getWhere(['square' => 'SU9999'])->getResultArray());
     }
+
+    /**
+     * Keep regional aggregates independent even when two types share a square.
+     */
+    public function testOverlappingRegionsKeepSeparateStableSquareRows(): void
+    {
+        $this->db->table('geographic_regions')->insertBatch([
+            ['higher_geography_identifier' => 'VC', 'location_type' => 'Vice County'],
+            ['higher_geography_identifier' => 'LERN', 'location_type' => 'LRC Boundary'],
+        ]);
+        $row = [
+            'square' => 'SU99A', 'centre_easting' => 412300, 'centre_northing' => 112300,
+            'centre_lat' => 50.1234567, 'centre_lon' => -1.2345678,
+        ];
+        $rows = [
+            $row + ['higher_geography_identifier' => 'VC', 'partial' => 0],
+            $row + ['higher_geography_identifier' => 'LERN', 'partial' => 1],
+        ];
+        $service = new GridSquareStatsImportService();
+        $this->assertSame(2, $service->import($rows)['inserted']);
+        $before = $this->db->table('grid_square_stats')->orderBy('id')->get()->getResultArray();
+        $this->assertSame(2, $service->import($rows)['updated']);
+        $after = $this->db->table('grid_square_stats')->orderBy('id')->get()->getResultArray();
+
+        $this->assertCount(2, $after);
+        $this->assertSame($before, $after);
+        $this->assertNotSame($after[0]['uuid'], $after[1]['uuid']);
+        $this->assertSame([0, 1], array_map('intval', array_column($after, 'partial')));
+    }
 }

@@ -98,14 +98,15 @@ refresh planning.
   recorded is also preserved.
 - `import.taxonGroups`: CSV list of taxon groups to import. Use CSV quoting for
   a group name that contains a comma.
-- `import.geographicRegions`: CSV list of Indicia location names to import.
-- `import.geographicRegionLocationType`: Indicia location type used to identify
-  the configured regions; the default is `Vice County`.
+- `import.geographicRegions`: JSON object of installation-time geography groups. See
+  [Geographic regions](#geographic-regions). The old CSV format and
+  `import.geographicRegionLocationType` are no longer supported. Import CLI commands stop with
+  a link to this section when they detect the old settings; update `.env` before retrying.
 
 These scope values are also applied to NBN Atlas occurrence imports. A change affects which records
 are eligible, so refresh the relevant occurrence data and derived statistics afterwards:
 
-- `import.geographicRegions` builds a `cl254` filter
+- `import.geographicRegions` builds one filter per group using its configured `nbnField`
 - `import.taxonRanks` builds a `taxonRank` filter
 - `import.nbnApiFilterQuery` appends custom `fq` clauses to NBN requests
 
@@ -124,6 +125,62 @@ NBN imports also always exclude unresolved assertion codes `50005`, `50006`, and
 NBN occurrence imports use `https://records-ws.nbnatlas.org/occurrences/search`.
 
 See [Import](import.md) for the required import order and source behaviour.
+
+### Geographic regions
+
+Configure regions before population. Each group has a stable key, an `indiciaLocationType`,
+an NBN layer field (`nbnField`), and a non-empty `locations` list. Each location requires its exact
+`irecordName`. Optional `nbnName` overrides that name for NBN only. Names are full, unencoded
+strings; the HTTP client URL encodes them. Do not use short LRC IDs as filter values.
+
+Every location must exist in iRecord under the configured type and name, be indexed for
+occurrence filtering, and have a usable boundary polygon. A centroid alone is not sufficient.
+Location codes, or location IDs when codes are blank, must identify configured regions uniquely.
+
+Example scope combining the default VCs with all four LRCs:
+
+```json
+{
+  "vice-counties": {
+    "indiciaLocationType": "Vice County",
+    "nbnField": "cl254",
+    "locations": [
+      {"irecordName": "Cheshire"},
+      {"irecordName": "South Lancashire"},
+      {"irecordName": "West Lancashire"}
+    ]
+  },
+  "local-record-centres": {
+    "indiciaLocationType": "LRC Boundary",
+    "nbnField": "cl1012",
+    "locations": [
+      {"irecordName": "Lancashire Environmental Records Network"},
+      {
+        "irecordName": "RECORD - Biodiversity Information Centre for Cheshire, Halton, Warrington & Wirral",
+        "nbnName": "RECORD - Biodiversity Information Centre for Cheshire, Halton, Warrington & Wirral."
+      },
+      {"irecordName": "Greater Manchester Local Record Centre"},
+      {"irecordName": "Merseyside BioBank"}
+    ]
+  }
+}
+```
+
+Put the JSON on one line, enclosed in single quotes, in `.env`:
+
+```dotenv
+import.geographicRegions = '{"vice-counties":{"indiciaLocationType":"Vice County","nbnField":"cl254","locations":[{"irecordName":"Cheshire"},{"irecordName":"South Lancashire"},{"irecordName":"West Lancashire"}]},"local-record-centres":{"indiciaLocationType":"LRC Boundary","nbnField":"cl1012","locations":[{"irecordName":"Lancashire Environmental Records Network"},{"irecordName":"RECORD - Biodiversity Information Centre for Cheshire, Halton, Warrington & Wirral","nbnName":"RECORD - Biodiversity Information Centre for Cheshire, Halton, Warrington & Wirral."},{"irecordName":"Greater Manchester Local Record Centre"},{"irecordName":"Merseyside BioBank"}]}}'
+```
+
+The final full stop in the RECORD NBN name is intentional; its iRecord name has no full stop.
+Without an override, both sources use `irecordName`. Group keys use lowercase letters, digits
+and hyphens, start with a letter, and have at most 29 characters to fit stored progress keys.
+Invalid or empty configuration,
+unknown properties and duplicate type/name pairs fail explicitly.
+
+The default remains the three VCs; LRCs are included only when configured. Scope changes after
+population are not reconciled automatically. For the one-off v1.1.0 upgrade, follow the
+[changelog](../CHANGELOG.md#installation-and-upgrade), including the full membership rebuild.
 
 ## Staff search presentation
 

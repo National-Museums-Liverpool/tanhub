@@ -79,4 +79,28 @@ final class GeographicRegionsImportServiceTest extends CIUnitTestCase
         $this->assertSame('Vice County', (string) $row['location_type']);
         $this->assertSame('POLYGON((-1 51,-1 52,0 52,0 51,-1 51))', (string) $row['footprint_geometry']);
     }
+
+    /**
+     * Accept textual LRC identifiers without merging a different region on collision.
+     */
+    public function testTextualIdentifiersAreIdempotentAndCollisionsFail(): void
+    {
+        $this->db->table('data_sources')->insert([
+            'id' => 1, 'abbr' => 'IREC', 'title' => 'Indicia', 'url' => 'https://example.org',
+        ]);
+        $row = [
+            'higher_geography_identifier' => 'LERN',
+            'higher_geography' => 'Lancashire Environmental Records Network',
+            'location_type' => 'LRC Boundary',
+            'footprint_geometry' => 'POLYGON((0 0,1 0,1 1,0 0))',
+        ];
+        $service = new GeographicRegionsImportService();
+        $this->assertSame(1, $service->import([$row])['inserted']);
+        $this->assertSame(1, $service->import([$row])['updated']);
+        $row['location_type'] = 'Vice County';
+        $this->assertSame(1, $service->import([$row])['errors']);
+        $stored = $this->db->table('geographic_regions')->get()->getRowArray();
+        $this->assertSame('LRC Boundary', $stored['location_type']);
+        $this->assertSame('LERN', $stored['higher_geography_identifier']);
+    }
 }

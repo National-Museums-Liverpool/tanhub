@@ -326,6 +326,13 @@ unfinished interrupted executions are marked failed for explicit retry.
 Task outcomes and summaries are stored in `import_runs`, which is the canonical history for import
 and derived-task executions.
 
+Geography lookup and NBN occurrence tasks process one configured geography group per batch.
+The public task stays incomplete until every group completes. With several groups, the displayed
+parent checkpoint names the last attempted group; each group's offset/cursor lives in its own
+child progress row. Run messages and summaries identify the active group.
+The existing **Restart** action resets both parent and configured child progress.
+See [geography group progress](import.md#geography-groups-and-progress).
+
 The report-stat tasks recalculate reporting data from active occurrences:
 
 - `grid_square_stats_counts` updates per-square occurrence counts, species counts, and rarity

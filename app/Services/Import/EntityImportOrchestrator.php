@@ -69,6 +69,8 @@ class EntityImportOrchestrator
      * are never persisted, so repeated dry runs always start from the same
      * offset. Any row error also short-circuits `has_more` to `true` in the
      * result to signal the run should be retried.
+     * Geography lookup tasks process one group per invocation with independent
+     * offsets; their public completion flag covers every configured group.
      *
      * @param string   $sourceKey      Source key to import from (e.g. `indicia`).
      * @param string   $entity         Taxonomy entity to import (e.g. `taxa`,
@@ -80,10 +82,10 @@ class EntityImportOrchestrator
      *                                 last successful offset (e.g. for manual re-runs).
      * @param callable(int): void|null $onRunCreated Callback linking a newly created run to its request.
      *
-     * @return array<string, int|string|null> Result with `run_id`, `entity`,
+     * @return array<string, int|string|bool|null> Result with `run_id`, `entity`,
      *         `status` (`success`|`failed`), `offset` (offset fetched from),
      *         `next_offset`, `has_more`, `fetched`, `inserted`, `updated`,
-     *         `skipped`, and `errors`.
+     *         `skipped`, `errors`, and the optional `geography_group`.
      *
      * @throws InvalidArgumentException When no `data_sources` row exists for the
      *                                  source's configured abbreviation.
@@ -111,8 +113,21 @@ class EntityImportOrchestrator
         $source = strtolower($sourceKey);
         $entityKey = strtolower($entity);
         $sourceEntityKey = $source . '-taxonomy:' . $entityKey;
+        $progress = null;
+        $group = null;
+        $progressKey = $sourceEntityKey;
+        if (in_array($entityKey, ['geographic_regions', 'grid_square_stats'], true)) {
+            if ($offsetOverride !== null && count($config->geographicRegions) > 1) {
+                throw new InvalidArgumentException('An offset override is ambiguous with multiple geography groups. Clear import offsets to restart population.');
+            }
+            $progress = new GeographicImportProgress($importOffsetModel, $sourceEntityKey, array_keys($config->geographicRegions));
+        }
 
         $this->assertDependenciesComplete($importOffsetModel, $source, $entityKey);
+        if ($progress !== null) {
+            $group = $progress->select();
+            $progressKey = $progress->key($group);
+        }
 
         $sourceAbbr = strtoupper($adapterFactory->sourceAbbr($source));
 
@@ -122,7 +137,7 @@ class EntityImportOrchestrator
             throw new InvalidArgumentException('No data_sources row found for abbr: ' . $sourceAbbr);
         }
 
-        $offset = $offsetOverride === null ? $this->lastSuccessfulOffset($importOffsetModel, $sourceEntityKey) : $offsetOverride;
+        $offset = $offsetOverride === null ? $this->lastSuccessfulOffset($importOffsetModel, $progressKey) : $offsetOverride;
 
         $runId = (int) $importRunModel->insert([
             'source_key' => $sourceEntityKey,
@@ -136,7 +151,7 @@ class EntityImportOrchestrator
             if ($onRunCreated !== null) {
                 $onRunCreated($runId);
             }
-            $batch = $adapterFactory->make($source)->fetchBatch($entityKey, $limit, $offset);
+            $batch = $adapterFactory->make($source, $group)->fetchBatch($entityKey, $limit, $offset);
             $counts = $entityImportService->import($entityKey, $batch->rows, $dryRun);
             $processed = max(0, min((int) ($counts['processed'] ?? 0), (int) ($counts['fetched'] ?? 0)));
             $nextOffset = $offset + $processed;
@@ -145,8 +160,14 @@ class EntityImportOrchestrator
             $isComplete = $counts['errors'] === 0 && $batch->hasMore === false;
 
             if (! $dryRun) {
-                $importOffsetModel->setOffset($sourceEntityKey, $nextOffset);
-                $importOffsetModel->setCompletion($sourceEntityKey, $isComplete);
+                $importOffsetModel->setOffset($progressKey, $nextOffset);
+                if ($progress !== null) {
+                    $isComplete = $progress->finish($group, $isComplete);
+                } else {
+                    $importOffsetModel->setCompletion($sourceEntityKey, $isComplete);
+                }
+            } elseif ($progress !== null) {
+                $isComplete = $progress->isCompleteAfter($group, $isComplete);
             }
 
             $importRunModel->update($runId, [
@@ -157,17 +178,19 @@ class EntityImportOrchestrator
                 'updated_count' => $counts['updated'],
                 'skipped_count' => $counts['skipped'],
                 'error_count' => $counts['errors'],
-                'message' => $dryRun ? 'Dry-run execution.' : ($counts['errors'] > 0 ? 'Import stopped on first row error. Re-run to continue from current offset.' : null),
+                'message' => ($group !== null ? 'Geography group: ' . $group . '. ' : '')
+                    . ($dryRun ? 'Dry-run execution.' : ($counts['errors'] > 0 ? 'Import stopped on first row error. Re-run to continue from current offset.' : 'Batch completed.')),
                 'finished_at' => date('Y-m-d H:i:s'),
             ]);
 
             return [
                 'run_id' => $runId,
                 'entity' => $entityKey,
+                'geography_group' => $group,
                 'status' => $status,
                 'offset' => $offset,
                 'next_offset' => $nextOffset,
-                'has_more' => $counts['errors'] > 0 ? true : $batch->hasMore,
+                'has_more' => ! $isComplete,
                 'fetched' => $counts['fetched'],
                 'inserted' => $counts['inserted'],
                 'updated' => $counts['updated'],
@@ -176,14 +199,18 @@ class EntityImportOrchestrator
             ];
         } catch (\Throwable $exception) {
             if (! $dryRun) {
-                $importOffsetModel->setCompletion($sourceEntityKey, false);
+                if ($progress !== null) {
+                    $progress->finish($group, false);
+                } else {
+                    $importOffsetModel->setCompletion($sourceEntityKey, false);
+                }
             }
 
             $importRunModel->update($runId, [
                 'status' => 'failed',
                 'checkpoint' => (string) $offset,
                 'error_count' => 1,
-                'message' => $exception->getMessage(),
+                'message' => ($group !== null ? 'Geography group: ' . $group . '. ' : '') . $exception->getMessage(),
                 'finished_at' => date('Y-m-d H:i:s'),
             ]);
 

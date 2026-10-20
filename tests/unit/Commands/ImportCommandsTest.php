@@ -4,6 +4,7 @@ namespace Tests;
 
 use App\Commands\ImportAuto;
 use App\Commands\ImportOccurrences;
+use CodeIgniter\Config\Factories;
 use App\Services\Import\AutoImportService;
 use App\Services\Import\ImportLock;
 use App\Services\Import\ImportOrchestrator;
@@ -28,6 +29,30 @@ final class ImportCommandsTest extends CIUnitTestCase
         (new ImportOccurrences(service('logger'), service('commands')))->run([]);
 
         $this->addToAssertionCount(1);
+    }
+
+    /**
+     * Stop cleanly and before the orchestrator when installation config is obsolete.
+     */
+    public function testOccurrenceCommandHandlesLegacyGeographyConfiguration(): void
+    {
+        putenv('import.geographicRegionLocationType=Vice County');
+        $_ENV['import.geographicRegionLocationType'] = 'Vice County';
+        $_SERVER['import.geographicRegionLocationType'] = 'Vice County';
+        Factories::reset('config');
+        $orchestrator = $this->createMock(ImportOrchestrator::class);
+        $orchestrator->expects($this->never())->method('run');
+        Services::injectMock('occurrenceImportOrchestrator', $orchestrator);
+
+        try {
+            (new ImportOccurrences(service('logger'), service('commands')))->run(['source' => 'nbn']);
+            $this->addToAssertionCount(1);
+        } finally {
+            putenv('import.geographicRegionLocationType=null');
+            $_ENV['import.geographicRegionLocationType'] = 'null';
+            $_SERVER['import.geographicRegionLocationType'] = 'null';
+            Factories::reset('config');
+        }
     }
 
     /**

@@ -170,6 +170,11 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
     }
 
     /**
+     * Build a combined scope while keeping each type/name match nested together.
+     *
+     * @param string|null $checkpoint Last persisted tracking value.
+     * @param int         $limit Maximum page size.
+     *
      * @return array<string, mixed>
      */
     private function buildSearchBody(?string $checkpoint, int $limit): array
@@ -187,8 +192,7 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         ];
 
         $taxonGroups = $this->normalisedListValues($this->config['taxon_groups'] ?? []);
-        $geographicRegions = $this->normalisedListValues($this->config['geographic_regions'] ?? []);
-        $locationType = trim((string) ($this->config['geographic_region_location_type'] ?? ''));
+        $geographicGroups = $this->config['geographic_regions'] ?? [];
 
         if ($taxonGroups !== []) {
             $mustFilters[] = [
@@ -200,20 +204,24 @@ class IndiciaOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             $mustFilters[] = ['range' => ['taxon.taxon_rank_sort_order' => ['gte' => $this->config['min_taxon_rank_sort_order'] ?? 0]]];
         }
 
-        if ($geographicRegions !== []) {
-            $mustFilters[] = [
+        $geographyClauses = [];
+        foreach ($geographicGroups as $group) {
+            $geographyClauses[] = [
                 'nested' => [
                     'path' => 'location.higher_geography',
                     'query' => [
                         'bool' => [
                             'must' => [
-                                ['terms' => ['location.higher_geography.name.keyword' => $geographicRegions]],
-                                ['term' => ['location.higher_geography.type.keyword' => $locationType]],
+                                ['terms' => ['location.higher_geography.name.keyword' => array_column($group['locations'], 'irecordName')]],
+                                ['term' => ['location.higher_geography.type.keyword' => $group['indiciaLocationType']]],
                             ],
                         ],
                     ],
                 ],
             ];
+        }
+        if ($geographyClauses !== []) {
+            $mustFilters[] = ['bool' => ['should' => $geographyClauses, 'minimum_should_match' => 1]];
         }
 
         if ($checkpoint !== null && $checkpoint !== '') {

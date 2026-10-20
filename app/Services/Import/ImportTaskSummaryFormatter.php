@@ -29,6 +29,7 @@ class ImportTaskSummaryFormatter
      * @param array<string, mixed> $result Task result values; recognized keys are
      *                                     `status`, `fetched`, `processed`, `inserted`,
      *                                     `updated`, `not changed`, `skipped`, `errors`.
+     *                                     Optional `geography_group` identifies a grouped batch.
      *
      * @return string Formatted task summary.
      */
@@ -45,6 +46,9 @@ class ImportTaskSummaryFormatter
         }
 
         $summary = sprintf('Task %s finished with status %s.', $label, $status);
+        if (isset($result['geography_group'])) {
+            $summary .= ' Geography group: ' . $result['geography_group'] . '.';
+        }
 
         if ($summaryParts !== []) {
             $summary .= ' ' . ucfirst(implode(', ', $summaryParts)) . '.';

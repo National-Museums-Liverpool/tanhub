@@ -10,6 +10,11 @@ use InvalidArgumentException;
  */
 class OccurrenceSourceAdapterFactory
 {
+    /**
+     * Create a factory for installation-scoped occurrence adapters.
+     *
+     * @param ImportConfig $config Validated import configuration.
+     */
     public function __construct(
         private readonly ImportConfig $config,
     ) {
@@ -17,8 +22,13 @@ class OccurrenceSourceAdapterFactory
 
     /**
      * Create an adapter for the requested source key.
+     *
+     * @param string      $sourceKey Occurrence source.
+     * @param string|null $geographyGroup Selected NBN stream; Indicia uses all groups.
+     *
+     * @return OccurrenceSourceAdapterInterface Configured source adapter.
      */
-    public function make(string $sourceKey): OccurrenceSourceAdapterInterface
+    public function make(string $sourceKey, ?string $geographyGroup = null): OccurrenceSourceAdapterInterface
     {
         $source = strtolower($sourceKey);
         $sourceConfig = $this->config->occurrenceSources[$source] ?? null;
@@ -31,9 +41,19 @@ class OccurrenceSourceAdapterFactory
         $resolvedConfig = $sourceConfig;
 
         if ($source === 'nbn') {
+            $groups = $this->config->geographicRegions;
+            $key = $geographyGroup ?? (count($groups) === 1 ? array_key_first($groups) : null);
+            if ($key === null || ! isset($groups[$key])) {
+                throw new InvalidArgumentException('Select a configured geography group for NBN occurrences.');
+            }
+            $group = $groups[$key];
             $resolvedConfig = array_merge($sourceConfig, [
                 'taxon_ranks' => $this->config->taxonRanks,
-                'geographic_regions' => $this->config->geographicRegions,
+                'geographic_regions' => array_map(
+                    static fn (array $location): string => $location['nbnName'] ?? $location['irecordName'],
+                    $group['locations'],
+                ),
+                'geographic_region_field' => $group['nbnField'],
                 'min_taxon_rank_id' => $this->config->nbnMinTaxonRankId,
                 'nbn_filter_query' => $this->config->nbnApiFilterQuery,
             ]);
@@ -51,7 +71,6 @@ class OccurrenceSourceAdapterFactory
                 'taxon_ranks' => $this->config->taxonRanks,
                 'min_taxon_rank_sort_order' => $this->config->indiciaMinTaxonRankSortOrder,
                 'geographic_regions' => $this->config->geographicRegions,
-                'geographic_region_location_type' => $this->config->geographicRegionLocationType,
                 'maximum_coordinate_uncertainty_in_meters' => $this->config->maximumCoordinateUncertaintyInMeters,
             ]);
         }

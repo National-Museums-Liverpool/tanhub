@@ -20,7 +20,8 @@ Occurrence imports from NBN Atlas use the records web service search endpoint:
 When importing, Tanhub sends `q=*:*` and pages results with `start` and `pageSize`. It adds filters
 from the import configuration:
 
-- geographic regions are applied as a `cl254` filter from `import.geographicRegions`
+- geographic regions use each group's configured `nbnField` and full NBN names from
+  `import.geographicRegions` (`cl254` for VCs, `cl1012` for LRC boundaries)
 - the minimum NBN rank is applied as `taxonRankID:[<minimum> TO *]` from
   `import.nbnMinTaxonRankId`
 - optional custom NBN clauses are appended from `import.nbnApiFilterQuery`
@@ -81,16 +82,45 @@ using the same configuration used elsewhere in import:
 - `taxonGroups`
 - `taxonRanks`
 - `geographicRegions`
-- `geographicRegionLocationType`
 
 By default, the Indicia occurrence checkpoint uses `metadata.tracking` so
 incremental loads can resume deterministically.
 
-NBN occurrence checkpoints use the Atlas `start` offset. The last checkpoint is stored in
-`import_offsets.next_checkpoint` using the source key `nbn-occurrences:occurrences`, and the next
-run resumes from that value. A new NBN source starts at `0`. Use `--since` to override the stored
-checkpoint for one run. Both NBN and Indicia occurrence checkpoints are written only for
-non-dry-run imports.
+NBN occurrence checkpoints use an `occurrenceID` cursor after the initial page, with legacy
+numeric offsets still accepted for a single stream. A new stream starts at `0`. Checkpoints live
+in `import_offsets`, never fall back to old run history, and are written only for non-dry-run
+imports. Clearing all import offsets therefore restarts population even when run history remains.
+
+### Geography groups and progress
+
+Configure scope at installation using the
+[geography JSON contract](configuration-reference.md#geographic-regions).
+`geographic_regions`, `grid_square_stats`, and NBN occurrences process one geography group per
+bounded invocation. With multiple groups, each has an independent offset/cursor under a child
+source key such as `nbn-occurrences:occurrences:local-record-centres`. The existing parent task
+completes only after all groups finish. Unfinished groups take priority; subsequent NBN invocations
+rotate completed groups so each continues receiving routine imports. A single configured group
+uses the existing parent progress key directly.
+
+Indicia occurrences use one request scope and checkpoint, matching any configured type/name
+pair. NBN uses a separate filtered stream per group. A record returned by more than one stream
+still upserts the same occurrence; geography does not become part of occurrence identity.
+
+With multiple groups, parent `next_checkpoint` identifies the last attempted group, not a source
+cursor. Child rows hold source cursors or lookup offsets. Run history and summaries identify the
+active group. Existing top-level task names, queue requests and dependency gates are unchanged.
+Do not pass `--since` or a lookup offset override with multiple groups: a single override is
+ambiguous and is rejected.
+
+Overlapping regional memberships are intentional. Do not sum regional counts to obtain global
+totals. The `partial` grid-square flag describes containment in one region, not uniqueness across
+regions.
+
+For an existing installation upgrading to v1.1.0, follow the
+[changelog procedure](../CHANGELOG.md#installation-and-upgrade). In particular, restarting imports
+does not add new memberships to unchanged occurrence rows: invoke the
+[full membership rebuild](../CHANGELOG.md#full-occurrence-region-membership-rebuild) before full
+statistics recalculation. No automatic scope reconciliation or backfill workflow is provided.
 
 Note that data from iRecord should not be imported from Indicia, as it will be a duplicate and the
 iRecord copy should be more recent. Records whose `dataResourceName` contains `iRecord` are
@@ -164,7 +194,8 @@ Refreshing the page never processes requests.
 
 The admin page runs imports synchronously in the web request. For large Indicia occurrence imports,
 prefer `php spark import:occurrences --source indicia` or the scheduled `import:auto` command so
-the work is not limited by browser, PHP, or web-server request timeouts. If execution is interrupted,
+the work is not limited by browser, PHP, or web-server request timeouts. If execution is
+interrupted,
 the next non-dry-run scheduled or manual queue operation recovers abandoned requests after
 acquiring the exclusive import lock. Unfinished executions are marked failed for **Retry** from
 the saved checkpoint; successful runs are reconciled with their persisted completion state.

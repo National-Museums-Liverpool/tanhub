@@ -73,7 +73,7 @@ final class GeographicRegionsOccurrenceImportServiceTest extends CIUnitTestCase
                 'id' => 1,
                 'higher_geography_identifier' => 101,
                 'higher_geography' => 'Region A',
-                'location_type' => 'Vice County',
+                'location_type' => 'LRC Boundary',
                 'footprint_geometry' => 'POLYGON((0 0,2 0,2 2,0 2,0 0))',
                 'data_source_id' => 1,
                 'deleted_at' => null,

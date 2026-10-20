@@ -307,10 +307,10 @@ class Imports extends BaseController
     }
 
     /**
-     * Reset persisted progress for one registered task.
+     * Reset persisted progress for one registered task and its geography children.
      *
-     * Occurrence tasks use an explicit zero checkpoint so the occurrence
-     * orchestrator cannot fall back to historical run checkpoints.
+     * All configured child streams must restart with the parent; otherwise
+     * a grouped task would immediately reuse its old completed progress.
      *
      * @param string               $sourceKey Task source key.
      * @param array<string, mixed> $task      Registered task definition.
@@ -321,12 +321,24 @@ class Imports extends BaseController
     {
         /** @var \App\Models\ImportOffsetModel $offsetModel */
         $offsetModel = model(\App\Models\ImportOffsetModel::class);
-        $offsetModel->setOffset($sourceKey, 0);
-        $offsetModel->setCheckpoint(
-            $sourceKey,
-            ($task['kind'] ?? null) === 'occurrence' ? '0' : null,
-        );
-        $offsetModel->setCompletion($sourceKey, false);
+        $keys = [$sourceKey];
+        if (in_array($sourceKey, [
+            'indicia-taxonomy:geographic_regions',
+            'indicia-taxonomy:grid_square_stats',
+            'nbn-occurrences:occurrences',
+        ], true)) {
+            $groups = config(ImportConfig::class)->geographicRegions;
+            if (count($groups) > 1) {
+                foreach (array_keys($groups) as $group) {
+                    $keys[] = $sourceKey . ':' . $group;
+                }
+            }
+        }
+        foreach ($keys as $key) {
+            $offsetModel->setOffset($key, 0);
+            $offsetModel->setCheckpoint($key, ($task['kind'] ?? null) === 'occurrence' ? '0' : null);
+            $offsetModel->setCompletion($key, false);
+        }
     }
 
     /**

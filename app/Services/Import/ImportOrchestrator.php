@@ -61,8 +61,8 @@ class ImportOrchestrator
      * repeatedly fetches and persists pages of up to `$pageSize` records
      * until either `$limit` records have been processed, the adapter reports
      * no more pages, a page returns zero records, or a row error occurs.
-    * After each page, geographic memberships for that page's changed occurrences
-    * are rebuilt immediately. The checkpoint advances to the persistence service's
+     * After each page, geographic memberships for that page's changed occurrences
+     * are rebuilt immediately. The checkpoint advances to the persistence service's
      * reported `last_checkpoint` (falling back to the adapter's
      * `nextCheckpoint`), so a failed run can resume from the last
      * successfully-persisted record rather than re-fetching everything.
@@ -72,9 +72,14 @@ class ImportOrchestrator
      * the persistence layer, so the next run retries from there rather than
      * skipping the failed records. On success, and only when not `$dryRun`,
      * {@see \App\Services\Import\Persistence\GeographicRegionsOccurrenceImportService}
-     * is run once to (re)assign geographic regions to newly-imported
-     * occurrences; any errors from that step are folded into the run's total
+     * assigns geographic regions to changed occurrences after each page;
+     * any errors from that step are folded into the run's total
      * error count and can flip the run to `failed`.
+     *
+     * NBN processes one configured geography group per bounded invocation.
+     * Each group has an independent cursor; the public task completes only
+     * when all groups finish. Indicia retains one combined stream. Progress
+     * comes only from import_offsets, so clearing offsets restarts population.
      *
      * @param string      $sourceKey Source key to import from (`indicia` or `nbn`).
      * @param int         $limit Maximum records to process in this run.
@@ -88,7 +93,8 @@ class ImportOrchestrator
      * @return array<string, int|string|null> Result with `run_id`, `status`
      *         (`success`|`failed`), `checkpoint` (final checkpoint reached),
      *         `fetched`, `inserted`, `updated`, `skipped`, and `errors`
-     *         (totals across all pages processed in this run).
+     *         (totals across all pages processed in this run), plus `geography_group`
+     *         for the selected NBN stream (null for Indicia).
      *
      * @throws InvalidArgumentException When no `data_sources` row exists for the
      *                                  source's configured abbreviation.
@@ -121,8 +127,21 @@ class ImportOrchestrator
 
         $source = strtolower($sourceKey);
         $sourceEntityKey = $this->occurrenceSourceKey($source);
+        $progress = null;
+        $group = null;
+        $progressKey = $sourceEntityKey;
+        if ($source === 'nbn') {
+            if ($checkpointOverride !== null && count($config->geographicRegions) > 1) {
+                throw new InvalidArgumentException('A checkpoint override is ambiguous with multiple geography groups. Clear import offsets to restart population.');
+            }
+            $progress = new GeographicImportProgress($importOffsetModel, $sourceEntityKey, array_keys($config->geographicRegions));
+        }
 
         $this->assertTaxonomyDependenciesComplete($importOffsetModel);
+        if ($progress !== null) {
+            $group = $progress->select();
+            $progressKey = $progress->key($group);
+        }
 
         $sourceAbbr = strtoupper($adapterFactory->sourceAbbr($source));
 
@@ -133,7 +152,7 @@ class ImportOrchestrator
         }
 
         $checkpoint = $checkpointOverride
-            ?? $this->lastSuccessfulCheckpoint($importOffsetModel, $importRunModel, $source, $sourceEntityKey)
+            ?? $importOffsetModel->getCheckpoint($progressKey)
             ?? ($source === 'nbn' ? '0' : null);
 
         $runId = (int) $importRunModel->insert([
@@ -143,8 +162,6 @@ class ImportOrchestrator
             'checkpoint' => $checkpoint,
             'started_at' => date('Y-m-d H:i:s'),
         ]);
-
-        $adapter = $adapterFactory->make($source);
 
         $total = [
             'fetched' => 0,
@@ -159,6 +176,7 @@ class ImportOrchestrator
         $geographicRegionAssignmentFailed = false;
 
         try {
+            $adapter = $adapterFactory->make($source, $group);
             if ($onRunCreated !== null) {
                 $onRunCreated($runId);
             }
@@ -222,10 +240,15 @@ class ImportOrchestrator
 
             if (! $dryRun) {
                 if (! $geographicRegionAssignmentFailed) {
-                    $importOffsetModel->setCheckpoint($sourceEntityKey, $checkpoint);
+                    $importOffsetModel->setCheckpoint($progressKey, $checkpoint);
                 }
 
-                $importOffsetModel->setCompletion($sourceEntityKey, $status === 'success' && $hasMore === false);
+                $complete = $status === 'success' && $hasMore === false;
+                if ($progress !== null) {
+                    $progress->finish($group, $complete);
+                } else {
+                    $importOffsetModel->setCompletion($sourceEntityKey, $complete);
+                }
             }
 
             $importRunModel->update($runId, [
@@ -236,13 +259,15 @@ class ImportOrchestrator
                 'updated_count' => $total['updated'],
                 'skipped_count' => $total['skipped'],
                 'error_count' => $total['errors'],
-                'message' => $dryRun ? 'Dry-run execution.' : ($total['errors'] > 0 ? 'Import stopped on first row error. Re-run to continue from the last successful checkpoint.' : null),
+                'message' => ($group !== null ? 'Geography group: ' . $group . '. ' : '')
+                    . ($dryRun ? 'Dry-run execution.' : ($total['errors'] > 0 ? 'Import stopped on first row error. Re-run to continue from the last successful checkpoint.' : 'Batch completed.')),
                 'finished_at' => date('Y-m-d H:i:s'),
             ]);
 
             return [
                 'run_id' => $runId,
                 'status' => $status,
+                'geography_group' => $group,
                 'checkpoint' => $checkpoint,
                 'fetched' => $total['fetched'],
                 'inserted' => $total['inserted'],
@@ -252,8 +277,12 @@ class ImportOrchestrator
             ];
         } catch (\Throwable $exception) {
             if (! $dryRun) {
-                $importOffsetModel->setCheckpoint($sourceEntityKey, $checkpoint);
-                $importOffsetModel->setCompletion($sourceEntityKey, false);
+                $importOffsetModel->setCheckpoint($progressKey, $checkpoint);
+                if ($progress !== null) {
+                    $progress->finish($group, false);
+                } else {
+                    $importOffsetModel->setCompletion($sourceEntityKey, false);
+                }
             }
 
             $importRunModel->update($runId, [
@@ -264,57 +293,12 @@ class ImportOrchestrator
                 'updated_count' => $total['updated'],
                 'skipped_count' => $total['skipped'],
                 'error_count' => $total['errors'] + 1,
-                'message' => $exception->getMessage(),
+                'message' => ($group !== null ? 'Geography group: ' . $group . '. ' : '') . $exception->getMessage(),
                 'finished_at' => date('Y-m-d H:i:s'),
             ]);
 
             throw new RuntimeException('Import failed: ' . $exception->getMessage(), 0, $exception);
         }
-    }
-
-    /**
-     * Resolve the checkpoint to resume from for an occurrence import.
-     *
-     * @param ImportOffsetModel $importOffsetModel Import offset/checkpoint model.
-     * @param ImportRunModel    $importRunModel Import run tracker model.
-     * @param string            $source Source key.
-     * @param string            $sourceEntityKey Source/entity tracking key.
-     *
-     * @return string|null Checkpoint token when available.
-     */
-    private function lastSuccessfulCheckpoint(
-        ImportOffsetModel $importOffsetModel,
-        ImportRunModel $importRunModel,
-        string $source,
-        string $sourceEntityKey,
-    ): ?string
-    {
-        $checkpoint = $importOffsetModel->getCheckpoint($sourceEntityKey);
-
-        if ($checkpoint !== null) {
-            return $checkpoint;
-        }
-
-        // Backward compatibility for runs created before occurrence source-key normalization.
-        foreach ([$sourceEntityKey, $source] as $legacySourceKey) {
-            $run = $importRunModel
-                ->where('source_key', $legacySourceKey)
-                ->whereIn('status', ['success', 'partial'])
-                ->orderBy('id', 'desc')
-                ->first();
-
-            if ($run === null) {
-                continue;
-            }
-
-            $runCheckpoint = $run['checkpoint'] ?? null;
-
-            if (is_string($runCheckpoint) && $runCheckpoint !== '') {
-                return $runCheckpoint;
-            }
-        }
-
-        return null;
     }
 
     /**

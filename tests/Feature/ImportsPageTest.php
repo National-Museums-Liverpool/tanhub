@@ -132,6 +132,43 @@ final class ImportsPageTest extends CIUnitTestCase
         $this->assertSame(0, (int) $row['is_complete']);
     }
 
+    /**
+     * Restart every configured geography child without resetting unrelated tasks.
+     */
+    public function testResetGroupedTasksClearsAllChildProgress(): void
+    {
+        $this->authenticateAs('imports-admin-groups@example.com', 'admin');
+        $config = config(\Config\Import::class);
+        $original = $config->geographicRegions;
+        $config->geographicRegions['lrc'] = [
+            'indiciaLocationType' => 'LRC Boundary', 'nbnField' => 'cl1012',
+            'locations' => [['irecordName' => 'Lancashire Environmental Records Network']],
+        ];
+        $offsets = model(\App\Models\ImportOffsetModel::class);
+        try {
+            foreach (['indicia-taxonomy:geographic_regions', 'indicia-taxonomy:grid_square_stats', 'nbn-occurrences:occurrences'] as $parent) {
+                foreach (array_keys($config->geographicRegions) as $group) {
+                    $offsets->setOffset($parent . ':' . $group, 50);
+                    $offsets->setCheckpoint($parent . ':' . $group, 'old-cursor');
+                    $offsets->setCompletion($parent . ':' . $group, true);
+                }
+                $offsets->setCompletion($parent, true);
+                $response = $this->post('imports/reset', ['source_key' => $parent] + $this->csrfFields());
+                $response->assertRedirectTo(site_url('imports'));
+                $this->assertFalse($offsets->isComplete($parent));
+                foreach (array_keys($config->geographicRegions) as $group) {
+                    $key = $parent . ':' . $group;
+                    $this->assertSame(0, $offsets->getOffset($key));
+                    $this->assertFalse($offsets->isComplete($key));
+                    $this->assertSame(str_starts_with($parent, 'nbn-') ? '0' : null, $offsets->getCheckpoint($key));
+                }
+            }
+            $this->assertSame('abc123', $offsets->getCheckpoint('indicia-occurrences:occurrences'));
+        } finally {
+            $config->geographicRegions = $original;
+        }
+    }
+
     public function testResetQueuedTaskShowsErrorWithoutChangingProgress(): void
     {
         $this->authenticateAs('imports-admin-reset-queued@example.com', 'admin');

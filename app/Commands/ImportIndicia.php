@@ -5,7 +5,6 @@ namespace App\Commands;
 use App\Commands\Support\UsesImportLock;
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
-use Config\Import as ImportConfig;
 use Throwable;
 
 /**
@@ -75,7 +74,10 @@ class ImportIndicia extends BaseCommand
      */
     public function run(array $params)
     {
-        $importConfig = config(ImportConfig::class);
+        $importConfig = $this->loadImportConfig();
+        if ($importConfig === null) {
+            return;
+        }
         $source = $params['source'] ?? CLI::getOption('source') ?? 'indicia';
         $entity = strtolower((string) ($params['entity'] ?? CLI::getOption('entity') ?? 'taxa'));
         $entity = str_replace('-', '_', $entity);

@@ -169,8 +169,10 @@ Lookup table for names of data sources such as iRecord and the NBN Atlas.
 ### geographic_regions
 
 Lists the regions which define the geographical constraint of the data held in the system.
-Populated using the `.env` file's `import.geographicRegions` and
-`import.geographicRegionLocationType` configurations from the Indicia database.
+Populated from Indicia using the `.env` file's grouped `import.geographicRegions` JSON.
+Regions of different types can overlap. A region uses its non-blank Indicia location code,
+or its location ID when the code is blank; the geographic-region and grid-square reports use
+the same identifier contract. Configured region identifiers must be unique.
 
 | Column                      | Type         | Null | Key | Default           | Description                                                               |
 | --------------------------- | ------------ | ---- | --- | ----------------- | ------------------------------------------------------------------------- |
@@ -486,13 +488,16 @@ more efficient to run.
 
 ### grid_square_stats
 
-Statistics for 2km grid squares. Where a grid square intersects 2 or more region boundaries, there
-will be a copy of the grid square per region (with partial set to true). The number of records and
-species will pertain to the portion of the grid square inside that VC. There will also be a copy
-with the geographic_region_id null and partial set to false. Therefore, a query for all grid
-squares should filter on partial=false. A query on a given geographic_region_id can filter on the
-geographic_region_id alone (this will include contained grid squares, plus those along the boundary
-where partial is true).
+Statistics for 2km grid squares, with a separate row for each intersecting region. The occurrence
+and species counts are scoped to membership of that region, including overlapping VCs and LRCs.
+`partial` is true when the square is not fully contained by that particular region; two overlapping
+regions can both contain an entire square and both have `partial=false`.
+
+Regional queries filter by `geographic_region_id`. Neither summing regional rows nor filtering
+`partial=false` deduplicates overlapping regions. Select distinct square references for a
+cross-region square list, and calculate global occurrence/species totals from distinct source
+records rather than summing regional aggregates. Lookup imports currently create regional rows,
+not additional null-region aggregate rows.
 
 | Column               | Type          | Null | Key     | Default        | Description                                                                                           |
 | -------------------- | ------------- | ---- | ------- | -------------- | ----------------------------------------------------------------------------------------------------- |
@@ -628,7 +633,16 @@ The following tables are used to manage and track data import tasks.
 ### import_offsets
 
 Tracks the offset reached when paging through a remote dataset (e.g. reading taxa from Indicia).
-Contains a maximum of one row per import task type.
+Contains one row per progress key. A task with several configured geography groups also has child
+rows, for example `indicia-taxonomy:geographic_regions:local-record-centres`. Child rows store
+the actual lookup offsets or NBN cursors. The parent checkpoint names the last attempted group
+for recurring rotation, and parent completion covers all configured groups. Single-group tasks
+use only the parent row. Indicia occurrences always retain one combined stream.
+
+Group keys are limited to 29 characters so all child keys fit the existing 64-character column.
+These rows are created lazily and live until an operator resets progress; no configuration-change
+reconciliation is performed. The existing Restart action clears the parent's and configured
+children's progress. Clearing all rows restarts imports without consulting old run history.
 
 | Column          | Type         | Null | Key | Default           | Description                                                                      |
 | --------------- | ------------ | ---- | --- | ----------------- | -------------------------------------------------------------------------------- |

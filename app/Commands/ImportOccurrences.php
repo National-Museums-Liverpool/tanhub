@@ -5,7 +5,6 @@ namespace App\Commands;
 use App\Commands\Support\UsesImportLock;
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
-use Config\Import as ImportConfig;
 use Throwable;
 
 /**
@@ -68,7 +67,10 @@ class ImportOccurrences extends BaseCommand
      */
     public function run(array $params)
     {
-        $config = config(ImportConfig::class);
+        $config = $this->loadImportConfig();
+        if ($config === null) {
+            return;
+        }
 
         $source = (string) ($params['source'] ?? CLI::getOption('source') ?? '');
 

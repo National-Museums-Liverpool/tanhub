@@ -201,23 +201,25 @@ class Import extends BaseConfig
      */
     public string $nbnApiFilterQuery = '';
 
-     /**
-     * Taxonomic groups we allow reporting at.
-     *
-     * @var array|string
-     */
-    public array|string $geographicRegions = [
-        'Cheshire',
-        'South Lancashire',
-        'West Lancashire',
-    ];
-
     /**
-     * Geographic region location type.
+     * Installation-time geography groups, keyed by a stable checkpoint identity.
      *
-     * @var string
+     * Names are stored unencoded. NBN uses irecordName unless nbnName overrides it.
+     *
+     * @var array<string, array{indiciaLocationType: string, nbnField: string,
+     *     locations: list<array{irecordName: string, nbnName?: string}>}>
      */
-    public string $geographicRegionLocationType = 'Vice County';
+    public array $geographicRegions = [
+        'vice-counties' => [
+            'indiciaLocationType' => 'Vice County',
+            'nbnField' => 'cl254',
+            'locations' => [
+                ['irecordName' => 'Cheshire'],
+                ['irecordName' => 'South Lancashire'],
+                ['irecordName' => 'West Lancashire'],
+            ],
+        ],
+    ];
 
     /**
      * Maximum coordinate uncertainty in metres.
@@ -230,7 +232,7 @@ class Import extends BaseConfig
     public int $maximumCoordinateUncertaintyInMeters = 10000;
 
     /**
-     * Constructor loads array overrides from .env.
+     * Load and validate installation-time array overrides from .env.
      */
     public function __construct()
     {
@@ -270,15 +272,28 @@ class Import extends BaseConfig
             log_message('info', 'Configured taxon groups overriden: ' . $configuredTaxonGroups);
         }
         $configuredGeographicRegions = env('import.geographicRegions');
-        if (is_string($configuredGeographicRegions) && $configuredGeographicRegions !== '') {
-            $this->geographicRegions = array_map('trim', str_getcsv($configuredGeographicRegions));
-            log_message('info', 'Configured geographic regions overriden: ' . $configuredGeographicRegions);
+        if (is_string($configuredGeographicRegions) && trim($configuredGeographicRegions) !== '') {
+            $decoded = json_decode($configuredGeographicRegions, true);
+            if (! is_array($decoded)) {
+                throw new RuntimeException(
+                    'Your import configuration needs updating before imports can run. Replace the CSV '
+                    . 'value for import.geographicRegions with the grouped JSON format. See '
+                    . 'docs/configuration-reference.md#geographic-regions.',
+                );
+            }
+            $this->geographicRegions = $decoded;
         }
-        $configuredGeographicRegionLocationType = env('import.geographicRegionLocationType');
-        if (is_string($configuredGeographicRegionLocationType) && $configuredGeographicRegionLocationType !== '') {
-            $this->geographicRegionLocationType = trim($configuredGeographicRegionLocationType);
-            log_message('info', 'Configured geographic region location type overriden: ' . $configuredGeographicRegionLocationType);
+        $legacyType = env('import.geographicRegionLocationType');
+        if (is_string($legacyType) && trim($legacyType) !== '') {
+            throw new RuntimeException(
+                'Your import configuration needs updating before imports can run. Remove '
+                . 'import.geographicRegionLocationType and replace the CSV value for '
+                . 'import.geographicRegions with the grouped JSON format. Put each Indicia '
+                . 'location type in its group\'s indiciaLocationType property. See '
+                . 'docs/configuration-reference.md#geographic-regions.',
+            );
         }
+        $this->geographicRegions = $this->normaliseGeographicRegions($this->geographicRegions);
         $configuredIndiciaMinTaxonRankSortOrder = env('import.indiciaMinTaxonRankSortOrder');
         $validIndiciaMinTaxonRankSortOrder = $this->validateInt($configuredIndiciaMinTaxonRankSortOrder);
         if ($validIndiciaMinTaxonRankSortOrder !== null) {
@@ -302,6 +317,65 @@ class Import extends BaseConfig
         if ($configuredUiTaskStaleAfter !== null && $configuredUiTaskStaleAfter > 0) {
             $this->uiTaskStaleAfter = $configuredUiTaskStaleAfter;
         }
+    }
+
+    /**
+     * Validate geography groups before constructing source filters or progress keys.
+     *
+     * @param array<mixed> $groups Decoded installation configuration.
+     *
+     * @return array<string, array{indiciaLocationType: string, nbnField: string,
+     *     locations: list<array{irecordName: string, nbnName?: string}>}>
+     *
+     * @throws RuntimeException When the scope is empty, ambiguous or malformed.
+     */
+    private function normaliseGeographicRegions(array $groups): array
+    {
+        if ($groups === [] || array_is_list($groups)) {
+            throw new RuntimeException('Config Import: import.geographicRegions must be a non-empty JSON object of geography groups.');
+        }
+
+        $seen = [];
+        foreach ($groups as $key => &$group) {
+            // Leave room for the longest task prefix in import_offsets.source_key (64).
+            if (! is_string($key) || ! preg_match('/^[a-z][a-z0-9-]{0,28}$/D', $key)
+                || ! is_array($group)
+                || array_diff(array_keys($group), ['indiciaLocationType', 'nbnField', 'locations']) !== []
+                || ! is_string($group['indiciaLocationType'] ?? null)
+                || trim($group['indiciaLocationType']) === ''
+                || ! is_string($group['nbnField'] ?? null)
+                || ! preg_match('/^cl[0-9]+$/D', $group['nbnField'])
+                || ! is_array($group['locations'] ?? null)
+                || ! array_is_list($group['locations'])
+                || $group['locations'] === []) {
+                throw new RuntimeException('Config Import: invalid import.geographicRegions group ' . (string) $key . '. Expected indiciaLocationType, nbnField and a non-empty locations list.');
+            }
+
+            $group['indiciaLocationType'] = trim($group['indiciaLocationType']);
+            foreach ($group['locations'] as &$location) {
+                if (! is_array($location)
+                    || array_diff(array_keys($location), ['irecordName', 'nbnName']) !== []
+                    || ! is_string($location['irecordName'] ?? null)
+                    || trim($location['irecordName']) === ''
+                    || (array_key_exists('nbnName', $location)
+                        && (! is_string($location['nbnName']) || trim($location['nbnName']) === ''))) {
+                    throw new RuntimeException('Config Import: each geography location requires irecordName and an optional non-empty nbnName.');
+                }
+                $location['irecordName'] = trim($location['irecordName']);
+                if (isset($location['nbnName'])) {
+                    $location['nbnName'] = trim($location['nbnName']);
+                }
+                $identity = $group['indiciaLocationType'] . "\0" . $location['irecordName'];
+                if (isset($seen[$identity])) {
+                    throw new RuntimeException('Config Import: duplicate geography location ' . $location['irecordName'] . '.');
+                }
+                $seen[$identity] = true;
+            }
+            unset($location);
+        }
+        unset($group);
+
+        return $groups;
     }
 
     /**

@@ -16,6 +16,50 @@ use ReflectionMethod;
 final class IndiciaOccurrencesAdapterTest extends CIUnitTestCase
 {
     /**
+     * Match any configured type/name pair inside its own nested geography object.
+     */
+    public function testGeographyUsesNestedTypeNamePairsAndPreservesRestrictions(): void
+    {
+        $client = $this->createMock(CURLRequest::class);
+        $response = $this->createMock(ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn(200);
+        $response->method('getBody')->willReturn('{"records":[]}');
+        $client->expects($this->once())->method('post')->with(
+            $this->anything(),
+            $this->callback(function (array $options): bool {
+                $body = json_decode($options['body'], true);
+                $filters = $body['query']['bool']['filter'];
+                $geography = $filters[5]['bool'];
+                $this->assertSame(1, $geography['minimum_should_match']);
+                $this->assertCount(2, $geography['should']);
+                foreach (['Vice County', 'LRC Boundary'] as $index => $type) {
+                    $clause = $geography['should'][$index]['nested'];
+                    $this->assertSame('location.higher_geography', $clause['path']);
+                    $this->assertSame(['Cheshire'], $clause['query']['bool']['must'][0]['terms']['location.higher_geography.name.keyword']);
+                    $this->assertSame($type, $clause['query']['bool']['must'][1]['term']['location.higher_geography.type.keyword']);
+                }
+                $this->assertSame(['term' => ['metadata.confidential' => false]], $filters[0]);
+                $this->assertSame(['term' => ['metadata.private' => false]], $filters[1]);
+                $this->assertSame(['term' => ['metadata.trial' => false]], $filters[2]);
+                $this->assertSame(['term' => ['metadata.release_status' => 'R']], $filters[3]);
+                $this->assertSame('track-1', $filters[6]['range']['metadata.tracking']['gt']);
+                $this->assertSame(10000, $filters[7]['range']['location.coordinate_uncertainty_in_meters']['lte']);
+
+                return true;
+            }),
+        )->willReturn($response);
+        $adapter = new IndiciaOccurrencesAdapter($client, [
+            'endpoint' => 'https://warehouse.test/search',
+            'geographic_regions' => [
+                'vc' => ['indiciaLocationType' => 'Vice County', 'locations' => [['irecordName' => 'Cheshire']]],
+                'lrc' => ['indiciaLocationType' => 'LRC Boundary', 'locations' => [['irecordName' => 'Cheshire', 'nbnName' => 'Cheshire.']]],
+            ],
+            'maximum_coordinate_uncertainty_in_meters' => 10000,
+        ], 1);
+        $adapter->fetchPage('track-1', 10);
+    }
+
+    /**
      * Verify coarse grid references cannot be converted to tetrads.
      */
     public function testCalculateDintyTetradReturnsNullForTooCoarseGridReference(): void

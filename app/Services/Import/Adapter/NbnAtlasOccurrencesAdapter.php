@@ -105,6 +105,11 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
     }
 
     /**
+     * Build one geography stream's request without changing source cursor semantics.
+     *
+     * @param string|null $checkpoint Occurrence cursor or legacy offset.
+     * @param int         $limit Maximum page size.
+     *
      * @return array<string, mixed>
      */
     private function buildQuery(?string $checkpoint, int $limit): array
@@ -126,7 +131,10 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
         $query['startIndex'] = $cursor === null ? $legacyStart : 0;
 
         $filters = [];
-        $regionFilter = $this->buildOrFilter('cl254', $this->normalisedListValues($this->config['geographic_regions'] ?? []));
+        $regionFilter = $this->buildOrFilter(
+            $this->config['geographic_region_field'] ?? 'cl254',
+            $this->normalisedListValues($this->config['geographic_regions'] ?? []),
+        );
 
         if ($regionFilter !== null) {
             $filters[] = $regionFilter;

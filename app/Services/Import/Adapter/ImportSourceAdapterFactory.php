@@ -10,6 +10,11 @@ use InvalidArgumentException;
  */
 class ImportSourceAdapterFactory
 {
+    /**
+     * Create a factory for installation-scoped report adapters.
+     *
+     * @param ImportConfig $config Validated import configuration.
+     */
     public function __construct(
         private readonly ImportConfig $config,
     ) {
@@ -17,8 +22,13 @@ class ImportSourceAdapterFactory
 
     /**
      * Create an adapter for the requested source key.
+     *
+     * @param string      $sourceKey Source name.
+     * @param string|null $geographyGroup Active geography group for lookup reports.
+     *
+     * @return ImportSourceAdapterInterface Source adapter.
      */
-    public function make(string $sourceKey): ImportSourceAdapterInterface
+    public function make(string $sourceKey, ?string $geographyGroup = null): ImportSourceAdapterInterface
     {
         $source = strtolower($sourceKey);
         $sourceConfig = $this->config->taxonomySources[$source] ?? null;
@@ -30,7 +40,7 @@ class ImportSourceAdapterFactory
         $client = service('curlrequest');
 
         return match ($source) {
-            'indicia' => new IndiciaImportAdapter($client, $this->config, $sourceConfig),
+            'indicia' => new IndiciaImportAdapter($client, $this->config, $sourceConfig, $geographyGroup),
             default => throw new InvalidArgumentException('Unsupported import source: ' . $sourceKey),
         };
     }

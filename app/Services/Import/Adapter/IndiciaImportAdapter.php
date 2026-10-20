@@ -35,12 +35,18 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
     ];
 
     /**
-     * @param array<string, mixed> $config
+     * Create a report client, optionally scoped to one geography group.
+     *
+     * @param CURLRequest          $client HTTP client.
+     * @param \Config\Import       $config Installation configuration.
+     * @param array<string, mixed> $dataSourceConfig Source authentication metadata.
+     * @param string|null          $geographyGroup Group for geographic lookup reports.
      */
     public function __construct(
         private readonly CURLRequest $client,
         \Config\Import $config,
         array $dataSourceConfig,
+        private readonly ?string $geographyGroup = null,
     ) {
         $this->importConfig = $config;
         $this->sourceConfig = $dataSourceConfig;
@@ -115,8 +121,12 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
             $query['taxon_group_ids'] = $this->getTaxonGroupIndiciaIdsAsReportParam();
         }
         if (in_array($report, ['geographic_regions', 'grid_square_stats'], true)) {
-            $query['geographic_regions'] = $this->getConfigListAsReportParam('geographicRegions');
-            $query['location_type'] = trim((string) ($this->importConfig->geographicRegionLocationType ?? ''));
+            $group = $this->activeGeographyGroup();
+            $query['geographic_regions'] = implode(',', array_map(
+                static fn (array $location): string => "'" . str_replace("'", "''", $location['irecordName']) . "'",
+                $group['locations'],
+            ));
+            $query['location_type'] = $group['indiciaLocationType'];
         }
 
         $user = (string) ($this->importConfig->indiciaUsername ?? '');
@@ -166,6 +176,9 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
     }
 
     /**
+     * Normalize report rows without collapsing independent region/square pairs.
+     *
+     * @param string $entity Report entity.
      * @param array<int, array<string, mixed>> $rows
      * @return array<int, array<string, mixed>>
      */
@@ -177,8 +190,8 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
             'recording_schemes' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseRecordingSchemeRow($row), $rows), 'external_key'),
             'taxon_groups' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseTaxonGroupRow($row), $rows), 'external_key'),
             'taxon_ranks' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseTaxonRankRow($row), $rows), 'rank'),
-            'geographic_regions' => $this->uniqueRowsByKey(array_map(fn (array $row): array => $this->normaliseGeographicRegionRow($row), $rows), 'higher_geography_identifier'),
-            'grid_square_stats' => $this->uniqueRowsByCompositeKey(array_map(fn (array $row): array => $this->normaliseGridSquareStatRow($row), $rows), ['location_id', 'square']),
+            'geographic_regions' => array_map(fn (array $row): array => $this->normaliseGeographicRegionRow($row), $rows),
+            'grid_square_stats' => $this->uniqueRowsByCompositeKey(array_map(fn (array $row): array => $this->normaliseGridSquareStatRow($row), $rows), ['higher_geography_identifier', 'square']),
             default => [],
         };
     }
@@ -323,13 +336,30 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
     private function normaliseGeographicRegionRow(array $row): array
     {
         return [
-            // Use location code, or location ID if code is not available.
-            'higher_geography_identifier' => trim((string) ($row['higher_geography_identifier'] ?? $row['id'])),
+            'higher_geography_identifier' => trim((string) ($row['higher_geography_identifier'] ?? '')),
             'higher_geography' => trim((string) ($row['higher_geography'] ?? '')),
-            'location_type' => trim((string) ($row['location_type'] ?? $this->importConfig->geographicRegionLocationType ?? '')),
+            'location_type' => $this->activeGeographyGroup()['indiciaLocationType'],
             'footprint_geometry' => trim((string) ($row['footprint_geometry'] ?? '')),
             'data_source_abbr' => strtoupper((string) ($this->sourceConfig['abbr'] ?? 'IREC')),
         ];
+    }
+
+    /**
+     * Resolve the explicitly selected group, or the only configured group.
+     *
+     * @return array{indiciaLocationType: string, nbnField: string, locations: list<array{irecordName: string, nbnName?: string}>}
+     *
+     * @throws InvalidArgumentException When multiple groups have not been scoped.
+     */
+    private function activeGeographyGroup(): array
+    {
+        $groups = $this->importConfig->geographicRegions;
+        $key = $this->geographyGroup ?? (count($groups) === 1 ? array_key_first($groups) : null);
+        if ($key === null || ! isset($groups[$key])) {
+            throw new InvalidArgumentException('Select a configured geography group for this report.');
+        }
+
+        return $groups[$key];
     }
 
     /**

@@ -1,7 +1,7 @@
 {
   "name": "tanhub-frontend-build",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "SCSS build pipeline for tanhub",
   "scripts": {
     "css:build": "sass --style=expanded --no-source-map assets/scss/site.scss public/css/site.css",

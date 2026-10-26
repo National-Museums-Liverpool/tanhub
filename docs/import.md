@@ -453,6 +453,22 @@ The task:
 - stores first and last record date and recorder per scope
 - stores first and last verified record date and recorder where
   `identification_verification_status` starts with `V`
+- calculates species `occupied_square_score` within each rarity group and scope, and
+  `occupied_square_percentage` against all mapped squares, including unrecorded and partial squares
+- preserves manually maintained key-species and common/rare decisions through rebuilds and restarts
+
+Occupied-square scores use SQL-style percent-rank (0 to 100), with equal counts tied and a
+singleton scoring 50. Only species with positive square counts and a non-empty rarity group enter
+rankings. Percentages are independent of rarity groups; global mapped coverage deduplicates
+overlapping regions. Both use all-time counts, not the frequency-trend window. See
+[the schema contract](database.md#taxon_stats) for null values, ties and decision lifecycles.
+
+Mapped-square imports must finish before this task. Taxonomy, geographic-region and mapped-square
+imports invalidate taxon statistics so denominator and group changes refresh existing rows.
+Full rebuilds publish occupancy measurements after the final aggregate chunk; incremental batches
+refresh all peer scores before acknowledging dirty scopes. Missing mapped coverage logs a warning
+and leaves percentages NULL. If an occupied-square count exceeds mapped coverage, the task fails
+and remains retryable; correct the coverage or source data before rerunning it.
 
 ### Restarting derived statistics
 
@@ -498,7 +514,10 @@ DELETE FROM import_offsets
 WHERE source_key = 'derived-stats:taxon_year_stats';
 ```
 
-Reset taxon statistics and its dirty-scope queue:
+Reset taxon statistics and its dirty-scope queue (destructive to curated decisions):
+
+Prefer `php spark stats:taxon-stats --restart`, which preserves manually maintained key-species
+and rarity decisions. The SQL below deletes those decisions as well as calculated values.
 
 ```sql
 DELETE FROM taxon_stats;

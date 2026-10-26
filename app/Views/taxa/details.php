@@ -187,6 +187,74 @@
                             </div>
                         </div>
 
+                        <?php if ($page['isSpecies']): ?>
+                            <div class="col-12">
+                                <h2 class="h5 mb-1">Rarity by scope</h2>
+                                <p class="form-text mb-2">
+                                    Scores compare occupied 2km squares within the rarity group (lower is rarer).
+                                    Coverage is the percentage of all mapped squares occupied.
+                                    Manual status requires a rationale and never changes these measurements.
+                                    Global decisions do not override regional decisions.
+                                </p>
+                                <?php if (isset($errors['rarity_status'])): ?>
+                                    <div class="alert alert-danger" role="alert"><?= esc($errors['rarity_status']) ?></div>
+                                <?php endif; ?>
+                                <?php
+                                $oldRarity = old('rarity_status', []);
+                                $oldRarityComments = old('rarity_status_comment', []);
+                                $oldRarity = is_array($oldRarity) ? $oldRarity : [];
+                                $oldRarityComments = is_array($oldRarityComments) ? $oldRarityComments : [];
+                                ?>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered align-middle">
+                                        <thead class="table-light">
+                                        <tr>
+                                            <th scope="col">Region</th>
+                                            <th scope="col">Occupied square score</th>
+                                            <th scope="col">Occupied square percentage</th>
+                                            <th scope="col">Manual rarity status</th>
+                                            <th scope="col">Rationale</th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+                                        <?php foreach ($keySpeciesRows as $scopeRow): ?>
+                                            <?php
+                                            $scopeKey = $scopeRow['key'];
+                                            $stats = $page['rarityByScope'][$scopeKey] ?? [];
+                                            $status = $oldRarity[$scopeKey] ?? $stats['rarity_status'] ?? '';
+                                            $comment = $oldRarityComments[$scopeKey] ?? $stats['rarity_status_comment'] ?? '';
+                                            $status = is_string($status) ? $status : '';
+                                            $comment = is_string($comment) ? $comment : '';
+                                            $controlId = 'rarity_status_' . $scopeKey;
+                                            ?>
+                                            <tr>
+                                                <th scope="row"><?= esc($scopeRow['label']) ?></th>
+                                                <?php foreach (['occupied_square_score', 'occupied_square_percentage'] as $field): ?>
+                                                    <td><?= isset($stats[$field]) ? esc(number_format((float) $stats[$field], 4, '.', '')) : 'Not available' ?></td>
+                                                <?php endforeach; ?>
+                                                <td>
+                                                    <label class="visually-hidden" for="<?= esc($controlId) ?>"><?= esc($scopeRow['label']) ?> rarity status</label>
+                                                    <select class="form-select" id="<?= esc($controlId) ?>" name="rarity_status[<?= esc($scopeKey) ?>]" <?= $page['canEditDetails'] ? '' : 'disabled' ?>>
+                                                        <?php foreach (['' => 'Not set', 'common' => 'Common', 'rare' => 'Rare'] as $value => $label): ?>
+                                                            <option value="<?= esc($value) ?>" <?= $status === $value ? 'selected' : '' ?>><?= esc($label) ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                    <?php if (isset($stats['rarity_status_decision_date'])): ?>
+                                                        <div class="form-text">Decision date: <?= esc($stats['rarity_status_decision_date']) ?></div>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <label class="visually-hidden" for="<?= esc($controlId) ?>_comment"><?= esc($scopeRow['label']) ?> rarity rationale</label>
+                                                    <textarea class="form-control" id="<?= esc($controlId) ?>_comment" name="rarity_status_comment[<?= esc($scopeKey) ?>]" rows="2" maxlength="65535" <?= $page['canEditDetails'] ? '' : 'disabled' ?>><?= esc($comment) ?></textarea>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+
                         <?php foreach ($page['classificationColumns'] as $column): ?>
                             <div class="col-md-6">
                                 <label class="form-label" for="<?= esc($column) ?>">

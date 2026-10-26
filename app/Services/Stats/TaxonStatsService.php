@@ -158,6 +158,7 @@ class TaxonStatsService
 
             if (! $dryRun) {
                 if (! $hasMore) {
+                    (new TaxonOccupancyService())->refresh();
                     ($this->dirtyScopeService ?? service('statsDirtyScopeService'))
                         ->clear(StatsDirtyScopeService::TAXON);
                     $offsetModel->setCheckpoint('derived-stats:taxon_stats', null);
@@ -180,7 +181,7 @@ class TaxonStatsService
     }
 
     /**
-     * Reset derived statistics while retaining curated key-species decisions.
+     * Reset derived statistics while retaining curated key-species and rarity decisions.
      *
      * @return void
      */
@@ -190,11 +191,13 @@ class TaxonStatsService
         $db->transException(true)->transBegin();
         try {
             $existingRows = $db->table('taxon_stats')
-                ->select('uuid, taxon_id, geographic_region_id, key_species, key_species_comment, key_species_decision_date')
+                ->select('uuid, taxon_id, geographic_region_id, key_species, key_species_comment, key_species_decision_date,
+                    rarity_status, rarity_status_comment, rarity_status_decision_date')
                 ->groupStart()
                 ->where('key_species IS NOT NULL', null, false)
                 ->orWhere('key_species_comment IS NOT NULL', null, false)
                 ->orWhere('key_species_decision_date IS NOT NULL', null, false)
+                ->orWhere('rarity_status IS NOT NULL', null, false)
                 ->groupEnd()
                 ->get()
                 ->getResultArray();
@@ -224,6 +227,9 @@ class TaxonStatsService
                     'key_species' => $row['key_species'],
                     'key_species_comment' => $row['key_species_comment'],
                     'key_species_decision_date' => $row['key_species_decision_date'],
+                    'rarity_status' => $row['rarity_status'],
+                    'rarity_status_comment' => $row['rarity_status_comment'],
+                    'rarity_status_decision_date' => $row['rarity_status_decision_date'],
                 ]);
             }
 
@@ -286,6 +292,7 @@ class TaxonStatsService
             }
             if (! $dryRun && $counts['processed'] > 0) {
                 $this->refreshFrequencyTrends();
+                (new TaxonOccupancyService())->refresh();
             }
             if (! $dryRun && $processedScopeIds !== []) {
                 $dirty->acknowledge($processedScopeIds);
@@ -355,10 +362,11 @@ class TaxonStatsService
         $db->transException(true)->transBegin();
         try {
             $existingRows = $builder
-                ->select('taxon_id, geographic_region_id, key_species, key_species_comment, key_species_decision_date')
+                ->select('taxon_id, geographic_region_id, key_species, key_species_comment, key_species_decision_date,
+                    rarity_status, rarity_status_comment, rarity_status_decision_date')
                 ->get()
                 ->getResultArray();
-            $rows = $this->mergeKeySpeciesFields($rows, $existingRows);
+            $rows = $this->mergeCuratedFields($rows, $existingRows);
 
             $deleteBuilder = $db->table('taxon_stats')
                 ->where('taxon_id', (int) $scope['taxon_id']);
@@ -400,11 +408,12 @@ class TaxonStatsService
         $db->transException(true)->transBegin();
         try {
             $existingRows = $db->table('taxon_stats')
-                ->select('taxon_id, geographic_region_id, key_species, key_species_comment, key_species_decision_date')
+                ->select('taxon_id, geographic_region_id, key_species, key_species_comment, key_species_decision_date,
+                    rarity_status, rarity_status_comment, rarity_status_decision_date')
                 ->whereIn('taxon_id', $taxonIds)
                 ->get()
                 ->getResultArray();
-            $rows = $this->mergeKeySpeciesFields($rows, $existingRows);
+            $rows = $this->mergeCuratedFields($rows, $existingRows);
             $db->table('taxon_stats')->whereIn('taxon_id', $taxonIds)->delete();
 
             if ($rows !== []) {
@@ -427,7 +436,7 @@ class TaxonStatsService
      * @param array<int, array<string, mixed>> $existingRows Previous rows with curated fields.
      * @return array<int, array<string, mixed>> Rows ready for replacement.
      */
-    private function mergeKeySpeciesFields(array $rows, array $existingRows): array
+    private function mergeCuratedFields(array $rows, array $existingRows): array
     {
         $existingByScope = [];
         foreach ($existingRows as $existingRow) {
@@ -449,6 +458,9 @@ class TaxonStatsService
             $row['key_species'] = $existingRow['key_species'] ?? null;
             $row['key_species_comment'] = $existingRow['key_species_comment'] ?? null;
             $row['key_species_decision_date'] = $existingRow['key_species_decision_date'] ?? null;
+            $row['rarity_status'] = $existingRow['rarity_status'] ?? null;
+            $row['rarity_status_comment'] = $existingRow['rarity_status_comment'] ?? null;
+            $row['rarity_status_decision_date'] = $existingRow['rarity_status_decision_date'] ?? null;
         }
         unset($row);
 
@@ -458,7 +470,8 @@ class TaxonStatsService
             }
             if ($existingRow['key_species'] === null
                 && $existingRow['key_species_comment'] === null
-                && $existingRow['key_species_decision_date'] === null) {
+                && $existingRow['key_species_decision_date'] === null
+                && $existingRow['rarity_status'] === null) {
                 continue;
             }
 
@@ -482,6 +495,9 @@ class TaxonStatsService
                 'key_species' => $existingRow['key_species'],
                 'key_species_comment' => $existingRow['key_species_comment'],
                 'key_species_decision_date' => $existingRow['key_species_decision_date'],
+                'rarity_status' => $existingRow['rarity_status'],
+                'rarity_status_comment' => $existingRow['rarity_status_comment'],
+                'rarity_status_decision_date' => $existingRow['rarity_status_decision_date'],
             ];
         }
 
@@ -1316,6 +1332,9 @@ class TaxonStatsService
                 'key_species' => $row['key_species'] ?? null,
                 'key_species_comment' => $row['key_species_comment'] ?? null,
                 'key_species_decision_date' => $row['key_species_decision_date'] ?? null,
+                'rarity_status' => $row['rarity_status'] ?? null,
+                'rarity_status_comment' => $row['rarity_status_comment'] ?? null,
+                'rarity_status_decision_date' => $row['rarity_status_decision_date'] ?? null,
             ];
         }
 

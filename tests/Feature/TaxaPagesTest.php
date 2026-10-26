@@ -295,6 +295,109 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->assertSame(0, db_connect()->table('taxon_stats')->countAllResults());
     }
 
+    /**
+     * Save independent rarity decisions and display escaped measurements per scope.
+     */
+    public function testManagerCanCurateSpeciesRarityAndDisplayMeasurements(): void
+    {
+        $db = db_connect();
+        $db->table('taxa')->where('id', 1)->update(['species_id' => 1]);
+        $regionId = $this->createTestRegion('TPG-RARITY', 'Rarity test region');
+        $this->authenticateAs('taxa-manager-rarity@example.com', 'manager');
+        $this->post('taxa/1', [
+            'rarity_status' => ['global' => 'common', $regionId => 'rare'],
+            'rarity_status_comment' => ['global' => '<script>alert(1)</script>', $regionId => 'Regional evidence'],
+        ])->assertStatus(302);
+        $service = new \App\Services\Stats\TaxonRarityStatusService();
+        $scopes = $service->getForTaxon(1);
+        $this->assertSame('common', $scopes['global']['rarity_status']);
+        $this->assertSame('rare', $scopes[$regionId]['rarity_status']);
+        $this->assertSame(date('Y-m-d'), $scopes['global']['rarity_status_decision_date']);
+        $this->assertNull($scopes['global']['occupied_square_score']);
+        $this->assertNull($scopes['global']['key_species']);
+        $db->table('taxon_stats')->where('id', $scopes['global']['id'])->update([
+            'occupied_square_score' => 66.6667, 'occupied_square_percentage' => 0.6,
+        ]);
+        $page = $this->get('taxa/1');
+        $page->assertStatus(200);
+        $page->assertSee('Rarity by scope');
+        $page->assertSee('66.6667');
+        $page->assertSee('0.6000');
+        $this->assertStringContainsString('&lt;script&gt;', (string) $page->response()->getBody());
+        $this->assertStringNotContainsString('<script>alert(1)</script>', (string) $page->response()->getBody());
+        $this->assertSame(4, (int) $db->table('taxa')->where('id', 1)->get()->getRowArray()['rarity_category']);
+    }
+
+    /**
+     * Keep dates on rationale-only edits, update dates on status changes and clear unset decisions.
+     */
+    public function testRarityDecisionDateAndClearingLifecycle(): void
+    {
+        $db = db_connect();
+        $db->table('taxa')->where('id', 1)->update(['species_id' => 1]);
+        $this->authenticateAs('taxa-manager-rarity-dates@example.com', 'manager');
+        $service = new \App\Services\Stats\TaxonRarityStatusService();
+        $input = ['rarity_status' => ['global' => 'rare'], 'rarity_status_comment' => ['global' => 'Evidence']];
+        $this->post('taxa/1', $input)->assertStatus(302);
+        $db->table('taxon_stats')->where('taxon_id', 1)->update(['rarity_status_decision_date' => '2020-01-01']);
+        $input['rarity_status_comment']['global'] = 'Updated evidence';
+        $this->post('taxa/1', $input)->assertStatus(302);
+        $this->assertSame('2020-01-01', $service->getForTaxon(1)['global']['rarity_status_decision_date']);
+        $input['rarity_status']['global'] = 'common';
+        $this->post('taxa/1', $input)->assertStatus(302);
+        $this->assertSame(date('Y-m-d'), $service->getForTaxon(1)['global']['rarity_status_decision_date']);
+        $input['rarity_status']['global'] = '';
+        $this->post('taxa/1', $input)->assertStatus(302);
+        $row = $service->getForTaxon(1)['global'];
+        $this->assertNull($row['rarity_status']);
+        $this->assertNull($row['rarity_status_comment']);
+        $this->assertNull($row['rarity_status_decision_date']);
+    }
+
+    /**
+     * Reject malformed input, unknown or deleted regions, absent rationale and non-species.
+     */
+    public function testRarityValidationRejectsInvalidDecisionsWithoutWriting(): void
+    {
+        $db = db_connect();
+        $db->table('taxa')->where('id', 1)->update(['species_id' => 1]);
+        $regionId = $this->createTestRegion('TPG-RARITY-DELETED', 'Deleted rarity region');
+        $db->table('geographic_regions')->where('id', $regionId)->update(['deleted_at' => '2026-01-01']);
+        $this->authenticateAs('taxa-manager-rarity-invalid@example.com', 'manager');
+        foreach ([
+            ['rarity_status' => ['global' => 'rare']],
+            ['rarity_status' => ['global' => 'invalid']],
+            ['rarity_status' => ['global' => ['rare']]],
+            ['rarity_status' => 'rare'],
+            ['rarity_status' => ['999999' => 'rare'], 'rarity_status_comment' => ['999999' => 'Evidence']],
+            ['rarity_status' => [$regionId => 'rare'], 'rarity_status_comment' => [$regionId => 'Evidence']],
+            ['rarity_status' => [], 'rarity_status_comment' => ['global' => 'Orphan rationale']],
+        ] as $input) {
+            $this->post('taxa/1', $input)->assertStatus(302);
+            $this->assertArrayHasKey('rarity_status', session('errors'));
+            $this->assertSame(0, $db->table('taxon_stats')->countAllResults());
+        }
+        $db->table('taxa')->where('id', 1)->update(['species_id' => null]);
+        $this->post('taxa/1', [
+            'rarity_status' => ['global' => 'rare'], 'rarity_status_comment' => ['global' => 'Evidence'],
+        ])->assertStatus(302);
+        $this->assertStringContainsString('only be set for a species', session('errors')['rarity_status']);
+        $this->assertSame(0, $db->table('taxon_stats')->countAllResults());
+    }
+
+    /**
+     * Do not accept rarity decisions from a user without staff editing privileges.
+     */
+    public function testStandardUserCannotSaveRarityStatus(): void
+    {
+        db_connect()->table('taxa')->where('id', 1)->update(['species_id' => 1]);
+        $this->authenticateAs('taxa-standard-rarity@example.com', 'user');
+        $this->post('taxa/1', [
+            'rarity_status' => ['global' => 'rare'], 'rarity_status_comment' => ['global' => 'Evidence'],
+        ])->assertStatus(302);
+        $this->assertSame(0, db_connect()->table('taxon_stats')->countAllResults());
+    }
+
     public function testManagerCannotUpdateModerationFields(): void
     {
         $this->authenticateAs('taxa-manager-update@example.com', 'manager');

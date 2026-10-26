@@ -1276,6 +1276,8 @@ Examples:
 - Exposed fields:
 	- `uuid`, `taxon_identifier`, `higher_geography_identifier`,
 	  `occurrences_count`, `grid_square_count`, `mean_squares_per_year`,
+	  `occupied_square_score`, `occupied_square_percentage`,
+	  `rarity_status`, `rarity_status_comment`, `rarity_status_decision_date`,
 	  `mean_occurrences_per_year`, `frequency_trend`, `frequency_trend_state`,
 	  `key_species`, `key_species_comment`, `key_species_decision_date`,
 	  `first_record_date`,
@@ -1286,6 +1288,21 @@ Examples:
 `mean_squares_per_year` and `mean_occurrences_per_year` are means over the completed calendar years
 in the configured `taxon_year_stats` history window. Years without a row count as zero, and the
 current year is excluded because its data is incomplete.
+
+`occupied_square_score` and `occupied_square_percentage` are nullable species-only measurements,
+rounded to four decimals. The score is a SQL-style percent-rank of positive occupied-square counts
+within the same rarity group and global/regional scope (lower means rarer). Ties share scores,
+singletons receive 50, all-tied larger groups receive 0, and tied maxima may be below 100.
+Percentages use all mapped squares, including partial and unrecorded squares; globally overlapping
+regions are deduplicated. Percentages do not require a rarity group. Decision-only scopes have
+NULL measurements. See [the full calculation contract](database.md#taxon_stats).
+
+`rarity_status` returns `common`, `rare`, or JSON `null` for not set. Its nullable comment and ISO
+decision date describe the current expert decision, not an audit history. Global and regional
+decisions are independent; an override never changes either measurement or existing rarity fields.
+For example, `occupied_square_score[lte]=5` selects the bottom score band, while
+`occupied_square_percentage[lte]=0.6` selects coverage at or below 0.6%.
+Use `rarity_status[eq]=rare` or `rarity_status[eq]=null` to filter manual decisions.
 
 `key_species` returns `yes`, `no`, or `not set` for a positive, negative, or unset decision.
 `key_species_comment` and `key_species_decision_date` are also nullable. The date and comment
@@ -1360,6 +1377,11 @@ Examples:
 			"higher_geography_identifier": null,
 			"occurrences_count": 374,
 			"grid_square_count": 119,
+			"occupied_square_score": 87.1234,
+			"occupied_square_percentage": 4.2500,
+			"rarity_status": "common",
+			"rarity_status_comment": "Official assessment for this scope",
+			"rarity_status_decision_date": "2026-10-21",
 			"frequency_trend": 72,
 			"first_record_date": "1987-06-19",
 			"last_record_date": "2025-09-03",

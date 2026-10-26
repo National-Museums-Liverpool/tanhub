@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Models\TaxonModel;
 use App\Services\Search\TaxonSearchService;
+use App\Services\Stats\TaxonRarityStatusService;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\HTTP\Files\UploadedFile;
 use CodeIgniter\HTTP\RedirectResponse;
@@ -14,7 +15,7 @@ use CodeIgniter\HTTP\ResponseInterface;
  *
  * Combines read-only taxonomic data (imported via {@see \App\Services\Import})
  * with two editable concerns layered on top: manager-level detail fields
- * (rarity group, remarks) and admin-level moderation (blocked/blocked
+ * (rarity group, remarks and scoped curated decisions) and admin-level moderation (blocked/blocked
  * reason), plus taxon media upload/edit delegated to
  * {@see \App\Services\TaxonMediaUploadService} and
  * {@see \App\Services\TaxonMediaReadService}.
@@ -71,7 +72,7 @@ class Taxa extends BaseController
      * Show taxon details with associated taxon names.
      *
      * Also resolves human-readable labels for classification foreign keys,
-     * loads associated media and scoped key-species decisions, and computes the
+     * loads associated media, occupancy measurements and scoped curated decisions, and computes the
      * current user's edit/moderate permissions for the view.
      *
      * @param int $id Taxon identifier.
@@ -104,7 +105,7 @@ class Taxa extends BaseController
         $keySpeciesByScope = service('taxonKeySpeciesService')->getForTaxon($id);
         $user = auth()->user();
         $canEditDetails = $user !== null && $user->inGroup('admin', 'manager');
-        $canModerate = $user !== null && $user->inGroup('admin');
+        $canModerate = $user !== null && $user->inGroup('admin', 'manager');
 
         return $this->renderPage('taxa/details', [
             'pageTitle' => 'Taxon details',
@@ -115,6 +116,8 @@ class Taxa extends BaseController
             'taxonMedia' => $taxonMedia,
             'keySpeciesRegions' => $keySpeciesRegions,
             'keySpeciesByScope' => $keySpeciesByScope,
+            'rarityByScope' => (new TaxonRarityStatusService())->getForTaxon($id),
+            'isSpecies' => (int) ($taxon['species_id'] ?? 0) === $id,
             'referenceLabels' => $referenceLabels,
             'hierarchy' => $hierarchy,
             'canEditDetails' => $canEditDetails,
@@ -274,7 +277,7 @@ class Taxa extends BaseController
      *
      * Which fields are accepted depends on the current user's role: managers
      * (and admins) may update `rarity_group_name`, `taxon_remarks`, and
-     * key-species decisions; admins may additionally update `blocked` and
+     * key-species and species rarity decisions; admins may additionally update `blocked` and
      * `blocked_reason`. Only fields present in the submitted data and
      * permitted for the user's role are validated and written.
      *
@@ -286,7 +289,7 @@ class Taxa extends BaseController
     {
         $user = auth()->user();
         $canEditDetails = $user !== null && $user->inGroup('admin', 'manager');
-        $canModerate = $user !== null && $user->inGroup('admin');
+        $canModerate = $user !== null && $user->inGroup('admin', 'manager');
 
         if (! $canEditDetails && ! $canModerate) {
             return redirect()->back()->with('error', 'You are not authorised to update this taxon.');
@@ -297,6 +300,16 @@ class Taxa extends BaseController
         $rules = [];
         $keySpeciesScopes = null;
         $keySpeciesError = null;
+        $rarityError = null;
+        $hasRarityInput = $canEditDetails && is_array($postData)
+            && (array_key_exists('rarity_status', $postData) || array_key_exists('rarity_status_comment', $postData));
+        if ($hasRarityInput) {
+            try {
+                (new TaxonRarityStatusService())->validateInput($id, $postData);
+            } catch (\InvalidArgumentException $exception) {
+                $rarityError = $exception->getMessage();
+            }
+        }
 
         if ($canEditDetails && is_array($postData) && array_key_exists('key_species', $postData)) {
             try {
@@ -320,10 +333,13 @@ class Taxa extends BaseController
         }
 
         $valid = $rules === [] || $this->validate($rules);
-        if (! $valid || $keySpeciesError !== null) {
+        if (! $valid || $keySpeciesError !== null || $rarityError !== null) {
             $errors = $this->validator?->getErrors() ?? [];
             if ($keySpeciesError !== null) {
                 $errors['key_species'] = $keySpeciesError;
+            }
+            if ($rarityError !== null) {
+                $errors['rarity_status'] = $rarityError;
             }
 
             return redirect()->back()->withInput()->with('errors', $errors);
@@ -354,6 +370,14 @@ class Taxa extends BaseController
 
             $updateData['blocked'] = $blocked ? 1 : 0;
             $updateData['blocked_reason'] = $blocked ? ($blockedReason === '' ? null : $blockedReason) : null;
+        }
+
+        if ($hasRarityInput) {
+            try {
+                (new TaxonRarityStatusService())->saveForTaxon($id, $postData);
+            } catch (\InvalidArgumentException | \RuntimeException $exception) {
+                return redirect()->back()->withInput()->with('error', $exception->getMessage());
+            }
         }
 
         if ($keySpeciesScopes !== null) {

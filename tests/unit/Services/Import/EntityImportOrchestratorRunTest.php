@@ -144,6 +144,42 @@ final class EntityImportOrchestratorRunTest extends CIUnitTestCase
         $orchestrator->run('indicia', 'recording_schemes', 100, false, 0);
     }
 
+    /**
+     * Schedule occupancy recalculation after taxonomy or mapped-coverage imports, never dry runs.
+     */
+    public function testRelevantImportsInvalidateTaxonStatistics(): void
+    {
+        foreach (['taxa', 'grid_square_stats', 'geographic_regions'] as $entity) {
+            foreach ([false, true] as $dryRun) {
+                $adapter = $this->createMock(ImportSourceAdapterInterface::class);
+                $adapter->method('fetchBatch')->willReturn(new ImportBatch($entity, 0, [['id' => 1]], 1, false));
+                $persistence = $this->createMock(EntityImportService::class);
+                $persistence->method('import')->willReturn([
+                    'fetched' => 1, 'processed' => 1, 'inserted' => 1,
+                    'updated' => 0, 'skipped' => 0, 'errors' => 0,
+                ]);
+                $offsets = $this->createMock(ImportOffsetModel::class);
+                $offsets->method('isComplete')->willReturn(true);
+                $offsets->expects($dryRun ? $this->never() : $this->once())
+                    ->method('setCheckpoint')->with('derived-stats:taxon_stats', null);
+                $invalidated = false;
+                $offsets->method('setCompletion')->willReturnCallback(
+                    static function (string $key, bool $complete) use (&$invalidated): void {
+                        if ($key === 'derived-stats:taxon_stats') {
+                            $invalidated = ! $complete;
+                        }
+                    },
+                );
+                $runner = new EntityImportOrchestrator(
+                    new ImportConfig(), $this->mockEntityFactory($adapter), $persistence,
+                    $this->mockImportRunModel(), $this->mockDataSourceModel(), $offsets,
+                );
+                $this->assertSame('success', $runner->run('indicia', $entity, 10, $dryRun)['status']);
+                $this->assertSame(! $dryRun, $invalidated);
+            }
+        }
+    }
+
     private function mockEntityFactory(ImportSourceAdapterInterface $adapter): ImportSourceAdapterFactory
     {
         $factory = $this->createMock(ImportSourceAdapterFactory::class);

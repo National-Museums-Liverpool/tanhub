@@ -11,11 +11,12 @@ use RuntimeException;
 final class ExportTemplate
 {
     /** @var int Frozen template schema version. */
-    public const VERSION = 2;
+    public const VERSION = 3;
 
     /** @var list<string> Typed numeric fields that must not receive formula quoting. */
     private const NUMBERS = ['id', 'taxon_id', 'taxon_name_id', 'data_source_id', 'latitude',
-        'longitude', 'occurrences_count', 'grid_square_count', 'frequency_trend'];
+        'longitude', 'occurrences_count', 'grid_square_count', 'frequency_trend',
+        'occupied_square_score', 'occupied_square_percentage'];
 
     /**
      * List templates available for a resource.
@@ -68,7 +69,9 @@ final class ExportTemplate
         }
         if ($template === 'stats') {
             $columns['stats_available'] = 'Stats available';
-            foreach (['occurrences_count', 'grid_square_count', 'frequency_trend', 'frequency_trend_state',
+            foreach (['occurrences_count', 'grid_square_count', 'occupied_square_score', 'occupied_square_percentage',
+                'rarity_status', 'rarity_status_comment', 'rarity_status_decision_date',
+                'frequency_trend', 'frequency_trend_state',
                 'first_record_date', 'last_record_date', 'first_recorder', 'last_recorder',
                 'first_verified_record_date', 'last_verified_record_date',
                 'first_verified_recorder', 'last_verified_recorder'] as $field) {

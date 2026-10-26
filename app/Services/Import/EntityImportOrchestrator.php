@@ -71,6 +71,8 @@ class EntityImportOrchestrator
      * result to signal the run should be retried.
      * Geography lookup tasks process one group per invocation with independent
      * offsets; their public completion flag covers every configured group.
+     * Persisted taxonomy or coverage changes invalidate taxon statistics, since a
+     * species/group change or mapped-square change can affect unmodified peers.
      *
      * @param string   $sourceKey      Source key to import from (e.g. `indicia`).
      * @param string   $entity         Taxonomy entity to import (e.g. `taxa`,
@@ -160,6 +162,11 @@ class EntityImportOrchestrator
             $isComplete = $counts['errors'] === 0 && $batch->hasMore === false;
 
             if (! $dryRun) {
+                if (in_array($entityKey, ['taxa', 'geographic_regions', 'grid_square_stats'], true)
+                    && ((int) $counts['inserted'] > 0 || (int) $counts['updated'] > 0)) {
+                    $importOffsetModel->setCheckpoint('derived-stats:taxon_stats', null);
+                    $importOffsetModel->setCompletion('derived-stats:taxon_stats', false);
+                }
                 $importOffsetModel->setOffset($progressKey, $nextOffset);
                 if ($progress !== null) {
                     $isComplete = $progress->finish($group, $isComplete);

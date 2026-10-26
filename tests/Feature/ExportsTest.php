@@ -541,6 +541,9 @@ final class ExportsTest extends CIUnitTestCase
         db_connect()->table('taxon_stats')->insert(['uuid' => '00000000-0000-4000-8000-000000000002',
             'taxon_id' => 2, 'geographic_region_id' => null,
             'occurrences_count' => 23, 'grid_square_count' => 7, 'first_record_date' => '2010-01-01',
+            'occupied_square_score' => 4.1234, 'occupied_square_percentage' => 0.6,
+            'rarity_status' => 'common', 'rarity_status_comment' => '=Official rationale',
+            'rarity_status_decision_date' => '2026-01-01',
             'last_record_date' => '2010-12-31', 'first_recorder' => 'First recorder', 'last_recorder' => 'Last recorder',
             'first_verified_recorder' => '', 'last_verified_recorder' => '']);
         $job = $this->finish($this->exports->create(1, 'taxa', ['q' => 'Alpha'], 'stats'));
@@ -554,6 +557,11 @@ final class ExportsTest extends CIUnitTestCase
         $this->assertSame('23', $rows[1][array_search('Occurrences count', $rows[0], true)]);
         $this->assertSame('Yes', $rows[1][array_search('Stats available', $rows[0], true)]);
         $this->assertSame('Global', json_decode($job['contract'], true)['statistics_scope']);
+        $this->assertSame('4.1234', $rows[1][array_search('Occupied square score', $rows[0], true)]);
+        $this->assertSame(0.6, (float) $rows[1][array_search('Occupied square percentage', $rows[0], true)]);
+        $this->assertSame('common', $rows[1][array_search('Rarity status', $rows[0], true)]);
+        $this->assertSame("'=Official rationale", $rows[1][array_search('Rarity status comment', $rows[0], true)]);
+        $this->assertSame('2026-01-01', $rows[1][array_search('Rarity status decision date', $rows[0], true)]);
 
         db_connect()->table('geographic_regions')->upsert(['id' => 91, 'higher_geography' => 'Westshire',
             'higher_geography_identifier' => 'EXPORT-REGION', 'location_type' => 'Vice county', 'data_source_id' => 91]);
@@ -565,6 +573,8 @@ final class ExportsTest extends CIUnitTestCase
         $regionalRows = $this->records($regional);
         $this->assertSame('Westshire', json_decode($regional['contract'], true)['statistics_scope']);
         $this->assertSame('7', $regionalRows[1][array_search('Occurrences count', $regionalRows[0], true)]);
+        $this->assertSame('', $regionalRows[1][array_search('Rarity status', $regionalRows[0], true)]);
+        $this->assertSame('', $regionalRows[1][array_search('Occupied square score', $regionalRows[0], true)]);
 
         $user = $this->staffUser();
         $owned = $this->exports->create((int) $user->id, 'taxa', ['geographic_region_id' => '91'], 'stats');
@@ -588,6 +598,24 @@ final class ExportsTest extends CIUnitTestCase
         $rows = $this->records($this->finish($job));
         $this->assertSame('Global', $rows[1][array_search('Stored all-date statistics scope', $rows[0], true)]);
         $this->assertSame('No', $rows[1][array_search('Stored all-date statistics available', $rows[0], true)]);
+    }
+
+    /**
+     * Version two exports keep their frozen pre-occupancy columns and remain resumable.
+     */
+    public function testVersionTwoTemplateRetainsFrozenColumns(): void
+    {
+        $job = $this->exports->create(1, 'taxa', [], 'stats');
+        $contract = json_decode($job['contract'], true);
+        $contract['version'] = 2;
+        foreach (['occupied_square_score', 'occupied_square_percentage', 'rarity_status',
+            'rarity_status_comment', 'rarity_status_decision_date'] as $field) {
+            unset($contract['columns'][$field]);
+        }
+        db_connect()->table('export_jobs')->where('id', $job['id'])->update(['contract' => json_encode($contract)]);
+        $rows = $this->records($this->finish($job));
+        $this->assertSame(array_values($contract['columns']), $rows[0]);
+        $this->assertNotContains('Occupied square score', $rows[0]);
     }
 
     /**

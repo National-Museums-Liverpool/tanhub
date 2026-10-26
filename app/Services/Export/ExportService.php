@@ -179,7 +179,7 @@ final class ExportService
             $lock = $this->fileLock($uuid, LOCK_EX);
             try {
                 $contract = json_decode($job['contract'], true, 512, JSON_THROW_ON_ERROR);
-                if (! in_array($contract['version'], [1, ExportTemplate::VERSION], true)) {
+                if (! in_array($contract['version'], [1, 2, ExportTemplate::VERSION], true)) {
                     throw new RuntimeException('The export template changed. Cancel and create a new export.');
                 }
                 if ($job['phase'] === 'capturing') {

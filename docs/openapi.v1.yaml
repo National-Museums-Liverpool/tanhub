@@ -302,6 +302,18 @@ paths:
         `/api/v1/taxon-stats?key_species[eq]=1&higher_geography_identifier[eq]=13` lists key
         species for active region 13. Rows for deleted regions are excluded, so the null geography
         filter selects only global rows.
+        occupied_square_score and occupied_square_percentage are nullable species-only
+        measurements rounded to four decimals. Scores use SQL percent-rank of positive occupied
+        square counts within rarity_group_name and scope, with tied counts sharing scores and
+        singletons receiving 50. All-tied larger groups receive 0; tied maxima may be below 100.
+        Percentages use all mapped squares, including partial and unrecorded squares, with
+        globally deduplicated coverage across active regions. Missing coverage and decision-only
+        scopes have null percentages. Missing rarity groups have null scores.
+        rarity_status is common, rare, or null, with rarity_status_comment and
+        rarity_status_decision_date describing the current expert decision, not a history.
+        Decisions do not alter measured values and do not inherit between global and regional
+        scopes. All five fields support the standard filtering and sorting syntax, for example
+        occupied_square_score[lte]=5, occupied_square_percentage[lte]=0.6, or rarity_status[eq]=rare.
         Use the taxon_rank query filter, such as taxon_rank=species, when reviewing one level.
       parameters:
         - $ref: '#/components/parameters/TaxonStatsInclude'

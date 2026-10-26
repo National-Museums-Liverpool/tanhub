@@ -42,6 +42,7 @@ class ImportTaskDependencyService
             'indicia-taxonomy:taxon_names',
         ],
         'derived-stats:taxon_stats' => [
+            'indicia-taxonomy:grid_square_stats',
             'indicia-occurrences:occurrences',
             'nbn-occurrences:occurrences',
             'derived-stats:taxon_year_stats',

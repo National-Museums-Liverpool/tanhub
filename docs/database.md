@@ -531,6 +531,11 @@ access stats across the dataset or region filtered.
 | geographic_region_id       | BIGINT        | YES  | FK, UQ* |                | Region, or null if applies to all regions                                              |
 | occurrences_count          | INT           | NO   |         |                | Number of occurrences for the taxon and region scope                                   |
 | grid_square_count          | INT           | NO   |         |                | Number of grid squares for the taxon and region scope                                  |
+| occupied_square_score      | DECIMAL(7,4)  | YES  |         | NULL           | Species percent-rank of occupied squares within its rarity group and scope; singleton 50 |
+| occupied_square_percentage | DECIMAL(7,4)  | YES  |         | NULL           | Percentage of all mapped 2km squares occupied by the species in this scope              |
+| rarity_status              | VARCHAR(6)    | YES  |         | NULL           | Independent curated species status: common, rare, or NULL for not set                   |
+| rarity_status_comment      | TEXT          | YES  |         | NULL           | Required rationale for a set rarity status; cleared when status is not set              |
+| rarity_status_decision_date | DATE         | YES  |         | NULL           | Date status last changed to common/rare; rationale-only edits retain the date            |
 | mean_squares_per_year      | DECIMAL(16,4) | NO   |         | 0              | Mean yearly grid-square count within the configured completed-year window              |
 | mean_occurrences_per_year  | DECIMAL(16,4) | NO   |         | 0              | Mean yearly occurrence count within the configured completed-year window               |
 | frequency_trend            | INT           | YES  |         | NULL           | Relative frequency trend from 0 (most declining) to 100 (most increasing)              |
@@ -551,6 +556,34 @@ Key-species decisions are manually maintained alongside derived statistics. Glob
 the row whose `geographic_region_id` is null; regional decisions use that region's row. When a
 decision scope has no statistics yet, the admin UI can create a zero-count row. Full and incremental
 statistics rebuilds preserve these curated fields and any decision-only scope rows.
+
+Occupancy measurements use all-time active occurrence counts and only apply to species (a taxon
+whose `species_id` is its own ID). Scores compare positive occupied-square counts within the same
+trimmed `rarity_group_name` and scope: `100 * (RANK - 1) / (group size - 1)`, using SQL-style rank
+gaps for ties. A singleton receives 50. Equal counts share scores; an all-tied multi-species group
+receives 0, and tied maxima can be below 100. Missing groups, zero-square and decision-only rows
+have NULL scores. Client code chooses rarity cut-offs rather than the database.
+
+The percentage denominator counts every distinct mapped square for the active region, including
+partial and unrecorded squares. Global coverage uses the deduplicated union across active
+regions, not a sum of regional counts. Rarity-group membership does not affect percentages.
+Recorded species without usable squares receive 0 when coverage is available; decision-only
+rows remain NULL. Missing coverage produces NULL and a warning; a numerator exceeding available
+coverage fails the statistics task explicitly. Both measurements are rounded to four decimals.
+
+The nullable columns use portable CodeIgniter Forge definitions for MySQL and SQLite; no native
+enum or driver-specific ranking function is required. The migration invalidates existing taxon
+statistics so the next completed rebuild populates the new measurements. Full rebuilds refresh
+measurements after the final aggregate chunk; incremental runs refresh all peers before
+acknowledging dirty scopes. Taxonomy and mapped-coverage imports invalidate the full rebuild.
+
+Rarity status is species-only and is separate from key-species decisions and measured occupancy.
+Managers and admins can save a status per active region and independently for the global scope,
+including scopes without records. Setting a status requires a rationale; unsetting clears its
+rationale and date. Dates change with the status, not with rationale-only edits. Rebuilds,
+restarts and removal of the last occurrence preserve these current decisions and decision-only
+rows. There is no history or global-to-region inheritance. Status does not change the occupancy
+fields, `taxa.rarity_category`, or `grid_square_stats.rarity_score`.
 
 The yearly mean fields are calculated from `taxon_year_stats` for the same taxon and region scope.
 Their denominator is the number of completed calendar years in the configured history window;

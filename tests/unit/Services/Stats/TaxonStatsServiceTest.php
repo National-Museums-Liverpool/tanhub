@@ -34,6 +34,13 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxa');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'taxon_ranks');
         $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'geographic_regions');
+        $this->db->query('DROP TABLE IF EXISTS ' . $prefix . 'grid_square_stats');
+        $this->db->query('CREATE TABLE ' . $prefix . 'grid_square_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            square VARCHAR(12) NOT NULL,
+            partial BOOLEAN NOT NULL DEFAULT 0,
+            geographic_region_id INTEGER NULL
+        )');
 
         $this->db->query('CREATE TABLE ' . $prefix . 'taxon_ranks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,6 +56,7 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             family_id INTEGER NULL,
             genus_id INTEGER NULL,
             species_id INTEGER NULL,
+            rarity_group_name VARCHAR(100) NULL,
             blocked INTEGER NOT NULL DEFAULT 0,
             deleted_at DATETIME NULL
         )');
@@ -95,6 +103,11 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             mean_occurrences_per_year DECIMAL(16,4) NOT NULL DEFAULT 0,
             frequency_trend INTEGER NULL DEFAULT NULL,
             frequency_trend_state VARCHAR(32) NULL DEFAULT NULL,
+            occupied_square_score DECIMAL(7,4) NULL,
+            occupied_square_percentage DECIMAL(7,4) NULL,
+            rarity_status VARCHAR(6) NULL,
+            rarity_status_comment TEXT NULL,
+            rarity_status_decision_date DATE NULL,
             first_record_date DATE NULL,
             last_record_date DATE NULL,
             first_recorder VARCHAR(255) NOT NULL,
@@ -236,6 +249,222 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         foreach ($allRows as $row) {
             $this->assertSame(36, strlen((string) $row['uuid']));
         }
+    }
+
+    /**
+     * Rank species using SQL percent-rank semantics and deduplicated mapped coverage.
+     */
+    public function testOccupancyUsesPercentRankAndIndependentScopeDenominators(): void
+    {
+        $this->seedMappedSquares();
+        $this->db->table('grid_square_stats')->where('square', 'SQ1')->update(['partial' => 1]);
+        $this->db->table('grid_square_stats')->insert(['square' => ' sq1 ', 'geographic_region_id' => 22]);
+        foreach ([1 => 1, 2 => 1, 4 => 5, 5 => 10] as $taxonId => $squares) {
+            $this->addOccupancyStats($taxonId, $squares);
+        }
+        $this->addOccupancyStats(1, 1, 11);
+        $this->addOccupancyStats(1, 1, 22);
+        (new \App\Services\Stats\TaxonOccupancyService())->refresh();
+
+        foreach ([1 => 0, 2 => 0, 4 => 66.6667, 5 => 100] as $taxonId => $score) {
+            $row = $this->findTaxonStatRow($taxonId, null);
+            $this->assertEqualsWithDelta($score, (float) $row['occupied_square_score'], 0.00001);
+        }
+        $this->assertSame(10.0, (float) $this->findTaxonStatRow(1, null)['occupied_square_percentage']);
+        $this->assertSame(12.5, (float) $this->findTaxonStatRow(1, 11)['occupied_square_percentage']);
+        $this->assertSame(20.0, (float) $this->findTaxonStatRow(1, 22)['occupied_square_percentage']);
+        $this->assertSame(50.0, (float) $this->findTaxonStatRow(1, 11)['occupied_square_score']);
+    }
+
+    /**
+     * Keep ties equal, including all-tied groups and tied maxima below 100.
+     */
+    public function testOccupancyTiesAndSingletonGroups(): void
+    {
+        $this->seedMappedSquares();
+        foreach ([1 => 1, 2 => 5, 4 => 5] as $taxonId => $squares) {
+            $this->addOccupancyStats($taxonId, $squares);
+        }
+        $service = new \App\Services\Stats\TaxonOccupancyService();
+        $service->refresh();
+        $this->assertSame(50.0, (float) $this->findTaxonStatRow(2, null)['occupied_square_score']);
+        $this->assertSame(50.0, (float) $this->findTaxonStatRow(4, null)['occupied_square_score']);
+        $this->db->table('taxon_stats')->update(['grid_square_count' => 1]);
+        $service->refresh();
+        $this->assertSame(0.0, (float) $this->findTaxonStatRow(1, null)['occupied_square_score']);
+        $this->assertSame(0.0, (float) $this->findTaxonStatRow(2, null)['occupied_square_score']);
+        $this->db->table('taxa')->where('id', 1)->update(['rarity_group_name' => 'Separate']);
+        $service->refresh();
+        $this->assertSame(50.0, (float) $this->findTaxonStatRow(1, null)['occupied_square_score']);
+        $this->assertSame(0.0, (float) $this->findTaxonStatRow(2, null)['occupied_square_score']);
+    }
+
+    /**
+     * Distinguish missing groups, ungridded records, inactive taxa and decision-only scopes.
+     */
+    public function testOccupancyEligibilityAndMissingCoverage(): void
+    {
+        $this->addOccupancyStats(1, 1, null, null);
+        $this->addOccupancyStats(2, 0);
+        $this->addOccupancyStats(4, 0);
+        $this->db->table('taxon_stats')->where('taxon_id', 4)->update(['occurrences_count' => 0]);
+        $this->addOccupancyStats(5, 1);
+        $this->db->table('taxa')->where('id', 5)->update(['species_id' => 1]);
+        $this->addOccupancyStats(6, 1);
+        $this->db->table('taxa')->where('id', 6)->update(['blocked' => 1]);
+        $this->addOccupancyStats(7, 1);
+        $this->db->table('taxa')->where('id', 7)->update(['deleted_at' => '2026-01-01']);
+        $service = new \App\Services\Stats\TaxonOccupancyService();
+        $service->refresh();
+        $this->assertNull($this->findTaxonStatRow(1, null)['occupied_square_percentage']);
+        $this->seedMappedSquares();
+        $service->refresh();
+        $this->assertNull($this->findTaxonStatRow(1, null)['occupied_square_score']);
+        $this->assertSame(10.0, (float) $this->findTaxonStatRow(1, null)['occupied_square_percentage']);
+        $this->assertNull($this->findTaxonStatRow(2, null)['occupied_square_score']);
+        $this->assertSame(0.0, (float) $this->findTaxonStatRow(2, null)['occupied_square_percentage']);
+        foreach ([4, 5, 6, 7] as $taxonId) {
+            $this->assertNull($this->findTaxonStatRow($taxonId, null)['occupied_square_score']);
+            $this->assertNull($this->findTaxonStatRow($taxonId, null)['occupied_square_percentage']);
+        }
+    }
+
+    /**
+     * Round percentages and recompute denominators after mapped coverage or active regions change.
+     */
+    public function testOccupancyCoverageChangesAndRounding(): void
+    {
+        foreach (['SQ1', 'SQ2', 'SQ3'] as $square) {
+            $this->db->table('grid_square_stats')->insert(['square' => $square, 'geographic_region_id' => 11]);
+        }
+        $this->db->table('grid_square_stats')->insert(['square' => 'SQ4', 'geographic_region_id' => 22]);
+        $this->addOccupancyStats(1, 1);
+        $this->addOccupancyStats(1, 1, 11);
+        $this->addOccupancyStats(1, 1, 22);
+        $service = new \App\Services\Stats\TaxonOccupancyService();
+        $service->refresh();
+        $this->assertSame(25.0, (float) $this->findTaxonStatRow(1, null)['occupied_square_percentage']);
+        $this->assertSame(33.3333, (float) $this->findTaxonStatRow(1, 11)['occupied_square_percentage']);
+        $this->db->table('geographic_regions')->where('id', 22)->update(['deleted_at' => '2026-01-01']);
+        $service->refresh();
+        $this->assertSame(33.3333, (float) $this->findTaxonStatRow(1, null)['occupied_square_percentage']);
+        $this->assertNull($this->findTaxonStatRow(1, 22)['occupied_square_score']);
+        $this->assertNull($this->findTaxonStatRow(1, 22)['occupied_square_percentage']);
+    }
+
+    /**
+     * Preserve scopes whose only curated value is rarity through reset and an empty full rebuild.
+     */
+    public function testRarityOnlyDecisionSurvivesRestartAndEmptyRebuild(): void
+    {
+        $this->addOccupancyStats(1, 2, 22);
+        $this->db->table('taxon_stats')->update([
+            'rarity_status' => 'rare', 'rarity_status_comment' => 'Retain expert decision',
+            'rarity_status_decision_date' => '2026-01-01',
+        ]);
+        $service = new TaxonStatsService();
+        $service->resetFullRebuild();
+        $this->assertSame('success', $this->runAllTaxonStatBatches($service)['status']);
+        $row = $this->findTaxonStatRow(1, 22);
+        $this->assertSame('rare', $row['rarity_status']);
+        $this->assertSame('Retain expert decision', $row['rarity_status_comment']);
+        $this->assertSame('2026-01-01', $row['rarity_status_decision_date']);
+        $this->assertSame(0, (int) $row['occurrences_count']);
+        $this->assertNull($row['occupied_square_score']);
+        $this->assertNull($row['occupied_square_percentage']);
+    }
+
+    /**
+     * Add and remove the portable schema and invalidate an existing completed checkpoint.
+     */
+    public function testOccupancyMigrationIsReversibleAndSchedulesBackfill(): void
+    {
+        require_once APPPATH . 'Database/Migrations/2026-10-21-090000_AddTaxonOccupancyAndRarity.php';
+        $migration = new \App\Database\Migrations\AddTaxonOccupancyAndRarity();
+        $migration->down();
+        $this->db->resetDataCache();
+        $this->assertFalse($this->db->fieldExists('occupied_square_score', 'taxon_stats'));
+        $offsets = model(\App\Models\ImportOffsetModel::class);
+        $offsets->setCompletion('derived-stats:taxon_stats', true);
+        $offsets->setCheckpoint('derived-stats:taxon_stats', '3:100');
+        $migration->up();
+        $this->db->resetDataCache();
+        $this->assertTrue($this->db->fieldExists('occupied_square_score', 'taxon_stats'));
+        $this->assertTrue($this->db->fieldExists('rarity_status', 'taxon_stats'));
+        $this->assertFalse($offsets->isComplete('derived-stats:taxon_stats'));
+        $this->assertNull($offsets->getCheckpoint('derived-stats:taxon_stats'));
+    }
+
+    /**
+     * Recalculate peers before acknowledging incremental scopes, retrying coverage failures.
+     */
+    public function testIncrementalOccupancyRefreshesPeersAndRetainsFailedWork(): void
+    {
+        $this->seedMappedSquares();
+        foreach ([1 => 1, 2 => 5, 4 => 10] as $taxonId => $squares) {
+            $this->addOccupancyStats($taxonId, $squares);
+        }
+        (new \App\Services\Stats\TaxonOccupancyService())->refresh();
+        $this->assertSame(50.0, (float) $this->findTaxonStatRow(2, null)['occupied_square_score']);
+        for ($id = 1; $id <= 6; $id++) {
+            $this->db->table('occurrences')->insert([
+                'id' => $id, 'taxon_id' => 1, 'grid_ref_2km' => 'SQ' . $id,
+            ]);
+        }
+        model(\App\Models\ImportOffsetModel::class)->setCompletion('derived-stats:taxon_stats', true);
+        $this->db->table('stats_dirty_scopes')->insert([
+            'scope_key' => 'taxon|exact|1|global|all', 'stat_type' => 'taxon',
+            'projection' => 'exact', 'taxon_id' => 1,
+        ]);
+        $this->db->table('taxon_stats')->where('taxon_id', 4)->update(['grid_square_count' => 11]);
+        $service = new TaxonStatsService(new \App\Services\Stats\StatsDirtyScopeService());
+        $failed = $service->run();
+        $this->assertSame('failed', $failed['status']);
+        $this->assertSame(1, $this->db->table('stats_dirty_scopes')->countAllResults());
+        $this->db->table('grid_square_stats')->insert(['square' => 'SQ11', 'geographic_region_id' => 11]);
+        $result = $service->run();
+        $this->assertSame('success', $result['status']);
+        $this->assertSame(0, $this->db->table('stats_dirty_scopes')->countAllResults());
+        $this->assertSame(0.0, (float) $this->findTaxonStatRow(2, null)['occupied_square_score']);
+        $this->assertSame(50.0, (float) $this->findTaxonStatRow(1, null)['occupied_square_score']);
+    }
+
+    /**
+     * Create overlapping mapped coverage with eight and four squares, ten unique globally.
+     */
+    private function seedMappedSquares(): void
+    {
+        for ($id = 1; $id <= 10; $id++) {
+            if ($id <= 8) {
+                $this->db->table('grid_square_stats')->insert(['square' => 'SQ' . $id, 'geographic_region_id' => 11]);
+            }
+            if ($id >= 7) {
+                $this->db->table('grid_square_stats')->insert(['square' => 'SQ' . $id, 'geographic_region_id' => 22]);
+            }
+        }
+    }
+
+    /**
+     * Add a species and stored counts without requiring occurrence fixture hydration.
+     *
+     * @param int $taxonId Species identifier.
+     * @param int $squares Occupied-square count.
+     * @param int|null $regionId Region identifier or global.
+     * @param string|null $group Comparison group or missing group.
+     */
+    private function addOccupancyStats(int $taxonId, int $squares, ?int $regionId = null, ?string $group = 'Test'): void
+    {
+        $this->db->table('taxa')->upsert([
+            'id' => $taxonId, 'taxon_identifier' => 'TX-' . $taxonId, 'taxon_rank_id' => 1,
+            'species_id' => $taxonId, 'rarity_group_name' => $group,
+        ]);
+        $this->db->table('taxon_stats')->insert([
+            'uuid' => \App\Services\Stats\TaxonStatsIdentity::uuidForScope($taxonId, $regionId),
+            'taxon_id' => $taxonId, 'geographic_region_id' => $regionId,
+            'occurrences_count' => max(1, $squares), 'grid_square_count' => $squares,
+            'first_recorder' => '', 'last_recorder' => '',
+            'first_verified_recorder' => '', 'last_verified_recorder' => '',
+        ]);
     }
 
     /**
@@ -435,6 +664,9 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
                 'key_species' => 1,
                 'key_species_comment' => 'Global decision',
                 'key_species_decision_date' => '2026-01-02',
+                'rarity_status' => 'common',
+                'rarity_status_comment' => 'Expert assessment',
+                'rarity_status_decision_date' => '2026-01-02',
             ],
             [
                 'uuid' => '00000000-0000-4000-8000-000000000111',
@@ -447,6 +679,9 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
                 'key_species' => 0,
                 'key_species_comment' => 'Decision without regional records',
                 'key_species_decision_date' => '2026-01-03',
+                'rarity_status' => 'rare',
+                'rarity_status_comment' => 'Regional assessment',
+                'rarity_status_decision_date' => '2026-01-03',
             ],
         ]);
 
@@ -462,6 +697,12 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $this->assertSame('Decision without regional records', $region['key_species_comment']);
         $this->assertSame('2026-01-03', $region['key_species_decision_date']);
         $this->assertSame(0, (int) $region['occurrences_count']);
+        $this->assertSame('common', $global['rarity_status']);
+        $this->assertSame('Expert assessment', $global['rarity_status_comment']);
+        $this->assertSame('2026-01-02', $global['rarity_status_decision_date']);
+        $this->assertSame('rare', $region['rarity_status']);
+        $this->assertNull($region['occupied_square_score']);
+        $this->assertNull($region['occupied_square_percentage']);
     }
 
     /**
@@ -481,9 +722,9 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             'last_recorder' => '',
             'first_verified_recorder' => '',
             'last_verified_recorder' => '',
-            'key_species' => 1,
-            'key_species_comment' => 'Keep after record removal',
-            'key_species_decision_date' => '2026-01-04',
+            'rarity_status' => 'rare',
+            'rarity_status_comment' => 'Keep after record removal',
+            'rarity_status_decision_date' => '2026-01-04',
         ]);
         $this->db->table('import_offsets')->insert([
             'source_key' => 'derived-stats:taxon_stats',
@@ -503,8 +744,11 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
 
         $this->assertSame('success', $counts['status']);
         $row = $this->findTaxonStatRow(1, 22);
-        $this->assertSame(1, (int) $row['key_species']);
-        $this->assertSame('Keep after record removal', $row['key_species_comment']);
+        $this->assertSame('rare', $row['rarity_status']);
+        $this->assertSame('Keep after record removal', $row['rarity_status_comment']);
+        $this->assertSame('2026-01-04', $row['rarity_status_decision_date']);
+        $this->assertNull($row['occupied_square_score']);
+        $this->assertNull($row['occupied_square_percentage']);
         $this->assertSame(0, (int) $row['occurrences_count']);
     }
 
@@ -548,6 +792,11 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             'key_species' => 1,
             'key_species_comment' => 'Retain through restart',
             'key_species_decision_date' => '2026-01-05',
+            'rarity_status' => 'common',
+            'rarity_status_comment' => 'Preserve rarity',
+            'rarity_status_decision_date' => '2026-01-06',
+            'occupied_square_score' => 100,
+            'occupied_square_percentage' => 10,
         ]);
 
         (new TaxonStatsService())->resetFullRebuild();
@@ -560,6 +809,11 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $this->assertSame(1, (int) $row['key_species']);
         $this->assertSame('Retain through restart', $row['key_species_comment']);
         $this->assertSame('2026-01-05', $row['key_species_decision_date']);
+        $this->assertSame('common', $row['rarity_status']);
+        $this->assertSame('Preserve rarity', $row['rarity_status_comment']);
+        $this->assertSame('2026-01-06', $row['rarity_status_decision_date']);
+        $this->assertNull($row['occupied_square_score']);
+        $this->assertNull($row['occupied_square_percentage']);
     }
 
     /**

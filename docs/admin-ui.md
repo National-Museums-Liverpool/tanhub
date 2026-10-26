@@ -146,6 +146,30 @@ earlier decisions.
 2. In **Key species by scope**, choose a decision for each region or for **Global**.
 3. Add or update the rationale comment where useful, then save the page.
 
+### Review species rarity and set a common/rare status
+
+On a species details page, **Rarity by scope** shows the occupied-square score and percentage for
+**Global** and each active region. Lower scores mean fewer occupied 2km squares compared with
+species in the same rarity group. Percentages compare occupied squares with all mapped squares,
+including unrecorded and partial squares. **Not available** means the measurement is not eligible
+or mapped coverage is missing; it is not the same as zero.
+
+Managers and admins can select **Common**, **Rare**, or **Not set** independently for each scope.
+Common and Rare require a rationale. Saving a changed status records today's decision date;
+editing only the rationale retains the date. Not set clears the rationale and date. These fields
+capture the current expert assessment, not a change history, and survive statistics rebuilds and
+loss of the last occurrence.
+
+The status never changes the two measurements, rarity category, grid-square rarity score or
+key-species decision. Global status does not supply a default for regions. Use client-side
+thresholds such as score at or below 5 or coverage at or below 0.6% to interpret measurements.
+
+**Taxon grid with stored all-date statistics** CSV downloads include both measurements and the
+manual status, rationale and date for the selected region or global scope. Unavailable values
+remain blank, and rationale text has the same spreadsheet-formula protection as other text.
+Detailed occurrence and grid-only templates are unchanged. Existing export jobs retain their
+frozen columns; create a new statistics export to include the new fields.
+
 ### Add a media file to a taxon
 
 You can attach an image to an individual taxon from its details page. Use a clear, relevant image
@@ -439,11 +463,11 @@ List page:
 
 Detail/edit page:
 
-Allows you to review the details stored for a taxon, including the names. Admins can block a taxon
-from appearing in reports and set its blocked reason. Admins and managers can specify remarks for
-a taxon and override the rarity group name. The rarity group name defaults to the associated
-recording scheme name and groups taxa together into collections within which they can be compared
-for rarity calculations, so they are only compared to similarly recorded taxa.
+Allows you to review the details stored for a taxon, including the names. Admins and managers can
+block a taxon from appearing in reports and set its blocked reason. Admins and managers can specify
+remarks for a taxon and override the rarity group name. The rarity group name defaults to the
+associated recording scheme name and groups taxa together into collections within which they can be
+compared for rarity calculations, so they are only compared to similarly recorded taxa.
 
 - Read-only: taxon_identifier, scientific_name_identifier, scientific_name, vernacular_name,
   classification FKs, rarity category.
@@ -452,8 +476,7 @@ for rarity calculations, so they are only compared to similarly recorded taxa.
 - Classification FKs are dynamic self-references on taxa (for example order_id, family_id,
   species_id) rather than separate order, family, or superfamily tables.
 - Read-only table: associated taxon names (name, given_name_identifier, accepted, scientific).
-- Editable: blocked, blocked_reason (admin only), taxon_remarks, rarity_group_name (manager or
-  admin only).
+- Editable: blocked, blocked_reason, taxon_remarks, rarity_group_name (manager or admin only).
 - Taxon media upload:
   - Route: POST /taxa/{id}/media.
   - Roles allowed: admin and manager.

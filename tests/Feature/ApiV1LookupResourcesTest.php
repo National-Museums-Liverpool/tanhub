@@ -620,6 +620,35 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertArrayHasKey('mean_occurrences_per_year', $json['data'][0]);
     }
 
+    /**
+     * Expose nullable occupancy and manual status fields with numeric and status filtering.
+     */
+    public function testTaxonStatsOccupancyAndRarityFieldsSupportFilteringAndSorting(): void
+    {
+        db_connect()->table('taxon_stats')->where('id', 1)->update([
+            'occupied_square_score' => 4.1234, 'occupied_square_percentage' => 0.6,
+            'rarity_status' => 'common', 'rarity_status_comment' => 'Official regional assessment',
+            'rarity_status_decision_date' => '2026-01-01',
+        ]);
+        $result = $this->get('api/v1/taxon-stats?occupied_square_score[lte]=5'
+            . '&occupied_square_percentage[lte]=0.6&rarity_status[eq]=common&sort=occupied_square_score');
+        $result->assertStatus(200);
+        $json = json_decode($result->getJSON(), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertSame(1, $json['meta']['count']);
+        $row = $json['data'][0];
+        $this->assertSame(4.1234, (float) $row['occupied_square_score']);
+        $this->assertSame(0.6, (float) $row['occupied_square_percentage']);
+        $this->assertSame('common', $row['rarity_status']);
+        $this->assertSame('Official regional assessment', $row['rarity_status_comment']);
+        $this->assertSame('2026-01-01', $row['rarity_status_decision_date']);
+        $this->get('api/v1/taxon-stats?rarity_status[eq]=rare')->assertStatus(200);
+        db_connect()->table('taxon_stats')->where('id', 1)->update(['rarity_status' => null]);
+        $unset = $this->get('api/v1/taxon-stats?rarity_status[eq]=null');
+        $unset->assertStatus(200);
+        $json = json_decode($unset->getJSON(), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertNull($json['data'][0]['rarity_status']);
+    }
+
     public function testTaxonStatsListSupportsTaxonRankFilter(): void
     {
         $result = $this->get('api/v1/taxon-stats?taxon_rank=species');
@@ -1516,6 +1545,11 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             last_verified_recorder VARCHAR(255) NOT NULL
         )');
         $taxonStatsColumns = [
+            'occupied_square_score' => 'DECIMAL(7,4) NULL',
+            'occupied_square_percentage' => 'DECIMAL(7,4) NULL',
+            'rarity_status' => 'VARCHAR(6) NULL',
+            'rarity_status_comment' => 'TEXT NULL',
+            'rarity_status_decision_date' => 'DATE NULL',
             'mean_squares_per_year' => 'DECIMAL(16,4) NOT NULL DEFAULT 0',
             'mean_occurrences_per_year' => 'DECIMAL(16,4) NOT NULL DEFAULT 0',
             'key_species' => 'BOOLEAN NULL DEFAULT NULL',

@@ -2,16 +2,12 @@
 
 <?= $this->section('content') ?>
 <section class="page-section auth-page">
-    <div class="row g-4 align-items-stretch">
-        <div class="col-lg-5">
-            <div class="auth-panel p-4 p-lg-5 h-100">
-                <span class="eyebrow mb-3">Taxonomy</span>
-                <h1 class="section-heading mb-3">Edit taxon group</h1>
-                <p class="section-copy mb-4">Update the friendly display name for this taxon group.</p>
-            </div>
-        </div>
-        <div class="col-lg-7">
-            <div class="auth-card p-4 p-lg-5">
+    <div class="mb-4">
+        <span class="eyebrow mb-2">Taxonomy</span>
+        <h1 class="section-heading mb-2">Edit taxon group</h1>
+        <p class="section-copy mb-0">Update the friendly display name for this taxon group.</p>
+    </div>
+    <div class="auth-card p-3 p-md-4">
                 <?php if (session()->getFlashdata('message')): ?>
                     <div class="alert alert-success" role="alert"><?= esc(session()->getFlashdata('message')) ?></div>
                 <?php endif; ?>
@@ -73,7 +69,5 @@
                     </div>
                 </form>
             </div>
-        </div>
-    </div>
 </section>
 <?= $this->endSection() ?>

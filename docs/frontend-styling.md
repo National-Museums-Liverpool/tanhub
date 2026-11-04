@@ -16,6 +16,8 @@ editing the generated file; otherwise the next build will overwrite your changes
 - Output: `public/css/site.css`
 
 The layout template loads Bootstrap from CDN and then loads `public/css/site.css`.
+The shared `.app-container` follows Bootstrap's container widths, with a 1520px maximum
+width on viewports at least 1600px wide. Its rule lives in `assets/scss/layout/_shell.scss`.
 
 ## Directory structure
 

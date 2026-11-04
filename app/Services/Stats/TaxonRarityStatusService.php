@@ -61,7 +61,7 @@ class TaxonRarityStatusService
         $scopes = [];
         foreach ($statuses as $key => $status) {
             $comment = $comments[$key] ?? '';
-            if (! isset($allowed[$key]) || ! in_array($status, ['', 'common', 'rare'], true)
+            if (! isset($allowed[$key]) || ! in_array($status, ['', 'common', 'rare', 'scarce'], true)
                 || ! is_string($comment) || strlen($comment) > 65535) {
                 throw new InvalidArgumentException('Enter a valid rarity status and rationale for each scope.');
             }

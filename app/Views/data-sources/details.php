@@ -2,16 +2,12 @@
 
 <?= $this->section('content') ?>
 <section class="page-section auth-page">
-    <div class="row g-4 align-items-stretch">
-        <div class="col-lg-5">
-            <div class="auth-panel p-4 p-lg-5 h-100">
-                <span class="eyebrow mb-3">Lookups</span>
-                <h1 class="section-heading mb-3">Data source details</h1>
-                <p class="section-copy mb-4">Manage the lookup entry used to label imported records by source.</p>
-            </div>
-        </div>
-        <div class="col-lg-7">
-            <div class="auth-card p-4 p-lg-5">
+    <div class="mb-4">
+        <span class="eyebrow mb-2">Lookups</span>
+        <h1 class="section-heading mb-2">Data source details</h1>
+        <p class="section-copy mb-0">Manage the lookup entry used to label imported records by source.</p>
+    </div>
+    <div class="auth-card p-3 p-md-4">
                 <?php if (session()->getFlashdata('message')): ?>
                     <div class="alert alert-success" role="alert"><?= esc(session()->getFlashdata('message')) ?></div>
                 <?php endif; ?>
@@ -59,7 +55,5 @@
                     </div>
                 </form>
             </div>
-        </div>
-    </div>
 </section>
 <?= $this->endSection() ?>

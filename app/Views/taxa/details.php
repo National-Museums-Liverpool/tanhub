@@ -2,16 +2,12 @@
 
 <?= $this->section('content') ?>
 <section class="page-section auth-page">
-    <div class="row g-4 align-items-stretch">
-        <div class="col-lg-5">
-            <div class="auth-panel p-4 p-lg-5 h-100">
-                <span class="eyebrow mb-3">Taxonomy</span>
-                <h1 class="section-heading mb-3">Taxon details</h1>
-                <p class="section-copy mb-4">Most fields are read-only. Manager and admin users can edit rarity group name, taxon remarks, and key-species decisions. Admin users can also set blocking controls.</p>
-            </div>
-        </div>
-        <div class="col-lg-7">
-            <div class="auth-card p-4 p-lg-5">
+    <div class="mb-4">
+        <span class="eyebrow mb-2">Taxonomy</span>
+        <h1 class="section-heading mb-2">Taxon details</h1>
+        <p class="section-copy mb-0">Most fields are read-only. Manager and admin users can edit rarity group name, taxon remarks, and key-species decisions. Admin users can also set blocking controls.</p>
+    </div>
+    <div class="auth-card p-3 p-md-4">
                 <?php if (session()->getFlashdata('message')): ?>
                     <div class="alert alert-success" role="alert"><?= esc(session()->getFlashdata('message')) ?></div>
                 <?php endif; ?>
@@ -189,7 +185,7 @@
 
                         <?php if ($page['isSpecies']): ?>
                             <div class="col-12">
-                                <h2 class="h5 mb-1">Rarity by scope</h2>
+                                <h2 class="h5 mb-1">Rarity by region</h2>
                                 <p class="form-text mb-2">
                                     Scores compare occupied 2km squares within the rarity group (lower is rarer).
                                     Coverage is the percentage of all mapped squares occupied.
@@ -235,7 +231,7 @@
                                                 <td>
                                                     <label class="visually-hidden" for="<?= esc($controlId) ?>"><?= esc($scopeRow['label']) ?> rarity status</label>
                                                     <select class="form-select" id="<?= esc($controlId) ?>" name="rarity_status[<?= esc($scopeKey) ?>]" <?= $page['canEditDetails'] ? '' : 'disabled' ?>>
-                                                        <?php foreach (['' => 'Not set', 'common' => 'Common', 'rare' => 'Rare'] as $value => $label): ?>
+                                                        <?php foreach (['' => 'Not set', 'common' => 'Common', 'rare' => 'Rare', 'scarce' => 'Scarce'] as $value => $label): ?>
                                                             <option value="<?= esc($value) ?>" <?= $status === $value ? 'selected' : '' ?>><?= esc($label) ?></option>
                                                         <?php endforeach; ?>
                                                     </select>
@@ -319,12 +315,10 @@
                     <?php endif; ?>
                 </form>
             </div>
-        </div>
-    </div>
 </section>
 
 <section class="page-section pt-0">
-    <div class="auth-card p-4 p-lg-5 mb-4">
+    <div class="auth-card p-3 p-md-4 mb-4">
         <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
             <div>
                 <span class="eyebrow">Taxonomy</span>
@@ -604,7 +598,7 @@
         <?php endif; ?>
     </div>
 
-    <div class="auth-card p-4 p-lg-5">
+    <div class="auth-card p-3 p-md-4">
         <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
             <div>
                 <span class="eyebrow">Taxonomy</span>

@@ -2,6 +2,12 @@
     min-height: calc(100vh - 12rem);
 }
 
+@media (min-width: 1600px) {
+    .app-container {
+        max-width: 1520px;
+    }
+}
+
 .navbar-shell {
     border-radius: 1.25rem;
     margin-top: 1.5rem;

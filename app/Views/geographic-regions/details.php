@@ -2,16 +2,12 @@
 
 <?= $this->section('content') ?>
 <section class="page-section auth-page">
-    <div class="row g-4 align-items-stretch">
-        <div class="col-lg-5">
-            <div class="auth-panel p-4 p-lg-5 h-100">
-                <span class="eyebrow mb-3">Geography</span>
-                <h1 class="section-heading mb-3">Geographic region details</h1>
-                <p class="section-copy mb-4">Read-only values from the geographic regions reference table.</p>
-            </div>
-        </div>
-        <div class="col-lg-7">
-            <div class="auth-card p-4 p-lg-5">
+    <div class="mb-4">
+        <span class="eyebrow mb-2">Geography</span>
+        <h1 class="section-heading mb-2">Geographic region details</h1>
+        <p class="section-copy mb-0">Read-only values from the geographic regions reference table.</p>
+    </div>
+    <div class="auth-card p-3 p-md-4">
                 <div class="row g-3">
                     <?php
                     $fields = [
@@ -53,7 +49,5 @@
                     <a class="btn btn-outline-brand" href="<?= esc(site_url('geographic-regions')) ?>">Back to list</a>
                 </div>
             </div>
-        </div>
-    </div>
 </section>
 <?= $this->endSection() ?>

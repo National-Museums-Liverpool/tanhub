@@ -10,11 +10,11 @@ $count = (int) ($writing ? $job['written_rows'] : $job['captured_rows']);
 $percent = $total === null ? 100 : ($total > 0 ? min($writing ? 100 : 99, (int) floor($count / $total * 100)) : ($writing ? 100 : 0));
 ?>
 <section class="page-section">
-    <div class="auth-card p-4 p-lg-5" data-export
+    <h1 class="section-heading mb-4">Download progress</h1>
+    <div class="auth-card p-3 p-md-4" data-export
         data-auto-start="<?= $page['autoStart'] ? 'true' : 'false' ?>"
         data-status-url="<?= esc(site_url('exports/' . $job['uuid'] . '/status')) ?>"
         data-phase="<?= esc($job['phase']) ?>" data-state="<?= esc($job['status']) ?>">
-        <h1 class="section-heading">Download progress</h1>
         <div class="alert alert-info">This is a rolling capture. Data can change between capture batches.
             Captured values are frozen and the CSV uses their original grid sorting.
             Closing the tab pauses automatic processing; return here to Resume.</div>

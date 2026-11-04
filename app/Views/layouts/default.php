@@ -15,7 +15,7 @@
     <?= $this->renderSection('head') ?>
 </head>
 <body class="<?= esc($page['bodyClass']) ?>">
-<div class="container pb-5">
+<div class="container app-container pb-5">
     <?= $this->include('partials/header') ?>
     <main class="app-main">
         <?= $this->renderSection('content') ?>

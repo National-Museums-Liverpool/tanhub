@@ -92,6 +92,7 @@ final class TaxonSearchService
     {
         $criteria = new SearchCriteria($input, array_keys($this->classifications), $taxa);
         $references = ['taxon_id' => 'taxa', 'taxon_group_id' => 'taxon_groups',
+            'recording_scheme_id' => 'recording_schemes',
             'geographic_region_id' => 'geographic_regions', 'data_source_id' => 'data_sources'];
         foreach ($references as $key => $table) {
             if ($criteria->value($key) !== '' && ! isset($criteria->errors[$key])) {
@@ -141,7 +142,7 @@ final class TaxonSearchService
         $lookupOnly = false;
         if (! $taxa) {
             $taxonFilters = array_intersect_key($criteria->values, array_flip(
-                ['q', 'taxon_group_id', 'taxon_blocked', 'taxon_id', 'taxon_name']
+                ['q', 'taxon_group_id', 'recording_scheme_id', 'taxon_blocked', 'taxon_id', 'taxon_name']
             ));
             $lookupOnly = $idsOnly && $this->db->DBDriver === 'MySQLi'
                 && array_filter($taxonFilters, static fn (string $value): bool => $value !== '') === [];
@@ -194,6 +195,14 @@ final class TaxonSearchService
         }
         if ($taxa && $criteria->value('rank_id') !== '') {
             $builder->where('t.taxon_rank_id', $criteria->value('rank_id'));
+        }
+        if ($criteria->value('recording_scheme_id') !== '' && ! isset($criteria->errors['recording_scheme_id'])) {
+            $aliases = $this->db->aliasedTables;
+            $roots = $this->db->table('taxa')->select('id')
+                ->where('recording_scheme_id', $criteria->value('recording_scheme_id'))
+                ->where('deleted_at', null)->get()->getResultArray();
+            $this->db->setAliasedTables($aliases);
+            $this->applyDescendants($builder, 't', array_map('intval', array_column($roots, 'id')));
         }
         if ($criteria->value('taxon_id') !== '' && ! isset($criteria->errors['taxon_id'])) {
             $this->applySubtree($builder, 't', (int) $criteria->value('taxon_id'));
@@ -398,6 +407,7 @@ final class TaxonSearchService
     {
         $labels = ['q' => 'Search any descriptive field', 'year' => 'Year',
             'geographic_region_id' => 'Geographic region', 'taxon_group_id' => 'Taxon group',
+            'recording_scheme_id' => 'Recording scheme (including parent taxa)',
             'taxon_name' => 'Taxon (including descendants)', 'taxon_id' => 'Selected taxon',
             'data_source_id' => $taxa ? 'Data source (matching records)' : 'Data source',
             'taxon_blocked' => 'Taxon blocked', 'blocked' => 'Occurrence blocked',
@@ -447,6 +457,7 @@ final class TaxonSearchService
         $labels = $this->filterLabels($taxa);
         $references = ['geographic_region_id' => ['geographic_regions', 'higher_geography'],
             'taxon_group_id' => ['taxon_groups', 'title'], 'taxon_id' => ['taxa', 'scientific_name'],
+            'recording_scheme_id' => ['recording_schemes', 'title'],
             'data_source_id' => ['data_sources', 'title'], 'rank_id' => ['taxon_ranks', 'rank']];
         foreach ($this->classifications as $alias => $rank) {
             $references[$alias . '_id'] = ['taxa', 'scientific_name'];
@@ -534,7 +545,8 @@ final class TaxonSearchService
     {
         $options = ['ranks' => $this->ranks, 'classifications' => $this->classifications];
         foreach (['regions' => ['geographic_regions', 'higher_geography'],
-            'groups' => ['taxon_groups', 'title'], 'dataSources' => ['data_sources', 'title']] as $key => [$table, $sort]) {
+            'groups' => ['taxon_groups', 'title'], 'recordingSchemes' => ['recording_schemes', 'title'],
+            'dataSources' => ['data_sources', 'title']] as $key => [$table, $sort]) {
             $reference = $this->db->table($table);
             if ($table !== 'data_sources') {
                 $reference->where('deleted_at', null);
@@ -709,8 +721,30 @@ final class TaxonSearchService
                 return;
             }
         }
-        $seen = [$id => true];
-        $frontier = [$id];
+        $this->applyDescendants($builder, $alias, [$id]);
+    }
+
+    /**
+     * Restrict results to live roots and descendants at any rank, without duplicate rows.
+     *
+     * Batched parent-link traversal supports MySQL 5.7 and non-reporting ancestors.
+     * Visited IDs stop cycles and overlapping roots; no roots must yield no results.
+     * Deleted taxa cannot supply or transmit a recording-scheme association.
+     *
+     * @param BaseBuilder $builder Query being constrained.
+     * @param string $alias Internal taxon alias.
+     * @param list<int> $ids Live root taxon IDs.
+     */
+    private function applyDescendants(BaseBuilder $builder, string $alias, array $ids): void
+    {
+        if ($ids === []) {
+            $builder->where('1 = 0', null, false);
+
+            return;
+        }
+        $aliases = $this->db->aliasedTables;
+        $seen = array_fill_keys($ids, true);
+        $frontier = $ids;
         while ($frontier !== []) {
             $next = [];
             foreach (array_chunk($frontier, 500) as $batch) {

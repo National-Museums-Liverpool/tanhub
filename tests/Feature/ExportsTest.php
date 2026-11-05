@@ -179,6 +179,25 @@ final class ExportsTest extends CIUnitTestCase
     }
 
     /**
+     * Scheme inheritance remains applied in bounded CSV capture for both resources.
+     */
+    public function testRecordingSchemeFilterIsRetainedInExports(): void
+    {
+        $db = db_connect();
+        $db->table('recording_schemes')->upsert([
+            'id' => 91, 'title' => 'Export scheme', 'external_key' => 'EXPORT-SCHEME', 'deleted_at' => null,
+        ]);
+        $db->table('taxa')->where('id', 2)->update(['recording_scheme_id' => 91]);
+        $db->table('taxa')->where('id', 3)->update(['parent_taxon_id' => 2]);
+        foreach (['taxa', 'occurrences'] as $resource) {
+            $job = $this->finish($this->exports->create(1, $resource,
+                ['recording_scheme_id' => '91', 'year' => '2010'], 'grid'));
+            $this->assertSame(2, (int) $job['captured_rows']);
+            $this->assertCount(3, $this->records($job));
+        }
+    }
+
+    /**
      * Uncommitted tails are truncated before a retry appends the next batch.
      */
     public function testInterruptedCsvTailAndLostResponseRecovery(): void

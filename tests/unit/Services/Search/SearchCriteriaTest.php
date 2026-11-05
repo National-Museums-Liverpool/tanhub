@@ -68,6 +68,9 @@ final class SearchCriteriaTest extends CIUnitTestCase
     public function testOccurrenceEvidenceIsExplicit(): void
     {
         $this->assertFalse((new SearchCriteria(['taxon_blocked' => '0'], [], true))->needsOccurrences());
+        $scheme = new SearchCriteria(['recording_scheme_id' => '1'], [], true);
+        $this->assertSame([], $scheme->errors);
+        $this->assertFalse($scheme->needsOccurrences());
         $this->assertTrue((new SearchCriteria(['blocked' => '0'], [], true))->needsOccurrences());
     }
 }

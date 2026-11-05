@@ -33,7 +33,7 @@ final class SearchCriteria
      */
     public function __construct(array $input, array $classificationKeys, bool $taxa)
     {
-        $keys = ['q', 'year', 'geographic_region_id', 'taxon_group_id', 'taxon_id',
+        $keys = ['q', 'year', 'geographic_region_id', 'taxon_group_id', 'recording_scheme_id', 'taxon_id',
             'taxon_name', 'data_source_id', 'blocked', 'taxon_blocked', 'from_date', 'to_date'];
         if ($taxa) {
             $keys[] = 'rank_id';

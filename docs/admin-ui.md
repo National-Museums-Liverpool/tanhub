@@ -228,8 +228,16 @@ All detail pages should follow the same interaction model:
 ## Occurrence and taxa searches
 
 Both indexes support broad descriptive text search, year, geographic region, taxon group,
-configured classification filters (Family by default), and a taxon-name selector. Different
-filters combine with AND. Text search matches any of the supported descriptive fields.
+recording scheme, configured classification filters (Family by default), and a taxon-name
+selector. Different filters combine with AND. Text search matches any of the supported
+descriptive fields.
+
+The Recording scheme filter matches an association on the listed taxon (or an occurrence's
+exact taxon) or any of its parents, including parents at non-reporting ranks. A different
+scheme on a child does not override an association on a parent: either scheme can match.
+Deleted schemes and taxa are excluded, and deleted parents do not transmit associations.
+This filter alone does not require taxa to have occurrence records. Taxon suggestions and
+CSV downloads retain the selected scheme.
 
 On occurrences, text search includes taxon names and synonyms, recorded names, identifiers,
 classification/group labels, region names, locality, grid reference, recorder, identifier and

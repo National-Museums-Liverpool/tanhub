@@ -353,7 +353,7 @@ final class ExportService
             // Pick taxa by taxonomic filters first. The full query below checks occurrence
             // evidence only for this bounded ID batch, avoiding a full evidence UNION per batch.
             $candidateFilters = array_intersect_key($contract['filters'], array_flip(array_merge(
-                ['q', 'taxon_group_id', 'taxon_blocked', 'taxon_id', 'taxon_name', 'rank_id'],
+                ['q', 'taxon_group_id', 'recording_scheme_id', 'taxon_blocked', 'taxon_id', 'taxon_name', 'rank_id'],
                 array_map(static fn (string $rank): string => $rank . '_id',
                     array_keys($contract['classifications']))
             )));

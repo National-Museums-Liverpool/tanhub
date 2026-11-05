@@ -38,8 +38,14 @@ final class TaxonSearchTest extends CIUnitTestCase
         $db->query('PRAGMA foreign_keys = OFF');
         foreach (['taxon_media_variants', 'taxon_media', 'geographic_regions_occurrences',
             'occurrences', 'taxon_stats', 'taxon_year_stats', 'taxon_names', 'taxa',
-            'taxon_ranks', 'taxon_groups', 'geographic_regions'] as $table) {
+            'taxon_ranks', 'taxon_groups', 'recording_schemes', 'geographic_regions'] as $table) {
             $db->table($table)->emptyTable();
+        }
+        foreach ([1 => 'Family scheme', 2 => 'Species scheme', 3 => 'Unused scheme', 4 => 'Deleted scheme'] as $id => $title) {
+            $db->table('recording_schemes')->insert([
+                'id' => $id, 'title' => $title, 'external_key' => 'SCHEME-' . $id,
+                'deleted_at' => $id === 4 ? '2020-01-01 00:00:00' : null,
+            ]);
         }
         $db->table('data_sources')->upsert([
             'id' => 90, 'abbr' => 'SEARCH', 'title' => 'Search source', 'url' => 'https://example.com/search',
@@ -84,6 +90,8 @@ final class TaxonSearchTest extends CIUnitTestCase
             'id' => 100, 'uuid' => '00000000-0000-4000-8000-000000000100', 'taxon_id' => 40,
             'name' => 'Old turnip name', 'given_name_identifier' => 'OLD', 'accepted' => 0, 'scientific' => 1,
         ]);
+        $db->table('taxa')->where('id', 20)->update(['recording_scheme_id' => 1]);
+        $db->table('taxa')->where('id', 40)->update(['recording_scheme_id' => 2]);
         foreach ([1 => 'West region', 2 => 'East region'] as $id => $name) {
             $db->table('geographic_regions')->insert([
                 'id' => $id, 'higher_geography' => $name, 'higher_geography_identifier' => 'REG-' . $id,
@@ -166,7 +174,8 @@ final class TaxonSearchTest extends CIUnitTestCase
         $search = new TaxonSearchService();
         $inputs = [[], ['q' => 'Noctuidae'], ['q' => 'West region'], ['q' => 'Old turnip'],
             ['taxon_name' => 'Agrotis'], ['taxon_id' => '20'], ['family_id' => '20'],
-            ['taxon_group_id' => '1'], ['blocked' => '0'], ['taxon_blocked' => '0'],
+            ['taxon_group_id' => '1'], ['recording_scheme_id' => '1'], ['recording_scheme_id' => '2'],
+            ['recording_scheme_id' => '3'], ['blocked' => '0'], ['taxon_blocked' => '0'],
             ['geographic_region_id' => '1'], ['data_source_id' => '90'], ['year' => '2010'],
             ['from_date' => '2010-01-01', 'to_date' => '2010-12-31'],
             ['year' => '2010', 'geographic_region_id' => '1', 'taxon_blocked' => '0']];
@@ -257,6 +266,52 @@ final class TaxonSearchTest extends CIUnitTestCase
     }
 
     /**
+     * Schemes match self or any parent without requiring records or overriding parents.
+     */
+    public function testRecordingSchemeInheritanceAndCombinedFilters(): void
+    {
+        $this->assertSame([20, 30, 31, 40, 41, 42, 50, 51], $this->ids(['recording_scheme_id' => '1']));
+        $this->assertSame([40, 41], $this->ids(['recording_scheme_id' => '2']));
+        $this->assertSame([1, 2, 4, 5, 6], $this->ids(['recording_scheme_id' => '2'], false));
+        $this->assertSame([1, 2, 3, 4, 5, 6, 8, 9], $this->ids(['recording_scheme_id' => '1'], false));
+        $this->assertSame([40], $this->ids(['recording_scheme_id' => '1', 'year' => '2010',
+            'rank_id' => '40', 'taxon_blocked' => '0']));
+        $this->assertSame([1], $this->ids(['recording_scheme_id' => '2', 'year' => '2010',
+            'geographic_region_id' => '2'], false));
+        $this->assertSame([], $this->ids(['recording_scheme_id' => '2', 'taxon_id' => '50']));
+        foreach ([true, false] as $taxa) {
+            $this->assertSame([], $this->ids(['recording_scheme_id' => '3'], $taxa));
+            $search = new TaxonSearchService();
+            $summary = $search->summary($search->criteria(['recording_scheme_id' => '1'], $taxa),
+                $search->ordering([], $taxa), $taxa);
+            $this->assertSame('Family scheme', $summary[0]['value']);
+        }
+        $search = new TaxonSearchService();
+        $this->assertSame([40], array_column($search->lookup('Old turnip',
+            $search->criteria(['recording_scheme_id' => '1'], true)), 'id'));
+        $this->assertSame([], $search->lookup('Other family',
+            $search->criteria(['recording_scheme_id' => '1'], true)));
+    }
+
+    /**
+     * Non-reporting parents, overlapping roots and cycles use live parent links.
+     */
+    public function testRecordingSchemeTraversalAndDeletedTaxa(): void
+    {
+        $db = db_connect();
+        $db->table('taxa')->where('id', 20)->update(['recording_scheme_id' => null]);
+        $db->table('taxa')->whereIn('id', [50, 51])->update(['recording_scheme_id' => 1]);
+        $db->table('taxa')->where('id', 50)->update(['parent_taxon_id' => 51]);
+        $this->assertSame([50, 51], $this->ids(['recording_scheme_id' => '1']));
+        $this->assertSame([9], $this->ids(['recording_scheme_id' => '1'], false));
+        $db->table('taxa')->where('id', 51)->update(['recording_scheme_id' => null]);
+        $db->table('taxa')->where('id', 50)->update(['deleted_at' => '2020-01-01']);
+        $this->assertSame([], $this->ids(['recording_scheme_id' => '1']));
+        $db->table('taxa')->where('id', 40)->update(['deleted_at' => '2020-01-01']);
+        $this->assertSame([], $this->ids(['recording_scheme_id' => '2'], false));
+    }
+
+    /**
      * Search linked labels/synonyms without duplicated rows and hydrate all regions.
      */
     public function testTextSearchAndReadableRows(): void
@@ -282,6 +337,8 @@ final class TaxonSearchTest extends CIUnitTestCase
         foreach ([
             ['year' => '2012-2010'], ['taxon_id' => '999'], ['family_id' => '40'],
             ['rank_id' => '50'], ['geographic_region_id' => ['1']], ['blocked' => 'bad'],
+            ['recording_scheme_id' => '999'], ['recording_scheme_id' => '4'],
+            ['recording_scheme_id' => ['1']], ['recording_scheme_id' => 'bad'],
         ] as $input) {
             $criteria = $search->criteria($input, true);
             $this->assertNotEmpty($criteria->errors);
@@ -414,6 +471,20 @@ final class TaxonSearchTest extends CIUnitTestCase
         $this->assertSame(1, $xpath->query('//details[@id="advanced-search"]//select[@name="rank_id"]')->length);
         $this->assertSame(1, $xpath->query('//details[@id="advanced-search"]//input[@name="taxon_name"]')->length);
         $this->assertSame(1, $xpath->query('//details[@id="advanced-search"]//select[@name="blocked"]')->length);
+        $this->assertSame(1, $xpath->query('//details[@id="advanced-search"]//select[@name="recording_scheme_id"]')->length);
+        foreach (['taxa', 'occurrences'] as $resource) {
+            $schemePage = $this->get($resource . '?recording_scheme_id=2');
+            $schemePage->assertStatus(200);
+            $schemePage->assertSee('Recording scheme (including parent taxa)');
+            $schemePage->assertDontSee('Deleted scheme');
+            $this->assertStringContainsString('<details id="advanced-search" open>', $schemePage->getBody());
+            $document->loadHTML($schemePage->getBody(), LIBXML_NOERROR | LIBXML_NOWARNING);
+            $xpath = new \DOMXPath($document);
+            $this->assertSame(1, $xpath->query(
+                '//select[@name="recording_scheme_id"]/option[@value="2" and @selected]'
+            )->length);
+            $this->get($resource . '?recording_scheme_id=4')->assertStatus(400);
+        }
         $page = $this->get('taxa?year=2010&family_id=20&rank_id=30');
         $page->assertStatus(200);
         $page->assertSee('Agrotis');

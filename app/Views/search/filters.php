@@ -14,6 +14,7 @@ $labels = $page['filterLabels'];
 $options = [
     'geographic_region_id' => ['rows' => $page['regions'], 'field' => 'higher_geography'],
     'taxon_group_id' => ['rows' => $page['groups'], 'field' => 'title'],
+    'recording_scheme_id' => ['rows' => $page['recordingSchemes'], 'field' => 'title'],
 ];
 foreach ($page['classifications'] as $alias => $rank) {
     $options[$alias . '_id'] = ['rows' => $page['classificationOptions'][$alias], 'field' => 'scientific_name'];

@@ -66,6 +66,8 @@ final class TaxaImportServiceTest extends CIUnitTestCase
             conservation_status VARCHAR(10) NULL,
             rarity_group_name VARCHAR(100) NOT NULL,
             rarity_category INTEGER NULL,
+            exclude_from_rarity_calculations INTEGER NOT NULL DEFAULT 0,
+            exclude_from_rarity_calculations_comment TEXT NULL,
             blocked INTEGER NOT NULL DEFAULT 0,
             blocked_reason TEXT NULL,
             deleted_at DATETIME NULL' . $rankColumnsSql . '
@@ -103,6 +105,9 @@ final class TaxaImportServiceTest extends CIUnitTestCase
         $this->assertSame('Scheme A Title', (string) $row['rarity_group_name']);
     }
 
+    /**
+     * Taxonomy refreshes preserve locally curated rarity groups and species exclusions.
+     */
     public function testUpdateDoesNotOverwriteExistingRarityGroupName(): void
     {
         $this->seedSharedLookupRows();
@@ -118,6 +123,8 @@ final class TaxaImportServiceTest extends CIUnitTestCase
             'taxon_rank_id' => 1,
             'conservation_status' => null,
             'rarity_group_name' => 'Manual rarity',
+            'exclude_from_rarity_calculations' => 1,
+            'exclude_from_rarity_calculations_comment' => 'Curated exclusion',
             'blocked' => 0,
             'blocked_reason' => null,
             'deleted_at' => null,
@@ -146,6 +153,8 @@ final class TaxaImportServiceTest extends CIUnitTestCase
         $this->assertNotNull($row);
         $this->assertSame('Manual rarity', (string) $row['rarity_group_name']);
         $this->assertSame('Existing taxon updated', (string) $row['scientific_name']);
+        $this->assertSame(1, (int) $row['exclude_from_rarity_calculations']);
+        $this->assertSame('Curated exclusion', $row['exclude_from_rarity_calculations_comment']);
     }
 
     public function testPersistsImmediateParentIdentifier(): void

@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Models\TaxonModel;
 use App\Services\Search\TaxonSearchService;
+use App\Services\Stats\TaxonRarityExclusionService;
 use App\Services\Stats\TaxonRarityStatusService;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\HTTP\Files\UploadedFile;
@@ -74,6 +75,7 @@ class Taxa extends BaseController
      * Also resolves human-readable labels for classification foreign keys,
      * loads associated media, occupancy measurements and scoped curated decisions, and computes the
      * current user's edit/moderate permissions for the view.
+     * Species exclusions are resolved through the owning species for descendant details.
      *
      * @param int $id Taxon identifier.
      * @return string Rendered HTML for the taxon details view.
@@ -118,6 +120,7 @@ class Taxa extends BaseController
             'keySpeciesByScope' => $keySpeciesByScope,
             'rarityByScope' => (new TaxonRarityStatusService())->getForTaxon($id),
             'isSpecies' => (int) ($taxon['species_id'] ?? 0) === $id,
+            'rarityExclusion' => (new TaxonRarityExclusionService())->getForSpecies((int) ($taxon['species_id'] ?? 0)),
             'referenceLabels' => $referenceLabels,
             'hierarchy' => $hierarchy,
             'canEditDetails' => $canEditDetails,
@@ -277,9 +280,10 @@ class Taxa extends BaseController
      *
      * Which fields are accepted depends on the current user's role: managers
      * (and admins) may update `rarity_group_name`, `taxon_remarks`, and
-     * key-species and species rarity decisions; admins may additionally update `blocked` and
+     * key-species, species rarity decisions and global species exclusions; admins may additionally update `blocked` and
      * `blocked_reason`. Only fields present in the submitted data and
      * permitted for the user's role are validated and written.
+     * Detail fields, curated decisions and exclusion refresh requests commit atomically.
      *
      * @param int $id Taxon identifier.
      * @return RedirectResponse Redirect back to the taxon details page, or with validation errors.
@@ -301,6 +305,17 @@ class Taxa extends BaseController
         $keySpeciesScopes = null;
         $keySpeciesError = null;
         $rarityError = null;
+        $exclusionError = null;
+        $hasExclusionInput = $canEditDetails && is_array($postData)
+            && (array_key_exists('exclude_from_rarity_calculations', $postData)
+                || array_key_exists('exclude_from_rarity_calculations_comment', $postData));
+        if ($hasExclusionInput) {
+            try {
+                (new TaxonRarityExclusionService())->validateInput($id, $postData);
+            } catch (\InvalidArgumentException $exception) {
+                $exclusionError = $exception->getMessage();
+            }
+        }
         $hasRarityInput = $canEditDetails && is_array($postData)
             && (array_key_exists('rarity_status', $postData) || array_key_exists('rarity_status_comment', $postData));
         if ($hasRarityInput) {
@@ -333,13 +348,16 @@ class Taxa extends BaseController
         }
 
         $valid = $rules === [] || $this->validate($rules);
-        if (! $valid || $keySpeciesError !== null || $rarityError !== null) {
+        if (! $valid || $keySpeciesError !== null || $rarityError !== null || $exclusionError !== null) {
             $errors = $this->validator?->getErrors() ?? [];
             if ($keySpeciesError !== null) {
                 $errors['key_species'] = $keySpeciesError;
             }
             if ($rarityError !== null) {
                 $errors['rarity_status'] = $rarityError;
+            }
+            if ($exclusionError !== null) {
+                $errors['exclude_from_rarity_calculations'] = $exclusionError;
             }
 
             return redirect()->back()->withInput()->with('errors', $errors);
@@ -372,26 +390,39 @@ class Taxa extends BaseController
             $updateData['blocked_reason'] = $blocked ? ($blockedReason === '' ? null : $blockedReason) : null;
         }
 
-        if ($hasRarityInput) {
-            try {
+        $db = db_connect();
+        $db->transException(true)->transBegin();
+        try {
+            if ($hasRarityInput) {
                 (new TaxonRarityStatusService())->saveForTaxon($id, $postData);
-            } catch (\InvalidArgumentException | \RuntimeException $exception) {
-                return redirect()->back()->withInput()->with('error', $exception->getMessage());
             }
-        }
-
-        if ($keySpeciesScopes !== null) {
-            try {
+            if ($keySpeciesScopes !== null) {
                 service('taxonKeySpeciesService')->saveForTaxon($id, $keySpeciesScopes);
-            } catch (\RuntimeException $exception) {
-                return redirect()->back()->withInput()->with('error', $exception->getMessage());
             }
-        }
+            if ($hasExclusionInput) {
+                (new TaxonRarityExclusionService())->saveForTaxon($id, $postData);
+            }
+            $changedDetails = [];
+            foreach ($updateData as $field => $value) {
+                if ($value != ($taxon[$field] ?? null)) {
+                    $changedDetails[$field] = $value;
+                }
+            }
+            if ($updateData !== [] && (! $hasExclusionInput || $changedDetails !== [])) {
+                service('statsDirtyScopeService')->enqueueTaxonOccurrenceScopes($id);
+                if (! $model->update($id, $updateData)) {
+                    throw new \RuntimeException('Taxon details could not be saved.');
+                }
+                service('statsDirtyScopeService')->enqueueTaxonOccurrenceScopes($id);
+            }
+            if (! $db->transStatus() || ! $db->transCommit()) {
+                throw new \RuntimeException('Taxon details could not be saved.');
+            }
+        } catch (\Throwable $exception) {
+            $db->transRollback();
+            log_message('error', 'Taxon details save failed: ' . $exception->getMessage());
 
-        if ($updateData !== []) {
-            service('statsDirtyScopeService')->enqueueTaxonOccurrenceScopes($id);
-            $model->update($id, $updateData);
-            service('statsDirtyScopeService')->enqueueTaxonOccurrenceScopes($id);
+            return redirect()->back()->withInput()->with('error', 'Taxon details could not be saved. Please try again.');
         }
 
         return redirect()->to(site_url('taxa/' . $id))->with('message', 'Taxon details updated.');

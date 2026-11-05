@@ -30,6 +30,8 @@ class TaxonModel extends Model
      * - `blocked`           Moderation flag; 1 hides this taxon from public counts/lists.
      * - `blocked_reason`    Free-text reason shown alongside `blocked`.
      * - `parent_taxon_id`   Immediate accepted parent taxon, when one exists.
+     * - `exclude_from_rarity_calculations` Species-only global exclusion; descendants inherit it.
+     * - `exclude_from_rarity_calculations_comment` Required rationale while excluded.
      *
      * @var array<int, string>
      */
@@ -40,6 +42,8 @@ class TaxonModel extends Model
         'taxon_remarks',
         'blocked',
         'blocked_reason',
+        'exclude_from_rarity_calculations',
+        'exclude_from_rarity_calculations_comment',
     ];
 
     /**

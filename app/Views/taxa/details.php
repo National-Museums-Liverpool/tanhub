@@ -5,7 +5,7 @@
     <div class="mb-4">
         <span class="eyebrow mb-2">Taxonomy</span>
         <h1 class="section-heading mb-2">Taxon details</h1>
-        <p class="section-copy mb-0">Most fields are read-only. Manager and admin users can edit rarity group name, taxon remarks, and key-species decisions. Admin users can also set blocking controls.</p>
+        <p class="section-copy mb-0">Most fields are read-only. Manager and admin users can edit rarity group name, taxon remarks, key-species decisions, and species rarity decisions and exclusions.</p>
     </div>
     <div class="auth-card p-3 p-md-4">
                 <?php if (session()->getFlashdata('message')): ?>
@@ -106,6 +106,33 @@
                                 <span class="badge bg-secondary ms-2">Read-only</span>
                             </label>
                             <input class="form-control" id="rarity_category" type="text" value="<?= esc((string) ($page['referenceLabels']['rarity_category'] ?? '')) ?>" disabled>
+                        </div>
+
+                        <div class="col-12">
+                            <h2 class="h5 mb-1">Global rarity exclusion</h2>
+                            <p class="form-text">Excluded species and all records assigned to them contribute no grid-square rarity score. Counts, measured rarity categories and regional expert statuses remain unchanged. Square scores are refreshed by a prioritised background recalculation.</p>
+                            <?php $exclusion = $page['rarityExclusion']; ?>
+                            <?php if ($page['isSpecies']): ?>
+                                <?php $excluded = (string) old('exclude_from_rarity_calculations', (string) ($exclusion['exclude_from_rarity_calculations'] ?? 0)) === '1'; ?>
+                                <?php if ($page['canEditDetails']): ?>
+                                    <input type="hidden" name="exclude_from_rarity_calculations" value="0">
+                                <?php endif; ?>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="exclude_from_rarity_calculations" name="exclude_from_rarity_calculations" value="1" <?= $excluded ? 'checked' : '' ?> <?= $page['canEditDetails'] ? '' : 'disabled' ?>>
+                                    <label class="form-check-label" for="exclude_from_rarity_calculations">Exclude this species from rarity calculations</label>
+                                </div>
+                                <label class="form-label mt-2" for="exclude_from_rarity_calculations_comment">Rationale (required when excluded)</label>
+                                <textarea class="form-control" id="exclude_from_rarity_calculations_comment" name="exclude_from_rarity_calculations_comment" rows="2" maxlength="65535" <?= $page['canEditDetails'] ? '' : 'disabled' ?>><?= esc(old('exclude_from_rarity_calculations_comment', (string) ($exclusion['exclude_from_rarity_calculations_comment'] ?? ''))) ?></textarea>
+                                <div class="form-text">Removing the exclusion clears its rationale.</div>
+                                <?php if (isset($errors['exclude_from_rarity_calculations'])): ?>
+                                    <div class="invalid-feedback d-block"><?= esc($errors['exclude_from_rarity_calculations']) ?></div>
+                                <?php endif; ?>
+                            <?php elseif ($exclusion !== null): ?>
+                                <p class="mb-1">Inherited from <a href="<?= esc(site_url('taxa/' . $exclusion['id'])) ?>"><?= esc($exclusion['scientific_name']) ?></a>: <?= (int) $exclusion['exclude_from_rarity_calculations'] === 1 ? 'Excluded' : 'Not excluded' ?>.</p>
+                                <p class="form-text"><?= esc((string) ($exclusion['exclude_from_rarity_calculations_comment'] ?? '')) ?></p>
+                            <?php else: ?>
+                                <p class="form-text">Only species can own an exclusion. This taxon has no assigned species.</p>
+                            <?php endif; ?>
                         </div>
 
                         <div class="col-12">

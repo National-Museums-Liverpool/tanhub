@@ -65,6 +65,7 @@ class Occurrences extends ApiResourceController
      * since an occurrence can belong to multiple geographic regions via the
      * `geographic_regions_occurrences` join table.
      *
+     * @param array<int, string> $includes Requested includes.
      * @return array<string, string>
      *   Array of field identifiers and their corresponding query columns.
      */
@@ -120,6 +121,7 @@ class Occurrences extends ApiResourceController
         $fields['taxon__id_difficulty'] = 't.id_difficulty';
         $fields['taxon__conservation_status'] = 't.conservation_status';
         $fields['taxon__rarity_category'] = 't.rarity_category';
+        $fields += $this->rarityExclusionFields('taxon__');
 
         if ($this->hasInclude($includes, 'parent-taxon')) {
             $fields['parent_taxon__taxon_identifier'] = 'pt.taxon_identifier';
@@ -249,6 +251,8 @@ class Occurrences extends ApiResourceController
      * `data-source`, `grid-square-stats`, `parent-taxa`, `taxon-name`, `taxon-rank`, and
      * `taxon-group` are only added when the corresponding include is requested.
      *
+     * @param object $db Database connection.
+     * @param array<int, string> $includes Requested includes.
      * @return object
      *   The query builder instance.
      */
@@ -259,6 +263,9 @@ class Occurrences extends ApiResourceController
             ->join('taxa t', 't.id = o.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0')
             ->where('o.deleted_at IS NULL', null, false)
             ->where('o.blocked = 0', null, false);
+        if ($this->hasInclude($includes, 'taxon')) {
+            $this->joinRarityExclusion($builder);
+        }
 
         if ($this->hasInclude($includes, 'data-source')) {
             $builder->join('data_sources ds', 'ds.id = o.data_source_id', 'left');

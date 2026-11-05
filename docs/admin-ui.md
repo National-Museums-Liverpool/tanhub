@@ -170,6 +170,24 @@ remain blank, and rationale text has the same spreadsheet-formula protection as 
 Detailed occurrence and grid-only templates are unchanged. Existing export jobs retain their
 frozen columns; create a new statistics export to include the new fields.
 
+### Exclude a species from rarity calculations
+
+Use **Global rarity exclusion** for species whose few local records would misleadingly increase
+square rarity, for example a species expanding rapidly nationally. Managers and admins can:
+
+1. Open the species' taxon details.
+2. Tick **Exclude this species from rarity calculations** and enter a rationale.
+3. Save. A prioritised background recalculation updates square rarity scores.
+
+All records assigned to that species, including subspecies records, inherit the exclusion.
+Descendant details show the inherited decision and link to the species where it can be edited.
+Counts, occupancy, measured rarity categories and scoped expert common/rare statuses do not change.
+Clients must explicitly filter excluded species out of rare-species lists.
+
+Untick the flag to restore rarity contributions after recalculation; this clears the rationale.
+Editing only the rationale does not recalculate scores. See
+[the API guide](./api.md#64-species-rarity-exclusion) for field names and list filters.
+
 ### Add a media file to a taxon
 
 You can attach an image to an individual taxon from its details page. Use a clear, relevant image

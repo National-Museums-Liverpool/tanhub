@@ -64,6 +64,8 @@ final class GridSquareStatsCountsServiceTest extends CIUnitTestCase
             species_id INTEGER NULL,
             rarity_group_name VARCHAR(100) NULL,
             rarity_category INTEGER NULL,
+            exclude_from_rarity_calculations INTEGER NOT NULL DEFAULT 0,
+            exclude_from_rarity_calculations_comment TEXT NULL,
             blocked INTEGER NOT NULL DEFAULT 0,
             blocked_reason TEXT NULL,
             deleted_at DATETIME NULL
@@ -350,6 +352,79 @@ final class GridSquareStatsCountsServiceTest extends CIUnitTestCase
         $this->assertSame(4, (int) $su12d['occurrences_count']);
         $this->assertSame(1, (int) $su12d['species_count']);
         $this->assertEqualsWithDelta(80.0, (float) $su12d['rarity_score'], 0.0001);
+    }
+
+    /**
+     * Exclusions remove all species projections while preserving counts and support reversal.
+     */
+    public function testSpeciesExclusionIncludesVariantsAndRestoresScores(): void
+    {
+        $this->seedTaxa();
+        $this->seedDataSource();
+        $this->seedGeographicRegions();
+        $this->seedGridSquareStats();
+        $this->db->table('occurrences')->insertBatch([
+            ['id' => 1, 'taxon_id' => 1, 'grid_ref_2km' => 'SU99A'],
+            ['id' => 2, 'taxon_id' => 3, 'grid_ref_2km' => 'SU99A'],
+            ['id' => 3, 'taxon_id' => 2, 'grid_ref_2km' => 'SU99A'],
+            ['id' => 4, 'taxon_id' => 3, 'grid_ref_2km' => 'SU10B'],
+        ]);
+        $this->db->table('geographic_regions_occurrences')->insertBatch([
+            ['geographic_region_id' => 11, 'occurrence_id' => 1],
+            ['geographic_region_id' => 11, 'occurrence_id' => 2],
+            ['geographic_region_id' => 11, 'occurrence_id' => 3],
+            ['geographic_region_id' => 22, 'occurrence_id' => 4],
+        ]);
+        $service = new GridSquareStatsCountsService();
+        $this->assertSame('success', $service->run()['status']);
+        $before = $this->db->table('grid_square_stats')->orderBy('id')->get()->getResultArray();
+        $this->assertEqualsWithDelta(166.6667, (float) $before[0]['rarity_score'], 0.0001);
+        $this->assertEqualsWithDelta(33.3333, (float) $before[1]['rarity_score'], 0.0001);
+
+        $this->db->table('taxa')->where('id', 1)->update(['exclude_from_rarity_calculations' => 1]);
+        $this->assertSame('success', $service->run(true)['status']);
+        $this->assertSame($before, $this->db->table('grid_square_stats')->orderBy('id')->get()->getResultArray());
+        $this->assertSame('success', $service->run()['status']);
+        $after = $this->db->table('grid_square_stats')->orderBy('id')->get()->getResultArray();
+        $this->assertSame(100.0, (float) $after[0]['rarity_score']);
+        $this->assertSame(0.0, (float) $after[1]['rarity_score']);
+        foreach ($after as $index => $row) {
+            $this->assertSame($before[$index]['occurrences_count'], $row['occurrences_count']);
+            $this->assertSame($before[$index]['species_count'], $row['species_count']);
+        }
+        $this->assertSame(4, (int) $this->db->table('taxa')->where('id', 1)->get()->getRowArray()['rarity_category']);
+        $this->db->table('taxa')->where('id', 1)->update(['exclude_from_rarity_calculations' => 0]);
+        $this->assertSame('success', $service->run()['status']);
+        $this->assertSame($before, $this->db->table('grid_square_stats')->orderBy('id')->get()->getResultArray());
+    }
+
+    /**
+     * The existing 100-record rarity threshold still applies before excluding qualifying species.
+     */
+    public function testExclusionPreservesTheRarityThreshold(): void
+    {
+        $this->seedTaxa();
+        $this->seedDataSource();
+        $this->seedGeographicRegions();
+        $this->seedGridSquareStats();
+        $occurrences = [];
+        $regions = [];
+        for ($id = 1; $id <= 201; $id++) {
+            $occurrences[] = ['id' => $id, 'taxon_id' => $id <= 100 ? 1 : 2, 'grid_ref_2km' => 'SU99A'];
+            $regions[] = ['geographic_region_id' => 11, 'occurrence_id' => $id];
+        }
+        $this->db->table('occurrences')->insertBatch($occurrences);
+        $this->db->table('geographic_regions_occurrences')->insertBatch($regions);
+        $service = new GridSquareStatsCountsService();
+        $this->assertSame('success', $service->run()['status']);
+        $row = $this->db->table('grid_square_stats')->where('id', 1)->get()->getRowArray();
+        $this->assertSame(100.0, (float) $row['rarity_score']);
+        $this->db->table('taxa')->where('id', 1)->update(['exclude_from_rarity_calculations' => 1]);
+        $this->assertSame('success', $service->run()['status']);
+        $row = $this->db->table('grid_square_stats')->where('id', 1)->get()->getRowArray();
+        $this->assertSame(0.0, (float) $row['rarity_score']);
+        $this->assertSame(201, (int) $row['occurrences_count']);
+        $this->assertSame(2, (int) $row['species_count']);
     }
 
     private function seedTaxa(): void

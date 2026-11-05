@@ -42,6 +42,8 @@ class GridSquareStatsCountsService
      * `100 / <species total active gridded records>` is added to the score
      * of the grid square/region where that occurrence falls, so widely
      * scattered rare species contribute fractional amounts to many squares.
+     * Species exclusions suppress only rarity contributions, including descendant records;
+     * ordinary occurrence and species counts are unaffected.
      * On a non-dry-run, all `grid_square_stats` counts are first reset to
      * zero before the freshly computed aggregates are written back.
      *
@@ -73,6 +75,12 @@ class GridSquareStatsCountsService
                     AND TRIM(o.grid_ref_2km) <> ""
                     AND t.deleted_at IS NULL
                     AND t.blocked = 0';
+            $rarityExclusionWhere = ' AND NOT EXISTS (
+                SELECT 1 FROM ' . $prefix . 'taxa exclusion_species
+                WHERE exclusion_species.id = t.species_id
+                    AND exclusion_species.species_id = exclusion_species.id
+                    AND exclusion_species.exclude_from_rarity_calculations = 1
+            )';
 
             $aggregates = $db->query(
                 // Outer query: for every (square, geographic_region_id) pair, combine the
@@ -121,7 +129,7 @@ class GridSquareStatsCountsService
                         INNER JOIN ' . $prefix . 'taxa t
                             ON t.id = o.taxon_id
                         WHERE ' . $activeOccurrenceWhere . '
-                            AND t.species_id IS NOT NULL
+                            AND t.species_id IS NOT NULL ' . $rarityExclusionWhere . '
                         GROUP BY UPPER(TRIM(o.grid_ref_2km)), gro.geographic_region_id, t.species_id
                     ) square_species
                     INNER JOIN (
@@ -135,7 +143,7 @@ class GridSquareStatsCountsService
                         INNER JOIN ' . $prefix . 'taxa t
                             ON t.id = o.taxon_id
                         WHERE ' . $activeOccurrenceWhere . '
-                            AND t.species_id IS NOT NULL
+                            AND t.species_id IS NOT NULL ' . $rarityExclusionWhere . '
                         GROUP BY t.species_id
                         HAVING COUNT(*) <= ' . self::RARITY_THRESHOLD . '
                     ) species_totals

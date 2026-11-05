@@ -5,6 +5,13 @@ info:
   description: >-
     Machine-readable specification for the tanhub read-only REST API. Keep this
     specification consistent with the canonical human-readable reference in api.md.
+    Taxa return exclude_from_rarity_calculations (boolean) and
+    exclude_from_rarity_calculations_comment (nullable string) from their assigned species.
+    Descendants inherit these effective values; taxa without an assigned species return false/null.
+    Occurrences, taxon names, taxon stats and yearly taxon stats expose the same values with a
+    taxon__ prefix only with include=taxon. Existing requests are unfiltered unless clients opt in.
+    Exclusion affects square rarity scores, not counts, measured categories or expert rarity status.
+    Staff flag transitions prioritise an asynchronous square-statistics rebuild.
 servers:
   - url: /api/v1
     description: API v1
@@ -84,6 +91,7 @@ paths:
       tags: [occurrences]
       summary: List occurrences
       parameters:
+        - $ref: '#/components/parameters/IncludedRarityExclusion'
         - $ref: '#/components/parameters/OccurrencesInclude'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
@@ -141,6 +149,7 @@ paths:
       tags: [taxa]
       summary: List taxa
       parameters:
+        - $ref: '#/components/parameters/RarityExclusion'
         - $ref: '#/components/parameters/TaxaInclude'
         - $ref: '#/components/parameters/ReportingOnly'
         - $ref: '#/components/parameters/Limit'
@@ -199,6 +208,7 @@ paths:
       tags: [taxon-names]
       summary: List taxon names
       parameters:
+        - $ref: '#/components/parameters/IncludedRarityExclusion'
         - $ref: '#/components/parameters/TaxonNamesInclude'
         - $ref: '#/components/parameters/ReportingOnly'
         - $ref: '#/components/parameters/Limit'
@@ -317,6 +327,7 @@ paths:
         Use the taxon_rank query filter, such as taxon_rank=species, when reviewing one level.
       parameters:
         - $ref: '#/components/parameters/TaxonStatsInclude'
+        - $ref: '#/components/parameters/IncludedRarityExclusion'
         - $ref: '#/components/parameters/ReportingOnly'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
@@ -352,6 +363,7 @@ paths:
       summary: List taxon year stats
       parameters:
         - $ref: '#/components/parameters/TaxonYearStatsInclude'
+        - $ref: '#/components/parameters/IncludedRarityExclusion'
         - $ref: '#/components/parameters/ReportingOnly'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
@@ -453,6 +465,24 @@ components:
         type: integer
         minimum: 0
         default: 0
+    RarityExclusion:
+      name: exclude_from_rarity_calculations
+      in: query
+      description: >-
+        Opt-in effective species exclusion filter for taxa. Equality accepts true/false or 1/0;
+        other values or operators return 400. Bracketed [eq] syntax is also supported.
+        The nullable rationale field supports normal string filtering.
+      schema:
+        type: boolean
+    IncludedRarityExclusion:
+      name: taxon__exclude_from_rarity_calculations
+      in: query
+      description: >-
+        Requires include=taxon. Filters the effective owning-species exclusion, including on
+        descendants. Equality accepts true/false or 1/0; other values/operators return 400.
+        The nullable taxon__exclude_from_rarity_calculations_comment supports string filtering.
+      schema:
+        type: boolean
     Sort:
       name: sort
       in: query

@@ -66,6 +66,7 @@ class AutoImportService
      */
     private const DEPENDENCY_CHAIN_TASKS = [
         'derived-stats:taxon_stats',
+        'derived-stats:grid_square_stats_counts',
     ];
 
     /**

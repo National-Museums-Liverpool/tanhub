@@ -269,6 +269,8 @@ directly to a Darwin Core concept, this is indicated in the description.
 | taxon_remarks              | TEXT         | YES  |     |                   | Species account text if provided, DwC taxonRemarks                                  |
 | rarity_group_name          | VARCHAR(100) | NO   |     |                   | Grouping of taxa whose rarities are compared together when calculating the category |
 | rarity_category            | TINYINT      | YES  |     |                   | Assigned category of rarity from 1 (rare) to 5 (common), populated by `php spark stats:taxon-rarity`            |
+| exclude_from_rarity_calculations | TINYINT(1) | NO | | 0 | Global species exclusion from grid-square rarity contributions |
+| exclude_from_rarity_calculations_comment | TEXT | YES | | NULL | Required rationale while excluded; cleared when exclusion is removed |
 | blocked                    | TINYINT(1)   | NO   |     |                   | 1 = species is blocked from searches, 0 otherwise                                   |
 | blocked_reason             | TEXT         | YES  |     |                   | Reason given for blocking the record                                                |
 | created_at                 | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                       |
@@ -277,6 +279,21 @@ directly to a Darwin Core concept, this is indicated in the description.
 
 `parent_taxon_id` is an FK to the immediate accepted parent. The dynamic `<rank>_id` columns are
 configured reporting projections and must not replace the exact hierarchy.
+
+Only species (`species_id = id`) own rarity exclusions. Records against subspecies or other
+taxa assigned to that species inherit its exclusion. Managers and admins must provide a rationale
+when excluding a species. Taxonomy imports and statistics rebuilds preserve these curated fields;
+unchecking the flag clears the rationale. The portable Forge migration uses TINYINT and nullable
+TEXT for MySQL and SQLite, with existing taxa initially included.
+On SQLite, rollback temporarily enables `legacy_alter_table` while Forge rebuilds the table,
+restoring the prior setting afterwards. This prevents inbound foreign keys from being rewritten
+to Forge's temporary table name; MySQL uses the normal Forge column drop.
+
+An exclusion affects only `grid_square_stats.rarity_score`. It does not change occurrence/species
+counts, occupancy, `rarity_category`, peer rankings, or independent regional/global
+`taxon_stats.rarity_status` decisions. APIs return the owning species' effective exclusion and
+rationale, or false/null without an assigned species, rather than the descendant's stored defaults.
+See [API filtering](./api.md#64-species-rarity-exclusion) for opt-in list behaviour.
 
 Note that when tanhub is linked to UKSI as its source of taxonomic data, the following applies:
 - taxon_identifier will contain `ORGANISM_KEY`, the UKSI provided unique identifier of the organism
@@ -686,6 +703,15 @@ children's progress. Clearing all rows restarts imports without consulting old r
 | is_complete     | TINYINT      | NO   |     | 0                 | Set to 1 if the task has ever run to completion.                                 |
 | created_at      | DATETIME     | NO   |     | CURRENT_TIMESTAMP | Creation date                                                                    |
 | updated_at      | DATETIME     | YES  |     |                   | Update date                                                                      |
+
+For `derived-stats:grid_square_stats_counts`, `next_checkpoint` is an opaque refresh revision,
+not a paging cursor. Either species-exclusion flag transition atomically saves a new revision and
+sets `is_complete = 0`, prioritising the task after its prerequisites. Rationale-only changes do
+not invalidate statistics. A successful rebuild marks completion only if the revision it observed
+before computing is still current; an edit during computation leaves another run pending. Dry runs
+do not acknowledge requests and failed runs remain incomplete. This uses the existing columns and
+a conditional update on both supported database drivers. The revision remains after completion
+until another exclusion change or a full restart replaces it.
 
 ### import_runs
 

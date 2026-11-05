@@ -240,6 +240,45 @@ class ImportOffsetModel extends Model
     }
 
     /**
+     * Atomically request a derived rebuild with a distinct invalidation revision.
+     *
+     * @param string $sourceKey Derived task key.
+     * @param string $checkpoint Opaque revision identifying this request.
+     * @return void
+     * @throws \RuntimeException If the refresh request cannot be persisted.
+     */
+    public function invalidateWithCheckpoint(string $sourceKey, string $checkpoint): void
+    {
+        $existing = $this->findBySourceKey($sourceKey);
+        $values = ['next_checkpoint' => $checkpoint, 'is_complete' => 0];
+        $saved = $existing === null
+            ? $this->insert($values + ['source_key' => $sourceKey, 'next_offset' => 0])
+            : $this->update($existing['id'], $values);
+        if ($saved === false) {
+            throw new \RuntimeException('The statistics refresh request could not be saved.');
+        }
+    }
+
+    /**
+     * Acknowledge a rebuild only if no newer request arrived during computation.
+     *
+     * A single conditional write prevents a concurrent staff edit from being acknowledged
+     * by a rebuild that used older data. A retained checkpoint is a revision, not a cursor.
+     *
+     * @param string $sourceKey Derived task key.
+     * @param string|null $checkpoint Revision observed before computation.
+     * @return void
+     * @throws \RuntimeException If the completion write fails.
+     */
+    public function completeIfCheckpointUnchanged(string $sourceKey, ?string $checkpoint): void
+    {
+        if (! $this->db->table($this->table)->where('source_key', $sourceKey)
+            ->where('next_checkpoint', $checkpoint)->update(['is_complete' => 1])) {
+            throw new \RuntimeException('The statistics refresh could not be acknowledged.');
+        }
+    }
+
+    /**
      * Run checkpoint persistence, reconnecting once after a lost database connection.
      *
      * The import can spend more than the server's 60-second `wait_timeout` waiting

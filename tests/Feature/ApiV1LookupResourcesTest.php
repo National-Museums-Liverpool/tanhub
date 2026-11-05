@@ -1453,6 +1453,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             scientific_name_authorship VARCHAR(100) NULL,
             vernacular_name VARCHAR(200) NOT NULL,
             family_id INTEGER NULL,
+            species_id INTEGER NULL,
             parent_taxon_id INTEGER NULL,
             taxon_rank_id INTEGER NOT NULL,
             taxon_group_id INTEGER NOT NULL,
@@ -1462,6 +1463,8 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             taxon_remarks TEXT NULL,
             rarity_group_name VARCHAR(100) NOT NULL,
             rarity_category INTEGER NULL,
+            exclude_from_rarity_calculations INTEGER NOT NULL DEFAULT 0,
+            exclude_from_rarity_calculations_comment TEXT NULL,
             blocked INTEGER NOT NULL DEFAULT 0,
             blocked_reason TEXT NULL,
             created_at DATETIME NOT NULL,
@@ -1608,5 +1611,67 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             height INTEGER NULL,
             created_at DATETIME NOT NULL
         )');
+    }
+
+    /**
+     * All taxon-bearing APIs expose and filter the same inherited species decision.
+     */
+    public function testRarityExclusionInheritanceAcrossResources(): void
+    {
+        $db = db_connect();
+        $db->table('taxa')->where('id', 1)->update([
+            'species_id' => 1,
+            'exclude_from_rarity_calculations' => 1,
+            'exclude_from_rarity_calculations_comment' => 'Rapid expansion',
+        ]);
+        $db->table('taxa')->where('id', 3)->update(['species_id' => 1]);
+        foreach (['occurrences', 'taxon_names', 'taxon_stats', 'taxon_year_stats'] as $table) {
+            $db->table($table)->where('taxon_id', 1)->update(['taxon_id' => 3]);
+        }
+        foreach (['taxa', 'occurrences', 'taxon-names', 'taxon-stats', 'taxon-year-stats'] as $resource) {
+            foreach (['api/v1/', '/api/v1/'] as $path) {
+                foreach (['ip:127.0.0.1', 'ip:::1', 'ip:0.0.0.0'] as $identity) {
+                    service('throttler')->remove('api_v1_' . sha1($path . $resource . '|' . $identity));
+                }
+            }
+            $field = $resource === 'taxa' ? 'exclude_from_rarity_calculations' : 'taxon__exclude_from_rarity_calculations';
+            $query = 'reporting_only=false' . ($resource === 'taxa' ? '' : '&include=taxon');
+            $result = $this->get('api/v1/' . $resource . '?' . $query . '&' . $field . '[eq]=true&limit=1');
+            $result->assertStatus(200);
+            $json = json_decode((string) $result->response()->getBody(), true);
+            $this->assertGreaterThan(0, $json['meta']['total'], $resource);
+            $this->assertTrue($json['data'][0][$field], $resource);
+            $this->assertSame('Rapid expansion', $json['data'][0][$field . '_comment'], $resource);
+
+            $excluded = $this->get('api/v1/' . $resource . '?' . $query . '&' . $field . '=0');
+            $excluded->assertStatus(200);
+            $this->assertSame(0, json_decode((string) $excluded->response()->getBody(), true)['meta']['total']);
+            $this->get('api/v1/' . $resource . '?' . $query . '&' . $field . '=maybe')->assertStatus(400);
+            $this->get('api/v1/' . $resource . '?' . $query . '&' . $field . '[contains]=true')->assertStatus(400);
+            if ($resource !== 'taxa') {
+                $this->get('api/v1/' . $resource . '?' . $field . '=true')->assertStatus(400);
+                $plain = $this->get('api/v1/' . $resource . '?reporting_only=false');
+                $plain->assertStatus(200);
+                $this->assertArrayNotHasKey($field, json_decode((string) $plain->response()->getBody(), true)['data'][0]);
+            }
+        }
+        $show = $this->get('api/v1/taxa/NHMSYS0021000001');
+        $show->assertStatus(200);
+        $this->assertTrue(json_decode((string) $show->response()->getBody(), true)['exclude_from_rarity_calculations']);
+    }
+
+    /**
+     * Taxa without a species assignment remain present with an explicit false flag.
+     */
+    public function testUnassignedTaxaReturnFalseExclusionAndNullComment(): void
+    {
+        $result = $this->get('api/v1/taxa?reporting_only=false&exclude_from_rarity_calculations=false');
+        $result->assertStatus(200);
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $this->assertSame(2, $json['meta']['total']);
+        foreach ($json['data'] as $taxon) {
+            $this->assertFalse($taxon['exclude_from_rarity_calculations']);
+            $this->assertNull($taxon['exclude_from_rarity_calculations_comment']);
+        }
     }
 }

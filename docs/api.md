@@ -207,6 +207,38 @@ For example, when querying `occurrences`, clients can filter by geographic regio
 
 This keeps the public API resource-focused, while still exposing useful relationship filters.
 
+### 6.4 Species rarity exclusion
+
+Taxa expose `exclude_from_rarity_calculations` as a JSON boolean and
+`exclude_from_rarity_calculations_comment` as a nullable string. The flag defaults to false.
+Both fields describe the assigned species' decision, including on subspecies; taxa without an
+assigned species return false and null. Only species own editable decisions.
+
+Occurrences, taxon names, taxon statistics and yearly taxon statistics expose the same effective
+values as `taxon__exclude_from_rarity_calculations` and
+`taxon__exclude_from_rarity_calculations_comment` when `include=taxon` is requested. Without that
+include, these fields and their filters are unavailable.
+
+Boolean filtering accepts equality only, with `true`, `false`, `1` or `0` (case-insensitive).
+Other values or operators return HTTP 400. The comment uses normal string filtering.
+
+```text
+/api/v1/taxa?exclude_from_rarity_calculations=false
+/api/v1/taxon-stats?include=taxon&taxon__rarity_category[lte]=2&taxon__exclude_from_rarity_calculations[eq]=false
+/api/v1/occurrences?include=taxon&taxon__exclude_from_rarity_calculations=0
+```
+
+Existing requests do not exclude flagged taxa automatically. Clients building rare-species lists
+must opt into the filter. Exclusions suppress grid-square rarity contributions from all records
+assigned to the species, but leave counts, occupancy, calculated rarity categories and independent
+global/regional expert rarity statuses unchanged. A flagged species can still have a measured
+category of rare or a regional expert rare status.
+
+Staff edits require manager/admin access and a non-blank rationale. Removing exclusion clears its
+rationale. Either flag transition prioritises a background square-statistics recalculation;
+responses immediately reflect the decision, but square scores change after that task succeeds.
+Rationale-only edits do not request a recalculation. These are current decisions, not a history.
+
 ## 7. Sorting
 
 Sorting is supported via:
@@ -506,6 +538,8 @@ Examples:
 			- `taxon__id_difficulty`
 			- `taxon__conservation_status`
 			- `taxon__rarity_category`
+			- `taxon__exclude_from_rarity_calculations`
+			- `taxon__exclude_from_rarity_calculations_comment`
 
 			Include `taxon` for additional info about the taxon concept.
 		- `taxon-name`
@@ -752,7 +786,8 @@ Examples:
 - Exposed fields:
 	- `taxon_identifier`, `scientific_name_identifier`, `scientific_name`,
 	  `scientific_name_authorship`, `vernacular_name`, `id_difficulty`, `conservation_status`,
-		`taxon_remarks`, `rarity_group_name`, `rarity_category`
+		`taxon_remarks`, `rarity_group_name`, `rarity_category`,
+		`exclude_from_rarity_calculations`, `exclude_from_rarity_calculations_comment`
 	- dynamic taxon rank fields by configured rank identifier
 - Filterable fields:
 	- all exposed taxa fields above
@@ -1026,6 +1061,8 @@ Examples:
 			- `taxon__id_difficulty`
 			- `taxon__conservation_status`
 			- `taxon__rarity_category`
+			- `taxon__exclude_from_rarity_calculations`
+			- `taxon__exclude_from_rarity_calculations_comment`
 
 			Include `taxon` for additional info about the taxon concept.
 		- `taxon-media`:
@@ -1332,6 +1369,8 @@ both fields.
 			- `taxon__id_difficulty`
 			- `taxon__conservation_status`
 			- `taxon__rarity_category`
+			- `taxon__exclude_from_rarity_calculations`
+			- `taxon__exclude_from_rarity_calculations_comment`
 
 			Include `taxon` for additional info about the taxon concept.
 		- `taxon-media`:
@@ -1523,6 +1562,8 @@ Examples:
 			- `taxon__id_difficulty`
 			- `taxon__conservation_status`
 			- `taxon__rarity_category`
+			- `taxon__exclude_from_rarity_calculations`
+			- `taxon__exclude_from_rarity_calculations_comment`
 
 			Include `taxon` for additional info about the taxon concept.
 		- `taxon-media`:

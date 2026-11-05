@@ -4,6 +4,7 @@ namespace App\Services\Import;
 
 use App\Models\ImportOffsetModel;
 use App\Models\ImportRunModel;
+use App\Services\Stats\TaxonRarityExclusionService;
 use RuntimeException;
 use Throwable;
 
@@ -44,13 +45,14 @@ class DerivedImportRunner
      * `status` value. If the service throws, the run row is marked `failed`
      * with the exception message and the exception is rethrown to the caller
      * (e.g. {@see \App\Controllers\Imports::run()}) so it can surface the error.
+     * Square-statistics completion acknowledges only the revision observed before computing.
      *
      * @param string $sourceKey   Task source key used for run-history tracking
      *                            (e.g. `derived-stats:taxon_stats`).
      * @param string $serviceName CodeIgniter service name implementing the task;
      *                            must expose a `run(bool $dryRun): array` method.
-    * @param bool   $dryRun      Whether persistence is disabled for this run.
-    * @param callable(int): void|null $onRunCreated Callback invoked with the new run ID.
+     * @param bool   $dryRun      Whether persistence is disabled for this run.
+     * @param callable(int): void|null $onRunCreated Callback invoked with the new run ID.
      *
      * @return array<string, mixed> The derived service's result array (shape
      *                              defined by that service; commonly includes
@@ -81,6 +83,12 @@ class DerivedImportRunner
             'started_at' => date('Y-m-d H:i:s'),
         ]);
         try {
+            if (! $dryRun && $sourceKey === TaxonRarityExclusionService::TASK
+                && ! $importOffsetModel->hasSourceKey($sourceKey)) {
+                $importOffsetModel->setCompletion($sourceKey, false);
+            }
+            $squareRevision = $sourceKey === TaxonRarityExclusionService::TASK
+                ? $importOffsetModel->getCheckpoint($sourceKey) : null;
             if ($onRunCreated !== null) {
                 $onRunCreated($runId);
             }
@@ -92,10 +100,15 @@ class DerivedImportRunner
             // TaxonStatsService owns rebuild completion; dirty-scope batches must not
             // make an already-populated stats table incomplete.
             if (! $dryRun && $sourceKey !== 'derived-stats:taxon_stats') {
-                $importOffsetModel->setCompletion(
-                    $sourceKey,
-                    $status === 'success' && (($result['has_more'] ?? false) !== true),
-                );
+                if ($sourceKey === TaxonRarityExclusionService::TASK && $status === 'success'
+                    && (($result['has_more'] ?? false) !== true)) {
+                    $importOffsetModel->completeIfCheckpointUnchanged($sourceKey, $squareRevision);
+                } else {
+                    $importOffsetModel->setCompletion(
+                        $sourceKey,
+                        $status === 'success' && (($result['has_more'] ?? false) !== true),
+                    );
+                }
             }
 
             $importRunModel->update($runId, [

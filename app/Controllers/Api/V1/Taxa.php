@@ -70,6 +70,7 @@ class Taxa extends ApiResourceController
     /**
      * Retrieve included fields array.
      *
+     * @param array<int, string> $includes Requested includes.
      * @return array<string, string>
      *   Array of field identifiers and their corresponding query columns.
      */
@@ -87,6 +88,7 @@ class Taxa extends ApiResourceController
             'rarity_group_name' => 't.rarity_group_name',
             'rarity_category' => 't.rarity_category',
         ];
+        $fields += $this->rarityExclusionFields();
 
         if ($this->hasInclude($includes, 'parent-taxa')) {
             foreach ($this->dynamicRankAliases() as $alias) {
@@ -133,6 +135,8 @@ class Taxa extends ApiResourceController
      * corresponding include is requested, so the query cost scales with what the
      * caller actually asked for.
      *
+     * @param object $db Database connection.
+     * @param array<int, string> $includes Requested includes.
      * @return object
      *   The query builder instance.
      */
@@ -142,6 +146,7 @@ class Taxa extends ApiResourceController
                 ->select($this->getFieldSql($includes), false)
             ->where('t.deleted_at', null, false)
             ->where('t.blocked', 0, false);
+        $this->joinRarityExclusion($builder);
         if ($this->hasInclude($includes, 'parent-taxon')) {
             $builder->join('taxa pt', 'pt.id = t.parent_taxon_id AND pt.deleted_at IS NULL AND pt.blocked = 0', 'left');
             $builder->join('taxon_ranks ptr', 'ptr.id = pt.taxon_rank_id', 'left');
@@ -194,7 +199,7 @@ class Taxa extends ApiResourceController
      */
     protected function getDefaultKeyColumn(): string
     {
-        return 'taxon_identifier';
+        return 't.taxon_identifier';
     }
 
     /**

@@ -132,6 +132,7 @@ class TaxonStats extends ApiResourceController
             $fields['taxon__id_difficulty'] = 't.id_difficulty';
             $fields['taxon__conservation_status'] = 't.conservation_status';
             $fields['taxon__rarity_category'] = 't.rarity_category';
+            $fields += $this->rarityExclusionFields('taxon__');
 
             if ($this->hasInclude($includes, 'parent-taxa')) {
                 foreach ($this->dynamicRankAliases() as $alias) {
@@ -222,6 +223,8 @@ class TaxonStats extends ApiResourceController
      * always available. Joins for `parent-taxa`, `taxon-group`, and `taxon-rank` are only
      * added when the corresponding include is requested.
      *
+     * @param object $db Database connection.
+     * @param array<int, string> $includes Requested includes.
      * @return object
      *   The query builder instance.
      */
@@ -232,6 +235,9 @@ class TaxonStats extends ApiResourceController
             ->join('taxa t', 't.id = ts.taxon_id AND t.deleted_at IS NULL AND t.blocked = 0')
             ->join('geographic_regions gr', 'gr.id = ts.geographic_region_id AND gr.deleted_at IS NULL', 'left');
         $builder->where(new RawSql('(ts.geographic_region_id IS NULL OR gr.id IS NOT NULL)'));
+        if ($this->hasInclude($includes, 'taxon')) {
+            $this->joinRarityExclusion($builder);
+        }
 
         if ($this->hasInclude($includes, 'parent-taxon')) {
             $builder->join('taxa pt', 'pt.id = t.parent_taxon_id AND pt.deleted_at IS NULL AND pt.blocked = 0', 'left');

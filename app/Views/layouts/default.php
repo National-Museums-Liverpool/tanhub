@@ -18,6 +18,7 @@
 <div class="container app-container pb-5">
     <?= $this->include('partials/header') ?>
     <main class="app-main">
+        <?= $this->include('partials/validation-summary') ?>
         <?= $this->renderSection('content') ?>
     </main>
     <?= $this->include('partials/footer') ?>

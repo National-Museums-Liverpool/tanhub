@@ -3,6 +3,10 @@
 namespace Tests;
 
 use App\Models\TaxonModel;
+use App\Models\ImportOffsetModel;
+use App\Services\Stats\TaxonRarityExclusionService;
+use App\Services\Import\DerivedImportRunner;
+use App\Services\Stats\GridSquareStatsCountsService;
 use Config\Auth;
 use CodeIgniter\Shield\Models\UserModel;
 use CodeIgniter\Shield\Test\AuthenticationTesting;
@@ -48,6 +52,250 @@ final class TaxaPagesTest extends CIUnitTestCase
 
         $result->assertStatus(302);
         $result->assertRedirect();
+    }
+
+    /**
+     * Species exclusions validate rationale, persist independently and refresh on both transitions.
+     */
+    public function testManagerCanSaveAndClearSpeciesRarityExclusion(): void
+    {
+        $db = db_connect();
+        $db->table('taxa')->where('id', 1)->update(['species_id' => 1]);
+        $this->authenticateAs('taxa-exclusion@example.com', 'manager');
+        $offset = model(ImportOffsetModel::class);
+        $offset->setCompletion(TaxonRarityExclusionService::TASK, true);
+        $invalid = $this->post('taxa/1', [
+            'exclude_from_rarity_calculations' => '1',
+            'exclude_from_rarity_calculations_comment' => ' ',
+            'taxon_remarks' => 'Must not save invalid form',
+        ]);
+        $invalid->assertStatus(302);
+        $invalid->assertSessionHas('errors');
+        $this->withSession(['errors' => [
+            'exclude_from_rarity_calculations' => 'A rationale is required when excluding a species from rarity calculations.',
+        ]]);
+        $reloaded = $this->get('taxa/1');
+        $reloaded->assertStatus(200);
+        $body = (string) $reloaded->response()->getBody();
+        $summaryPosition = strpos($body, 'validation-error-summary');
+        $this->assertNotFalse($summaryPosition);
+        $this->assertStringContainsString('Your changes were not saved', $body);
+        $this->assertStringContainsString('A rationale is required when excluding a species from rarity calculations.', $body);
+        $this->assertStringContainsString('tabindex="-1" autofocus', $body);
+        $this->assertLessThan(strpos($body, 'Global rarity exclusion'), $summaryPosition);
+        $this->assertSame(0, (int) model(TaxonModel::class)->find(1)['exclude_from_rarity_calculations']);
+        $this->assertNotSame('Must not save invalid form', model(TaxonModel::class)->find(1)['taxon_remarks']);
+        $this->assertTrue($offset->isComplete(TaxonRarityExclusionService::TASK));
+        $input = [
+            'exclude_from_rarity_calculations' => '1',
+            'exclude_from_rarity_calculations_comment' => '<script>expansion</script>',
+        ];
+        $this->post('taxa/1', $input)->assertStatus(302);
+        $this->assertSame(1, (int) model(TaxonModel::class)->find(1)['exclude_from_rarity_calculations']);
+        $this->assertFalse($offset->isComplete(TaxonRarityExclusionService::TASK));
+        $revision = $offset->getCheckpoint(TaxonRarityExclusionService::TASK);
+        $this->assertNotNull($revision);
+        $offset->completeIfCheckpointUnchanged(TaxonRarityExclusionService::TASK, $revision);
+        $input['exclude_from_rarity_calculations_comment'] = 'Updated rationale';
+        $this->post('taxa/1', $input)->assertStatus(302);
+        $this->assertTrue($offset->isComplete(TaxonRarityExclusionService::TASK));
+        $this->assertSame($revision, $offset->getCheckpoint(TaxonRarityExclusionService::TASK));
+        $this->post('taxa/1', ['taxon_remarks' => 'Unrelated text'])->assertStatus(302);
+        $this->assertSame(1, (int) model(TaxonModel::class)->find(1)['exclude_from_rarity_calculations']);
+        $this->post('taxa/1', ['exclude_from_rarity_calculations' => '0'])->assertStatus(302);
+        $taxon = model(TaxonModel::class)->find(1);
+        $this->assertSame(0, (int) $taxon['exclude_from_rarity_calculations']);
+        $this->assertNull($taxon['exclude_from_rarity_calculations_comment']);
+        $this->assertSame(4, (int) $taxon['rarity_category']);
+        $this->assertFalse($offset->isComplete(TaxonRarityExclusionService::TASK));
+        $this->assertNotSame($revision, $offset->getCheckpoint(TaxonRarityExclusionService::TASK));
+    }
+
+    /**
+     * Descendant details display escaped inherited rationale without editable exclusion controls.
+     */
+    public function testRarityExclusionDetailsEscapeAndExplainInheritance(): void
+    {
+        $db = db_connect();
+        $db->table('taxa')->where('id', 1)->update([
+            'species_id' => 1, 'exclude_from_rarity_calculations' => 1,
+            'exclude_from_rarity_calculations_comment' => '<script>expansion</script>',
+        ]);
+        $db->table('taxa')->where('id', 2)->update(['species_id' => 1]);
+        $this->authenticateAs('taxa-exclusion-inheritance@example.com', 'manager');
+        $species = $this->get('taxa/1');
+        $species->assertStatus(200);
+        $this->assertStringContainsString('&lt;script&gt;', (string) $species->response()->getBody());
+        $this->assertStringNotContainsString('<script>expansion</script>', (string) $species->response()->getBody());
+        $descendant = $this->get('taxa/2');
+        $descendant->assertStatus(200);
+        $descendant->assertSee('Inherited from');
+        $this->assertStringNotContainsString('name="exclude_from_rarity_calculations"', (string) $descendant->response()->getBody());
+        $this->post('taxa/2', [
+            'exclude_from_rarity_calculations' => '1',
+            'exclude_from_rarity_calculations_comment' => 'Invalid descendant decision',
+        ])->assertStatus(302);
+        $this->assertSame(0, (int) model(TaxonModel::class)->find(2)['exclude_from_rarity_calculations']);
+    }
+
+    /**
+     * A completion write for an older rebuild cannot erase a newer exclusion edit.
+     */
+    public function testSquareRefreshRevisionSurvivesConcurrentEdit(): void
+    {
+        $offset = model(ImportOffsetModel::class);
+        $offset->invalidateWithCheckpoint(TaxonRarityExclusionService::TASK, 'old-revision');
+        $offset->invalidateWithCheckpoint(TaxonRarityExclusionService::TASK, 'new-revision');
+        $offset->completeIfCheckpointUnchanged(TaxonRarityExclusionService::TASK, 'old-revision');
+        $this->assertFalse($offset->isComplete(TaxonRarityExclusionService::TASK));
+        $this->assertSame('new-revision', $offset->getCheckpoint(TaxonRarityExclusionService::TASK));
+        $offset->completeIfCheckpointUnchanged(TaxonRarityExclusionService::TASK, 'new-revision');
+        $this->assertTrue($offset->isComplete(TaxonRarityExclusionService::TASK));
+    }
+
+    /**
+     * Actual runner completion cannot acknowledge requests arriving after its revision snapshot.
+     */
+    public function testSquareRefreshRunnerPreservesNewRequestsAndDryRuns(): void
+    {
+        $offset = model(ImportOffsetModel::class);
+        $offset->invalidateWithCheckpoint(TaxonRarityExclusionService::TASK, 'before-run');
+        $runner = new DerivedImportRunner();
+        $result = $runner->run(
+            TaxonRarityExclusionService::TASK,
+            'gridSquareStatsCountsService',
+            false,
+            static function (int $runId) use ($offset): void {
+                $offset->invalidateWithCheckpoint(TaxonRarityExclusionService::TASK, 'during-run');
+            },
+        );
+        $this->assertSame('success', $result['status']);
+        $this->assertFalse($offset->isComplete(TaxonRarityExclusionService::TASK));
+        $this->assertSame('during-run', $offset->getCheckpoint(TaxonRarityExclusionService::TASK));
+        $this->assertSame('success', $runner->run(TaxonRarityExclusionService::TASK, 'gridSquareStatsCountsService', true)['status']);
+        $this->assertFalse($offset->isComplete(TaxonRarityExclusionService::TASK));
+        $this->assertSame('success', $runner->run(TaxonRarityExclusionService::TASK, 'gridSquareStatsCountsService')['status']);
+        $this->assertTrue($offset->isComplete(TaxonRarityExclusionService::TASK));
+    }
+
+    /**
+     * Failed square recalculations keep the request pending and record an explicit failure.
+     */
+    public function testSquareRefreshFailureRemainsPending(): void
+    {
+        $offset = model(ImportOffsetModel::class);
+        $offset->invalidateWithCheckpoint(TaxonRarityExclusionService::TASK, 'failed-run');
+        $service = $this->createMock(GridSquareStatsCountsService::class);
+        $service->method('run')->willReturn(['status' => 'failed', 'errors' => 1]);
+        \Config\Services::injectMock('gridSquareStatsCountsService', $service);
+        $result = (new DerivedImportRunner())->run(TaxonRarityExclusionService::TASK, 'gridSquareStatsCountsService');
+        $this->assertSame('failed', $result['status']);
+        $this->assertFalse($offset->isComplete(TaxonRarityExclusionService::TASK));
+        $this->assertSame('failed-run', $offset->getCheckpoint(TaxonRarityExclusionService::TASK));
+    }
+
+    /**
+     * Staff decisions are rolled back when their refresh request cannot be persisted.
+     */
+    public function testRarityExclusionSaveRollsBackWhenInvalidationFails(): void
+    {
+        $db = db_connect();
+        $db->table('taxa')->where('id', 1)->update(['species_id' => 1]);
+        model(ImportOffsetModel::class)->setCompletion(TaxonRarityExclusionService::TASK, true);
+        $this->authenticateAs('taxa-exclusion-failure@example.com', 'manager');
+        $db->query('CREATE TRIGGER exclusion_refresh_failure BEFORE UPDATE ON ' . $db->getPrefix()
+            . 'import_offsets BEGIN SELECT RAISE(ABORT, "Simulated refresh failure"); END');
+        try {
+            $response = $this->post('taxa/1', [
+                'exclude_from_rarity_calculations' => '1',
+                'exclude_from_rarity_calculations_comment' => 'Rapid expansion',
+                'taxon_remarks' => 'Must roll back',
+            ]);
+            $response->assertStatus(302);
+            $response->assertSessionHas('error');
+            $taxon = model(TaxonModel::class)->find(1);
+            $this->assertSame(0, (int) $taxon['exclude_from_rarity_calculations']);
+            $this->assertNotSame('Must roll back', $taxon['taxon_remarks']);
+            $this->assertTrue(model(ImportOffsetModel::class)->isComplete(TaxonRarityExclusionService::TASK));
+        } finally {
+            $db->query('DROP TRIGGER exclusion_refresh_failure');
+            $db->resetTransStatus();
+        }
+    }
+
+    /**
+     * Standard users cannot set exclusions even with a valid species submission.
+     */
+    public function testStandardUserCannotSaveRarityExclusion(): void
+    {
+        db_connect()->table('taxa')->where('id', 1)->update(['species_id' => 1]);
+        $this->authenticateAs('taxa-exclusion-user@example.com', 'user');
+        $this->post('taxa/1', [
+            'exclude_from_rarity_calculations' => '1',
+            'exclude_from_rarity_calculations_comment' => 'Not authorised',
+        ])->assertStatus(302);
+        $this->assertSame(0, (int) model(TaxonModel::class)->find(1)['exclude_from_rarity_calculations']);
+    }
+
+    /**
+     * Exclusion storage can be rolled back and restored with its default values.
+     */
+    public function testRarityExclusionMigrationIsReversible(): void
+    {
+        $migration = new \App\Database\Migrations\AddSpeciesRarityExclusion();
+        $migration->down();
+        $this->assertFalse(db_connect()->fieldExists('exclude_from_rarity_calculations', 'taxa'));
+        $migration->up();
+        $taxon = model(TaxonModel::class)->find(1);
+        $this->assertSame(0, (int) $taxon['exclude_from_rarity_calculations']);
+        $this->assertNull($taxon['exclude_from_rarity_calculations_comment']);
+        $references = db_connect()->query('PRAGMA foreign_key_list(' . db_connect()->getPrefix() . 'occurrences)')->getResultArray();
+        foreach ($references as $reference) {
+            if ($reference['from'] === 'taxon_id') {
+                $this->assertSame(db_connect()->getPrefix() . 'taxa', $reference['table']);
+            }
+        }
+    }
+
+    /**
+     * Invalid species submissions fail explicitly before persistence.
+     *
+     * @param array<string, mixed> $input Invalid flag or rationale submission.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('invalidRarityExclusions')]
+    public function testRarityExclusionRejectsInvalidInput(array $input): void
+    {
+        db_connect()->table('taxa')->where('id', 1)->update(['species_id' => 1]);
+        $this->expectException(\InvalidArgumentException::class);
+        (new TaxonRarityExclusionService())->validateInput(1, $input);
+    }
+
+    /**
+     * Supply malformed, omitted and oversized exclusion fields.
+     *
+     * @return array<string, array{array<string, mixed>}> Invalid submissions.
+     */
+    public static function invalidRarityExclusions(): array
+    {
+        return [
+            'invalid boolean' => [[
+                'exclude_from_rarity_calculations' => '2',
+                'exclude_from_rarity_calculations_comment' => 'Expansion',
+            ]],
+            'array boolean' => [[
+                'exclude_from_rarity_calculations' => ['1'],
+                'exclude_from_rarity_calculations_comment' => 'Expansion',
+            ]],
+            'omitted boolean' => [['exclude_from_rarity_calculations_comment' => 'Expansion']],
+            'oversized rationale' => [[
+                'exclude_from_rarity_calculations' => '1',
+                'exclude_from_rarity_calculations_comment' => str_repeat('x', 65536),
+            ]],
+            'array rationale' => [[
+                'exclude_from_rarity_calculations' => '1',
+                'exclude_from_rarity_calculations_comment' => ['Expansion'],
+            ]],
+        ];
     }
 
     public function testListAllowsManagerRole(): void

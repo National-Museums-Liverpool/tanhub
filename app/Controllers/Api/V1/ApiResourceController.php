@@ -30,6 +30,50 @@ use CodeIgniter\HTTP\ResponseInterface;
  */
 abstract class ApiResourceController extends ApiController
 {
+    /** @var string Effective species flag shared by selection and filtering. */
+    private const RARITY_EXCLUSION_FLAG = '(COALESCE(exclusion_species.exclude_from_rarity_calculations, 0))';
+
+    /**
+     * Map public exclusion fields to the owning species rather than the recorded taxon.
+     *
+     * @param string $prefix Empty for taxa, or `taxon__` for include fields.
+     * @return array<string, string> Effective field expressions.
+     */
+    protected function rarityExclusionFields(string $prefix = ''): array
+    {
+        return [
+            $prefix . 'exclude_from_rarity_calculations' => self::RARITY_EXCLUSION_FLAG,
+            $prefix . 'exclude_from_rarity_calculations_comment' => 'exclusion_species.exclude_from_rarity_calculations_comment',
+        ];
+    }
+
+    /**
+     * Join the species that owns the exclusion, without inheriting unrelated ancestors.
+     *
+     * @param BaseBuilder $builder Query already joining the returned taxon as `t`.
+     * @return void
+     */
+    protected function joinRarityExclusion(BaseBuilder $builder): void
+    {
+        $builder->join('taxa exclusion_species', 'exclusion_species.id = t.species_id AND exclusion_species.species_id = exclusion_species.id', 'left');
+    }
+
+    /**
+     * Normalize database flag values to JSON booleans on list and detail responses.
+     *
+     * @param array<int, array<string, mixed>> $rows Response rows, modified in place.
+     * @return void
+     */
+    private function normalizeRarityExclusionData(array &$rows): void
+    {
+        foreach ($rows as &$row) {
+            foreach (['exclude_from_rarity_calculations', 'taxon__exclude_from_rarity_calculations'] as $field) {
+                if (array_key_exists($field, $row)) {
+                    $row[$field] = (int) $row[$field] === 1;
+                }
+            }
+        }
+    }
     /**
      * Parsed reporting-only query option for the current request.
      *
@@ -256,6 +300,7 @@ abstract class ApiResourceController extends ApiController
             ->getResultArray();
 
         $this->augmentResponseData($data, $includes);
+        $this->normalizeRarityExclusionData($data);
 
         $this->removeInternalFields($data, $includes);
 
@@ -297,6 +342,7 @@ abstract class ApiResourceController extends ApiController
         $rows = [$item];
 
         $this->augmentResponseData($rows, $includes);
+        $this->normalizeRarityExclusionData($rows);
 
         $this->removeInternalFields($rows, $includes);
 
@@ -590,6 +636,7 @@ abstract class ApiResourceController extends ApiController
      * returned; this prevents filtering on arbitrary/unindexed columns. Supported operators
      * are `eq` (default, used for bare `field=value`), `in`, `contains`, `gte`, and `lte`;
      * an unrecognised operator also yields a 400 problem response.
+     * Species-exclusion booleans accept equality only with true/false or 1/0.
      *
      * @param array<string, string> $allowedFilters Map of API field name => SQL column/expression
      *                                               permitted for filtering (see {@see self::allowedFilters()}).
@@ -633,6 +680,25 @@ abstract class ApiResourceController extends ApiController
                 'value' => $value,
             ];
         }
+
+        foreach ($filters as &$filter) {
+            if ($filter['column'] !== self::RARITY_EXCLUSION_FLAG) {
+                continue;
+            }
+            if ($filter['operator'] !== 'eq' || ! is_string($filter['value'])) {
+                return $this->respondProblem(400, 'Invalid filter parameter', 'Rarity exclusion supports equality with true, false, 1, or 0.');
+            }
+            $value = match (strtolower(trim($filter['value']))) {
+                'true', '1' => 1,
+                'false', '0' => 0,
+                default => null,
+            };
+            if ($value === null) {
+                return $this->respondProblem(400, 'Invalid filter parameter', 'Rarity exclusion must be true, false, 1, or 0.');
+            }
+            $filter['value'] = $value;
+        }
+        unset($filter);
 
         return $filters;
     }

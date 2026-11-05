@@ -107,7 +107,7 @@ class Taxa extends BaseController
         $keySpeciesByScope = service('taxonKeySpeciesService')->getForTaxon($id);
         $user = auth()->user();
         $canEditDetails = $user !== null && $user->inGroup('admin', 'manager');
-        $canModerate = $user !== null && $user->inGroup('admin', 'manager');
+        $canModerate = $user !== null && $user->inGroup('admin');
 
         return $this->renderPage('taxa/details', [
             'pageTitle' => 'Taxon details',
@@ -293,7 +293,7 @@ class Taxa extends BaseController
     {
         $user = auth()->user();
         $canEditDetails = $user !== null && $user->inGroup('admin', 'manager');
-        $canModerate = $user !== null && $user->inGroup('admin', 'manager');
+        $canModerate = $user !== null && $user->inGroup('admin');
 
         if (! $canEditDetails && ! $canModerate) {
             return redirect()->back()->with('error', 'You are not authorised to update this taxon.');

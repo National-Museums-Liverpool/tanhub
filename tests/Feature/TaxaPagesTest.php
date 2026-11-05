@@ -568,7 +568,7 @@ final class TaxaPagesTest extends CIUnitTestCase
         ]);
         $page = $this->get('taxa/1');
         $page->assertStatus(200);
-        $page->assertSee('Rarity by scope');
+        $page->assertSee('Rarity by region');
         $page->assertSee('66.6667');
         $page->assertSee('0.6000');
         $this->assertStringContainsString('&lt;script&gt;', (string) $page->response()->getBody());

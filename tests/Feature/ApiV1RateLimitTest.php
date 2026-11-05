@@ -32,6 +32,7 @@ final class ApiV1RateLimitTest extends CIUnitTestCase
     public function testAnonymousRequestsAreRateLimited(): void
     {
         $anonymousLimit = $this->getRateLimitIntEnv('api.rateLimitAnonymousCapacity', 20);
+        service('throttler')->setTestTime(time());
 
         for ($i = 0; $i < $anonymousLimit; $i++) {
             $result = $this->get('api/v1/data-sources');

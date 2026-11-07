@@ -15,6 +15,13 @@
   date. See https://github.com/National-Museums-Liverpool/tanhub/issues/13.
 - Addition of average square and record counts per year to `taxon_stats` table. See
   https://github.com/National-Museums-Liverpool/tanhub/issues/12.
+- Import all GB Red List and GB Status designations as distinct semicolon-separated abbreviation
+  lists, including provisional and old types. See
+  https://github.com/National-Museums-Liverpool/tanhub/issues/11.
+  Breaking change: `conservation_status` becomes `gb_red_list` in the database, API fields,
+  filters and sorting; included taxon fields use `taxon__gb_red_list` and `taxon__gb_status`.
+  Admin screens and new CSV exports show both lists. Apply migrations and refresh taxonomy using
+  the [designation upgrade procedure](docs/import.md#refreshing-gb-designations).
 
 ### Bugfixes
 

@@ -124,7 +124,7 @@ final class TaxonMediaFilesDeliveryTest extends CIUnitTestCase
             'taxon_group_id' => 1,
             'id_difficulty' => 2,
             'recording_scheme_id' => 1,
-            'conservation_status' => 'LC',
+            'gb_red_list' => 'LC',
             'taxon_remarks' => null,
             'rarity_group_name' => 'Bees, Wasps and Ants',
             'rarity_category' => 4,

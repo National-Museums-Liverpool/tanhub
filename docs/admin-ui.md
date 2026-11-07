@@ -480,10 +480,13 @@ Access:
 
 List page:
 
-- Columns: id, taxon_identifier, scientific_name, vernacular_name, conservation_status, blocked,
+- Columns: id, taxon_identifier, scientific_name, vernacular_name, gb_red_list, gb_status, blocked,
   actions.
 - Generic search: `q` across taxon_identifier, scientific_name, vernacular_name, and
-  conservation_status.
+  gb_red_list and gb_status.
+- GB Red List and GB Status show semicolon-separated designation abbreviations. Both columns
+  support whole-string sorting and appear in new taxon CSV exports. Previously created exports
+  retain their frozen headings, including Conservation status.
 - Filters: taxon_group, taxon_rank, recording_scheme, blocked.
 - Default sort: scientific_name asc.
 
@@ -496,7 +499,7 @@ associated recording scheme name and groups taxa together into collections withi
 compared for rarity calculations, so they are only compared to similarly recorded taxa.
 
 - Read-only: taxon_identifier, scientific_name_identifier, scientific_name, vernacular_name,
-  classification FKs, rarity category.
+  classification FKs, rarity category, GB Red List and GB Status designation lists.
 - Read-only hierarchy context: current rank reporting status and the immediate accepted parent
   taxon, including its taxon identifier, scientific name, vernacular name, and rank.
 - Classification FKs are dynamic self-references on taxa (for example order_id, family_id,

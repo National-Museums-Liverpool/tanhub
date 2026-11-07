@@ -11,7 +11,7 @@ use RuntimeException;
 final class ExportTemplate
 {
     /** @var int Frozen template schema version. */
-    public const VERSION = 3;
+    public const VERSION = 4;
 
     /** @var list<string> Typed numeric fields that must not receive formula quoting. */
     private const NUMBERS = ['id', 'taxon_id', 'taxon_name_id', 'data_source_id', 'latitude',
@@ -53,7 +53,7 @@ final class ExportTemplate
             $columns[$alias . '_name'] = (string) $rank['rank'];
         }
         $columns += $taxa
-            ? ['conservation_status' => 'Conservation status', 'taxon_identifier' => 'Taxon identifier']
+            ? ['gb_red_list' => 'GB Red List', 'gb_status' => 'GB Status', 'taxon_identifier' => 'Taxon identifier']
             : ['regions' => 'Geographic regions', 'grid_ref' => 'Grid ref',
                 'data_source_title' => 'Data source', 'unique_key' => 'Unique key'];
         $columns['blocked'] = 'Blocked';

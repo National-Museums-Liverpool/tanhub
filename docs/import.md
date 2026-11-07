@@ -128,11 +128,12 @@ ignored.
 
 ## Running the imports using the admin user interface
 
-You can run imports by logging into the admin user interface and visiting the Imports page via the
-menu option. Imports are listed along with a Go button for initiating an import batch. Imports are
-limited to a batch of 5000 records so you may need to run each import several times to get it to
-completion. Where an import requires another import to complete before it can be run, the blocking
-import tasks are shown.
+Sign in as an admin or manager and open **Imports** from the menu. **Run** queues a task and attempts
+one batch of the oldest runnable queued work. The default batch limit is 5000 records, configurable
+through `Config\Import.defaultLimit`. Without a scheduled runner, use **Process next batch now**
+until the task completes. Refreshing the page only displays progress; it does not run a batch.
+Where an import requires another import to complete first, the blocking tasks are shown and
+processed before the requested task. See [queue controls](./admin-ui.md#imports) for details.
 
 The dependency rules are shared with the `import:auto` command. A task that is shown as blocked
 here is skipped by automation until all its prerequisite tasks are complete. Automatic scheduling
@@ -165,6 +166,72 @@ occurrence imports and rerun derived statistics so the reporting projections are
 The `grid_square_stats` task populates the `grid_square_stats` with all the 2km grid squares that
 intersect your geographic regions. It does not do the actual counting of contained records.
 Therefore it can also be completed once and not run again.
+
+### Refreshing GB designations
+
+The taxa report imports all non-deleted designations in `GB Red List` and `GB Status`, including
+old and provisional types. It aggregates distinct, nonblank abbreviations per taxon/category
+before joining taxa, so multiple designations do not multiply taxonomy rows or disrupt pagination.
+The report transports JSON arrays to preserve abbreviation boundaries. The adapter rejects
+embedded semicolons, trims, deduplicates and sorts values bytewise, then produces `;`-separated
+strings for `taxa.gb_red_list` and `taxa.gb_status`. Empty lists become null.
+Persistence rejects invalid UTF-8, NULLs or lists exceeding 65,535 bytes rather than truncate values.
+Errors stop the batch and are reported through the existing import logs/run status.
+If either designation column is absent, importing fails with an instruction to update the warehouse
+report rather than silently clearing stored values.
+
+To upgrade an existing deployment:
+
+1. Stop scheduled imports, wait for active imports/exports to finish, and back up the database.
+2. Coordinate updating the application and the warehouse copy of
+   `reports/projects/tanhub/taxa.xml` from the supplied warehouse module. The new report contract
+   is intentionally incompatible with the old importer.
+3. Run `php spark migrate --all`, or sign in as an admin, visit `/update` in the browser and click
+   **Run updates**. Existing conservation values are preserved as `gb_red_list`; `gb_status`
+   starts null. SQLite must be version 3.35 or later.
+4. Restart the taxonomy refresh explicitly from the beginning. For a browser-only alternative to
+   steps 4 and 5, follow [the UI instructions below](#browser-alternative-without-spark):
+
+   ```bash
+   php spark import:indicia --source indicia --entity taxa --offset 0 --limit 1000
+   ```
+
+5. Repeat that command without `--offset 0` to continue from the stored offset until `Has more`
+   is `no`. Check each batch for errors. Reimports upsert existing taxa and clear statuses that
+   disappear from the source; they do not append values to old lists.
+6. Verify taxa with multiple values, either category alone and neither category. Compare taxon
+   counts and API pagination, check both admin/CSV columns, and update API clients to the new names.
+7. Resume scheduled imports. The existing taxonomy orchestration marks `taxon_stats` incomplete
+   after updates, so allow the normal derived-statistics task to run. Designations themselves do
+   not affect rarity calculations and do not require an occurrence reimport.
+
+#### Browser alternative without Spark
+
+Complete the deployment and backup steps above first, and apply pending migrations through
+`/update` using **Run updates**. Then replace the command-line import steps with:
+
+1. Sign in as an admin or manager and open **Imports** (`/imports`).
+2. Find **taxa**, source **Indicia**, in the taxonomy section. If it already has a waiting or
+   failed request, use **Remove from queue** for that request before restarting. Wait for running
+   imports to finish; a running request cannot be removed.
+3. Click **Restart** on the taxa row. This resets its saved offset to zero and marks it incomplete
+   without deleting existing taxa. Restart alone does not run the import.
+4. Click **Run** on the taxa row. This queues the refresh and attempts one batch. Other older
+   requests or incomplete prerequisites may be processed first; check the queue and result message.
+5. Click **Process next batch now** repeatedly until the taxa row shows **Complete: Yes** and its
+   request leaves the queue. Each click runs one batch; simply refreshing or leaving the page open
+   does not continue the import. Do not click **Restart** again between batches.
+6. Check each result for errors. If the request fails, correct the reported problem, then click
+   **Retry** and continue processing batches from the saved offset.
+7. Verify the refreshed values as described above. Without a scheduled runner, also click **Run**
+   for **taxon_stats** in the report-stats section and use **Process next batch now** until it and
+   any required prerequisites complete. Taxonomy updates mark these statistics incomplete.
+
+No shell or cron runner is required for this manual workflow, but the hosting provider's PHP
+request time and resource limits still apply.
+
+API equality and `in` filters match whole lists, not individual abbreviations; see
+[GB designation lists](./api.md#gb-designation-lists).
 
 The 2 `occurrences` imports are for importing data from the NBN Atlas and Indicia and can be
 initially run to completion, then periodically run afterwards to pick up updates and new records.

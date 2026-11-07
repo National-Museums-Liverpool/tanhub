@@ -30,10 +30,20 @@
       JOIN recording_schemes rs ON rs.id=rst.recording_scheme_id AND rs.deleted=false
     ) ON cttlp.taxon_meaning_id=ANY(ctp.path)
       AND cttlp.preferred=true
-    LEFT JOIN (taxa_taxon_designations ttd
+    -- Aggregate before joining so designation multiplicity cannot multiply report rows.
+    -- JSON preserves abbreviation boundaries for delimiter validation by the importer.
+    LEFT JOIN (
+      SELECT ttd.taxon_id,
+        json_agg(DISTINCT btrim(td.abbreviation) ORDER BY btrim(td.abbreviation))
+          FILTER (WHERE t.term='GB Red List') AS gb_red_list,
+        json_agg(DISTINCT btrim(td.abbreviation) ORDER BY btrim(td.abbreviation))
+          FILTER (WHERE t.term='GB Status') AS gb_status
+      FROM taxa_taxon_designations ttd
       JOIN taxon_designations td ON td.id=ttd.taxon_designation_id AND td.deleted=false
-      JOIN cache_termlists_terms t ON t.id=td.category_id AND t.term='GB Red List'
-    ) ON ttd.taxon_id=cttl.taxon_id AND ttd.deleted=false
+      JOIN cache_termlists_terms t ON t.id=td.category_id AND t.term IN ('GB Red List', 'GB Status')
+      WHERE ttd.deleted=false AND NULLIF(btrim(td.abbreviation), '') IS NOT NULL
+      GROUP BY ttd.taxon_id
+    ) designations ON designations.taxon_id=cttl.taxon_id
     WHERE cttl.id IN (SELECT id FROM all_ttlids)
   </query>
   <order_bys>
@@ -94,9 +104,12 @@
     <column name="recording_scheme_external_key"
             sql="rs.external_key"
             datatype="text" />
-    <column name="conservation_status"
-            sql="td.abbreviation"
-            datatype="text" />
+    <column name="gb_red_list"
+            sql="designations.gb_red_list"
+            datatype="json" />
+    <column name="gb_status"
+            sql="designations.gb_status"
+            datatype="json" />
     <column name="id_difficulty"
             sql="cts.identification_difficulty"
             datatype="integer" />

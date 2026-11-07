@@ -285,13 +285,17 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
     }
 
     /**
-     * Cleanup a taxon row read from Indicia.
+     * Normalize taxonomy and encode warehouse designation arrays as stable string lists.
      *
      * @param array<string, mixed> $row
      * @return array<string, mixed>
+     * @throws RuntimeException If the warehouse still serves the old designation report contract.
      */
     private function normaliseTaxaRow(array $row): array
     {
+        if (! array_key_exists('gb_red_list', $row) || ! array_key_exists('gb_status', $row)) {
+            throw new RuntimeException('Indicia taxa report is missing GB designation columns. Deploy the updated taxa.xml before importing.');
+        }
         return [
             'taxon_identifier' => (string) ($row['taxon_identifier'] ?? ''),
             'scientific_name_identifier' => (string) ($row['scientific_name_identifier'] ?? ''),
@@ -303,11 +307,50 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
             'id_difficulty' => (int) ($row['id_difficulty'] ?? null),
             'recording_scheme' => (string) ($row['recording_scheme'] ?? ''),
             'recording_scheme_external_key' => (string) ($row['recording_scheme_external_key'] ?? ''),
-            'conservation_status' => $row['conservation_status'] ?? null,
+            'gb_red_list' => $this->normaliseDesignationList($row['gb_red_list'] ?? null),
+            'gb_status' => $this->normaliseDesignationList($row['gb_status'] ?? null),
             'taxon_rank' => (string) ($row['taxon_rank'] ?? ''),
             'parent_taxon_identifier' => trim((string) ($row['parent_taxon_identifier'] ?? '')),
             'higher_taxa' => json_decode((string) ($row['higher_taxa'] ?? '[]')),
         ];
+    }
+
+    /**
+     * Encode distinct abbreviations without losing boundaries or silently truncating values.
+     *
+     * The report aggregates JSON arrays before joining taxa. Semicolons inside an abbreviation
+     * would be ambiguous in the public string contract, so reject them before joining values.
+     *
+     * @param mixed $value Warehouse JSON array, decoded list, or null.
+     * @return string|null Bytewise-sorted abbreviations joined with semicolons, or null.
+     * @throws \RuntimeException If the source shape or an abbreviation cannot be represented.
+     */
+    private function normaliseDesignationList(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        $values = is_string($value) ? json_decode($value, true, 512, JSON_THROW_ON_ERROR) : $value;
+        if (! is_array($values) || ! array_is_list($values)) {
+            throw new \RuntimeException('Taxon designation report values must be JSON lists.');
+        }
+        $abbreviations = [];
+        foreach ($values as $abbreviation) {
+            if ($abbreviation === null) {
+                continue;
+            }
+            if (! is_string($abbreviation) || str_contains($abbreviation, ';')) {
+                throw new \RuntimeException('Taxon designation abbreviations must be strings without semicolons.');
+            }
+            $abbreviation = trim($abbreviation);
+            if ($abbreviation !== '') {
+                $abbreviations[] = $abbreviation;
+            }
+        }
+        $abbreviations = array_values(array_unique($abbreviations));
+        sort($abbreviations, SORT_STRING);
+
+        return $abbreviations === [] ? null : implode(';', $abbreviations);
     }
 
     /**

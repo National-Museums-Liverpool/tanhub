@@ -12,6 +12,13 @@ info:
     taxon__ prefix only with include=taxon. Existing requests are unfiltered unless clients opt in.
     Exclusion affects square rarity scores, not counts, measured categories or expert rarity status.
     Staff flag transitions prioritise an asynchronous square-statistics rebuild.
+    Taxa return gb_red_list and gb_status as nullable strings of distinct, bytewise-sorted
+    designation abbreviations separated by semicolons without spaces. Included taxa on
+    occurrences, taxon names, taxon stats and yearly taxon stats use taxon__gb_red_list and
+    taxon__gb_status with include=taxon. Old and provisional types are included within the
+    GB Red List and GB Status warehouse categories. Equality/in compare whole lists;
+    contains is substring matching, not exact membership. Sorting is lexical over whole lists.
+    This replaces conservation_status and taxon__conservation_status without legacy aliases.
 servers:
   - url: /api/v1
     description: API v1
@@ -620,6 +627,23 @@ components:
       type: object
       additionalProperties: true
       description: Generic placeholder resource schema for the starter contract.
+      properties:
+        gb_red_list:
+          $ref: '#/components/schemas/GbDesignationList'
+        gb_status:
+          $ref: '#/components/schemas/GbDesignationList'
+        taxon__gb_red_list:
+          $ref: '#/components/schemas/GbDesignationList'
+        taxon__gb_status:
+          $ref: '#/components/schemas/GbDesignationList'
+    GbDesignationList:
+      type: [string, 'null']
+      description: >-
+        Present on taxa, or with a taxon__ prefix only for include=taxon on related resources.
+        Distinct designation abbreviations, sorted bytewise and semicolon-separated.
+        Null means no available abbreviations. Equality/in compare the entire string;
+        contains matches substrings rather than exact members. Old/provisional types are included.
+      examples: ['LC;VU', 'Na;Nb', null]
     Problem:
       type: object
       required: [title, status]

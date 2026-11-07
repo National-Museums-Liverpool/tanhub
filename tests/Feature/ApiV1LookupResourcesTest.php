@@ -128,6 +128,72 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         $this->assertSame('Apidae', $json['data'][0]['scientific_name']);
     }
 
+    /**
+     * Designations expose two strings and retain whole-list equality/in semantics.
+     */
+    public function testDesignationListFieldsAndFilters(): void
+    {
+        db_connect()->table('taxa')->where('id', 1)->update([
+            'gb_red_list' => 'LC;VU', 'gb_status' => 'Na;Nb',
+        ]);
+        foreach ([
+            'gb_red_list[eq]=LC' => 0,
+            'gb_red_list[in]=LC,VU' => 0,
+            'gb_red_list[eq]=LC%3BVU' => 1,
+            'gb_red_list[in]=LC%3BVU,EN' => 1,
+            'gb_status[eq]=Na%3BNb' => 1,
+            'gb_status[contains]=Nb' => 1,
+        ] as $filter => $expected) {
+            $result = $this->get('api/v1/taxa?' . $filter . '&sort=gb_status');
+            $result->assertStatus(200);
+            $json = json_decode((string) $result->response()->getBody(), true);
+            $this->assertSame($expected, $json['meta']['count'], $filter);
+            if ($expected === 1) {
+                $this->assertSame('LC;VU', $json['data'][0]['gb_red_list']);
+                $this->assertSame('Na;Nb', $json['data'][0]['gb_status']);
+                $this->assertArrayNotHasKey('conservation_status', $json['data'][0]);
+            }
+        }
+        $this->get('api/v1/taxa?conservation_status[eq]=LC')->assertStatus(400);
+        $this->get('api/v1/taxa?sort=conservation_status')->assertStatus(400);
+        $result = $this->get('api/v1/taxa?reporting_only=false&gb_status[eq]=null');
+        $result->assertStatus(200);
+        $json = json_decode((string) $result->response()->getBody(), true);
+        $this->assertSame(1, $json['meta']['count']);
+        $this->assertNull($json['data'][0]['gb_status']);
+    }
+
+    /**
+     * Every existing taxon expansion carries both lists without leaking the old field.
+     */
+    public function testDesignationListsAcrossIncludedTaxonResources(): void
+    {
+        db_connect()->table('taxa')->where('id', 1)->update([
+            'gb_red_list' => 'LC;VU', 'gb_status' => 'Na;Nb',
+        ]);
+        foreach (['occurrences', 'taxon-names', 'taxon-stats', 'taxon-year-stats'] as $resource) {
+            $result = $this->get('api/v1/' . $resource . '?include=taxon'
+                . '&taxon__gb_status[eq]=Na%3BNb&sort=taxon__gb_red_list');
+            $result->assertStatus(200);
+            $json = json_decode((string) $result->response()->getBody(), true);
+            $this->assertNotEmpty($json['data'], $resource);
+            foreach ($json['data'] as $row) {
+                $this->assertSame('LC;VU', $row['taxon__gb_red_list']);
+                $this->assertSame('Na;Nb', $row['taxon__gb_status']);
+                $this->assertArrayNotHasKey('taxon__conservation_status', $row);
+            }
+            $this->get('api/v1/' . $resource . '?include=taxon&taxon__conservation_status[eq]=LC')
+                ->assertStatus(400);
+            $result = $this->get('api/v1/' . $resource);
+            $result->assertStatus(200);
+            $json = json_decode((string) $result->response()->getBody(), true);
+            foreach ($json['data'] as $row) {
+                $this->assertArrayNotHasKey('taxon__gb_status', $row);
+                $this->assertArrayNotHasKey('taxon__gb_red_list', $row);
+            }
+        }
+    }
+
     public function testOccurrencesSupportsGteAndLteFilterOperators(): void
     {
         $gteResult = $this->get('api/v1/occurrences?from_date[gte]=2024-05-11');
@@ -1101,7 +1167,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'taxon_rank_id' => 2,
                 'id_difficulty' => 2,
                 'recording_scheme_id' => 1,
-                'conservation_status' => 'LC',
+                'gb_red_list' => 'LC',
                 'taxon_remarks' => 'Common and widespread.',
                 'rarity_group_name' => 'Bees, Wasps and Ants',
                 'rarity_category' => 4,
@@ -1124,7 +1190,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'taxon_rank_id' => 2,
                 'id_difficulty' => 3,
                 'recording_scheme_id' => 1,
-                'conservation_status' => 'EN',
+                'gb_red_list' => 'EN',
                 'taxon_remarks' => null,
                 'rarity_group_name' => 'Bees, Wasps and Ants',
                 'rarity_category' => 2,
@@ -1147,7 +1213,7 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
                 'taxon_rank_id' => 1,
                 'id_difficulty' => 1,
                 'recording_scheme_id' => 1,
-                'conservation_status' => null,
+                'gb_red_list' => null,
                 'taxon_remarks' => null,
                 'rarity_group_name' => 'Bees, Wasps and Ants',
                 'rarity_category' => null,
@@ -1459,7 +1525,8 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             taxon_group_id INTEGER NOT NULL,
             id_difficulty INTEGER NULL,
             recording_scheme_id INTEGER NULL,
-            conservation_status VARCHAR(10) NULL,
+            gb_red_list TEXT NULL,
+            gb_status TEXT NULL,
             taxon_remarks TEXT NULL,
             rarity_group_name VARCHAR(100) NOT NULL,
             rarity_category INTEGER NULL,

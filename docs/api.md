@@ -536,7 +536,8 @@ Examples:
 			- `taxon__scientific_name_identifier`
 			- `taxon__vernacular_name`
 			- `taxon__id_difficulty`
-			- `taxon__conservation_status`
+			- `taxon__gb_red_list`
+			- `taxon__gb_status`
 			- `taxon__rarity_category`
 			- `taxon__exclude_from_rarity_calculations`
 			- `taxon__exclude_from_rarity_calculations_comment`
@@ -611,7 +612,8 @@ Examples:
 			"taxon__scientific_name_identifier": "NHMSYS0073AC441A",
 			"taxon__vernacular_name": "Buff-tailed Bumblebee",
 			"taxon__id_difficulty": 4,
-			"taxon__conservation_status": null,
+			"taxon__gb_red_list": null,
+			"taxon__gb_status": null,
 			"taxon__rarity_category": 5,
 			"taxon_name__uuid": "3d77f8e7-e2e8-4d74-9d4d-cff4d11130e8",
 			"taxon_name__name": "Buff-tailed Bumblebee",
@@ -785,7 +787,7 @@ Examples:
 - Unique identifier: `taxon_identifier`
 - Exposed fields:
 	- `taxon_identifier`, `scientific_name_identifier`, `scientific_name`,
-	  `scientific_name_authorship`, `vernacular_name`, `id_difficulty`, `conservation_status`,
+	  `scientific_name_authorship`, `vernacular_name`, `id_difficulty`, `gb_red_list`, `gb_status`,
 		`taxon_remarks`, `rarity_group_name`, `rarity_category`,
 		`exclude_from_rarity_calculations`, `exclude_from_rarity_calculations_comment`
 	- dynamic taxon rank fields by configured rank identifier
@@ -818,6 +820,25 @@ Examples:
 			hierarchy.
 	- include-only sort/filter fields are available when their include is requested
 
+#### Designation lists
+
+`gb_red_list` and `gb_status` are nullable strings containing distinct, bytewise-sorted designation
+abbreviations separated by `;`, without spaces. Both include old and provisional types within the
+warehouse categories `GB Red List` and `GB Status`. No available abbreviations means null.
+These are national designations, not this application's calculated or curated local rarity status.
+
+This is a breaking rename: `conservation_status` and `taxon__conservation_status` are no longer
+returned or accepted as filter/sort fields. Use `gb_red_list` and `taxon__gb_red_list` instead.
+Occurrences, taxon names, taxon stats and yearly taxon stats also expose `taxon__gb_status` when
+`include=taxon` is requested.
+
+Existing string operators are unchanged. Equality and `in` compare complete stored strings:
+`gb_red_list[eq]=LC` does not match `LC;VU`, whereas `gb_red_list[eq]=LC%3BVU` does.
+`gb_red_list[in]=LC,VU` matches either single-value string, not a list containing both.
+`contains` remains substring matching, not exact membership; it can match part of an abbreviation.
+Sorting is lexical over the whole list. There is no new individual-designation membership operator.
+The same rules apply to the `taxon__` fields when included.
+
 Examples:
 
 - Request: `/api/v1/taxa?scientific_name[contains]=bombus`
@@ -835,7 +856,8 @@ Examples:
 			"taxon_group_external_key": "hymenoptera",
 			"id_difficulty": 2,
 			"recording_scheme_external_key": "ABCD1234EFGH5678",
-			"conservation_status": "LC",
+			"gb_red_list": "LC",
+			"gb_status": null,
 			"taxon_remarks": "Common and widespread.",
 			"rarity_group_name": "Bees, Wasps and Ants",
 			"rarity_category": "Common"
@@ -855,7 +877,7 @@ Examples:
 }
 ```
 
-- Request: `/api/v1/taxa?conservation_status[in]=VU,EN,CR&sort=scientific_name`
+- Request: `/api/v1/taxa?gb_red_list[in]=VU,EN,CR&sort=scientific_name`
 	Response:
 
 ```json
@@ -870,7 +892,8 @@ Examples:
 			"taxon_group_external_key": "hymenoptera",
 			"id_difficulty": 4,
 			"recording_scheme_external_key": "ABCD1234EFGH5678",
-			"conservation_status": "EN",
+			"gb_red_list": "EN",
+			"gb_status": null,
 			"taxon_remarks": "Declining species.",
 			"rarity_group_name": "Bees, Wasps and Ants",
 			"rarity_category": "Scarce"
@@ -883,7 +906,7 @@ Examples:
 		"total": 63
 	},
 	"links": {
-		"self": "/api/v1/taxa?conservation_status[in]=VU,EN,CR&sort=scientific_name",
+		"self": "/api/v1/taxa?gb_red_list[in]=VU,EN,CR&sort=scientific_name",
 		"next": null,
 		"prev": null
 	}
@@ -905,7 +928,8 @@ Examples:
 			"taxon_group_external_key": "beetles",
 			"id_difficulty": 1,
 			"recording_scheme_external_key": "ABCD1234EFGH5678",
-			"conservation_status": "LC",
+			"gb_red_list": "LC",
+			"gb_status": null,
 			"taxon_remarks": null,
 			"rarity_group_name": "Beetles",
 			"rarity_category": "Common"
@@ -1059,7 +1083,8 @@ Examples:
 			- `taxon__scientific_name_identifier`
 			- `taxon__vernacular_name`
 			- `taxon__id_difficulty`
-			- `taxon__conservation_status`
+			- `taxon__gb_red_list`
+			- `taxon__gb_status`
 			- `taxon__rarity_category`
 			- `taxon__exclude_from_rarity_calculations`
 			- `taxon__exclude_from_rarity_calculations_comment`
@@ -1367,7 +1392,8 @@ both fields.
 			- `taxon__scientific_name_identifier`
 			- `taxon__vernacular_name`
 			- `taxon__id_difficulty`
-			- `taxon__conservation_status`
+			- `taxon__gb_red_list`
+			- `taxon__gb_status`
 			- `taxon__rarity_category`
 			- `taxon__exclude_from_rarity_calculations`
 			- `taxon__exclude_from_rarity_calculations_comment`
@@ -1437,7 +1463,8 @@ Examples:
 			"taxon__scientific_name_identifier": "XYZ123",
 			"taxon__vernacular_name": "Buff-tailed Bumblebee",
 			"taxon__id_difficulty": 4,
-			"taxon__conservation_status": null,
+			"taxon__gb_red_list": null,
+			"taxon__gb_status": null,
 			"taxon__rarity_category": 5,
 			"taxon_rank__rank": "Species",
 			"taxon_rank__abbr": "sp",
@@ -1560,7 +1587,8 @@ Examples:
 			- `taxon__scientific_name_identifier`
 			- `taxon__vernacular_name`
 			- `taxon__id_difficulty`
-			- `taxon__conservation_status`
+			- `taxon__gb_red_list`
+			- `taxon__gb_status`
 			- `taxon__rarity_category`
 			- `taxon__exclude_from_rarity_calculations`
 			- `taxon__exclude_from_rarity_calculations_comment`
@@ -1612,7 +1640,8 @@ Examples:
 			"taxon__scientific_name_identifier": "XYZ123",
 			"taxon__vernacular_name": "Buff-tailed Bumblebee",
 			"taxon__id_difficulty": 4,
-			"taxon__conservation_status": null,
+			"taxon__gb_red_list": null,
+			"taxon__gb_status": null,
 			"taxon__rarity_category": 5,
 			"taxon_rank__rank": "Species",
 			"taxon_rank__abbr": "sp",
@@ -1635,7 +1664,8 @@ Examples:
 			"taxon__scientific_name_identifier": "XYZ123",
 			"taxon__vernacular_name": "Buff-tailed Bumblebee",
 			"taxon__id_difficulty": 4,
-			"taxon__conservation_status": null,
+			"taxon__gb_red_list": null,
+			"taxon__gb_status": null,
 			"taxon__rarity_category": 5,
 			"taxon_rank__rank": "Species",
 			"taxon_rank__abbr": "sp",

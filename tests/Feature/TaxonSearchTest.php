@@ -329,6 +329,26 @@ final class TaxonSearchTest extends CIUnitTestCase
     }
 
     /**
+     * Both national designation lists are searchable and sortable without extra joins.
+     */
+    public function testDesignationListsInChecklistSearchAndOrdering(): void
+    {
+        db_connect()->table('taxa')->where('id', 40)->update([
+            'gb_red_list' => 'LC;VU', 'gb_status' => 'Nationally Rare;Nb',
+        ]);
+        $this->assertSame([40], $this->ids(['q' => 'Nationally Rare']));
+        $this->assertSame([40], $this->ids(['q' => 'LC;VU']));
+        $search = new TaxonSearchService();
+        $page = $search->page(['q' => 'Nationally Rare', 'sort' => 'gb_status'], true);
+        $this->assertSame('LC;VU', $page['taxa'][0]['gb_red_list']);
+        $this->assertSame('Nationally Rare;Nb', $page['taxa'][0]['gb_status']);
+        $this->assertSame('GB Red List', $page['columnLabels']['gb_red_list']);
+        $this->assertSame('GB Status', $page['columnLabels']['gb_status']);
+        $this->assertSame('t.gb_red_list', $search->ordering(['sort' => 'gb_red_list'], true)['column']);
+        $this->assertNotEmpty($search->ordering(['sort' => 'conservation_status'], true)['errors']);
+    }
+
+    /**
      * Invalid references and malformed filters cannot widen a query.
      */
     public function testValidationAndClassificationConfiguration(): void

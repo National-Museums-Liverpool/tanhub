@@ -55,6 +55,31 @@ final class TaxaPagesTest extends CIUnitTestCase
     }
 
     /**
+     * Imported designation lists display escaped and cannot be edited through the details form.
+     */
+    public function testDesignationDetailsAreEscapedAndReadOnly(): void
+    {
+        db_connect()->table('taxa')->where('id', 1)->update([
+            'gb_red_list' => 'LC;VU', 'gb_status' => '<rare>;Nb',
+        ]);
+        $this->authenticateAs('taxa-designations@example.com', 'manager');
+        $result = $this->get('taxa/1');
+        $result->assertStatus(200);
+        $body = (string) $result->response()->getBody();
+        $this->assertStringContainsString('GB Red List', $body);
+        $this->assertStringContainsString('GB Status', $body);
+        $this->assertStringContainsString('value="LC;VU" disabled', $body);
+        $this->assertStringContainsString('value="&lt;rare&gt;;Nb" disabled', $body);
+        $this->post('taxa/1', [
+            'gb_red_list' => 'CR', 'gb_status' => 'Na', 'taxon_remarks' => 'Allowed edit',
+        ])->assertStatus(302);
+        $row = model(TaxonModel::class)->find(1);
+        $this->assertSame('LC;VU', $row['gb_red_list']);
+        $this->assertSame('<rare>;Nb', $row['gb_status']);
+        $this->get('taxa?q=Nb')->assertSee('GB Status');
+    }
+
+    /**
      * Species exclusions validate rationale, persist independently and refresh on both transitions.
      */
     public function testManagerCanSaveAndClearSpeciesRarityExclusion(): void
@@ -943,7 +968,7 @@ final class TaxaPagesTest extends CIUnitTestCase
                 'taxon_group_id' => 1,
                 'id_difficulty' => 2,
                 'recording_scheme_id' => 1,
-                'conservation_status' => 'LC',
+                'gb_red_list' => 'LC',
                 'taxon_remarks' => null,
                 'rarity_group_name' => 'Bees, Wasps and Ants',
                 'rarity_category' => 4,
@@ -969,7 +994,7 @@ final class TaxaPagesTest extends CIUnitTestCase
                 'taxon_group_id' => 1,
                 'id_difficulty' => 2,
                 'recording_scheme_id' => 1,
-                'conservation_status' => 'LC',
+                'gb_red_list' => 'LC',
                 'taxon_remarks' => null,
                 'rarity_group_name' => 'Bees, Wasps and Ants',
                 'rarity_category' => 4,

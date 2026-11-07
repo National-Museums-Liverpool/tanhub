@@ -179,7 +179,7 @@ final class ExportService
             $lock = $this->fileLock($uuid, LOCK_EX);
             try {
                 $contract = json_decode($job['contract'], true, 512, JSON_THROW_ON_ERROR);
-                if (! in_array($contract['version'], [1, 2, ExportTemplate::VERSION], true)) {
+                if (! in_array($contract['version'], [1, 2, 3, ExportTemplate::VERSION], true)) {
                     throw new RuntimeException('The export template changed. Cancel and create a new export.');
                 }
                 if ($job['phase'] === 'capturing') {
@@ -341,6 +341,10 @@ final class ExportService
      */
     private function capture(array $job, array $contract): void
     {
+        // Frozen pre-v4 exports retain their old headings and sort contracts after the rename.
+        if ($contract['version'] < 4 && $contract['ordering']['column'] === 't.conservation_status') {
+            $contract['ordering']['column'] = 't.gb_red_list';
+        }
         $search = new TaxonSearchService($this->db);
         if ($this->classificationContract($search) !== $contract['classifications']) {
             throw new RuntimeException('Classification configuration changed. Create a new export.');
@@ -382,6 +386,9 @@ final class ExportService
         $numeric = in_array($contract['ordering']['sort'], ['id', 'rank_title', 'blocked', 'data_source_id',
             'taxon_id', 'taxon_name_id'], true);
         foreach ($rows as $row) {
+            if ($contract['version'] < 4 && $taxa) {
+                $row['conservation_status'] = $row['gb_red_list'];
+            }
             [$present, $value] = ExportTemplate::sortKey($row['export_sort'], $numeric);
             $secondary = ! $taxa && $contract['ordering']['sort'] === 'from_date' ? $row['to_date'] : null;
             [$datePresent, $dateValue] = ExportTemplate::sortKey($secondary, false);

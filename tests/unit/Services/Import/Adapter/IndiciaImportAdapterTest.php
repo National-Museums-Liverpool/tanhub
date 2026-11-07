@@ -208,6 +208,8 @@ final class IndiciaImportAdapterTest extends CIUnitTestCase
                 'scientific_name_identifier' => 'SN-1',
                 'scientific_name' => 'Example species',
                 'id_difficulty' => '2',
+                'gb_red_list' => null,
+                'gb_status' => null,
                 'higher_taxa' => '{"genus":"Example"}',
             ]];
             $nameRows = [
@@ -245,6 +247,8 @@ final class IndiciaImportAdapterTest extends CIUnitTestCase
             $this->assertSame('990001', $queries[1]['taxon_group_ids']);
             $this->assertSame('TX-1', $taxa->rows[0]['taxon_identifier']);
             $this->assertSame(2, $taxa->rows[0]['id_difficulty']);
+            $this->assertNull($taxa->rows[0]['gb_red_list']);
+            $this->assertNull($taxa->rows[0]['gb_status']);
             $this->assertSame('Example', $taxa->rows[0]['higher_taxa']->genus);
             $this->assertSame([[
                 'taxon_identifier' => 'TX-1',
@@ -256,6 +260,42 @@ final class IndiciaImportAdapterTest extends CIUnitTestCase
         } finally {
             $db->transRollback();
         }
+    }
+
+    /**
+     * JSON aggregation retains boundaries and the adapter encodes canonical public lists.
+     */
+    public function testDesignationArraysNormalizeAndRejectAmbiguousAbbreviations(): void
+    {
+        $adapter = new IndiciaImportAdapter($this->createMock(CURLRequest::class), new Import(), []);
+        $method = new \ReflectionMethod($adapter, 'normaliseTaxaRow');
+        $row = $method->invoke($adapter, [
+            'gb_red_list' => '["VU", " LC ", "VU", "", null, "EN"]',
+            'gb_status' => ['Nb', 'Na', 'Nb', 'Nationally Rare'],
+        ]);
+        $this->assertSame('EN;LC;VU', $row['gb_red_list']);
+        $this->assertSame('Na;Nationally Rare;Nb', $row['gb_status']);
+        $this->assertNull($method->invoke($adapter, ['gb_red_list' => null, 'gb_status' => '[]'])['gb_status']);
+        foreach (['["Na;Nb"]', '{"value":"LC"}', '[123]', 'not JSON'] as $invalid) {
+            try {
+                $method->invoke($adapter, ['gb_red_list' => null, 'gb_status' => $invalid]);
+                $this->fail('Invalid designation shape or abbreviation must fail.');
+            } catch (\RuntimeException | \JsonException $exception) {
+                $this->assertNotSame('', $exception->getMessage());
+            }
+        }
+    }
+
+    /**
+     * An outdated report cannot silently clear previously imported designation values.
+     */
+    public function testTaxaRequireUpdatedWarehouseDesignationContract(): void
+    {
+        $adapter = new IndiciaImportAdapter($this->createMock(CURLRequest::class), new Import(), []);
+        $method = new \ReflectionMethod($adapter, 'normaliseTaxaRow');
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Deploy the updated taxa.xml before importing.');
+        $method->invoke($adapter, ['conservation_status' => 'LC']);
     }
 
     /**

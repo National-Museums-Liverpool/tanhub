@@ -59,6 +59,7 @@ final class ExportMySqlTest extends CIUnitTestCase
             '2026-07-07-101000_CreateTaxonStatsTable',
             '2026-09-29-120000_AllowNullTaxonStatsDates',
             '2026-10-13-090000_CreateExports',
+            '2026-11-06-160000_AddGbDesignationLists',
         ] as $filename) {
             require_once APPPATH . 'Database/Migrations/' . $filename . '.php';
             $class = 'App\\Database\\Migrations\\' . substr($filename, 18);
@@ -123,7 +124,7 @@ final class ExportMySqlTest extends CIUnitTestCase
     {
         $this->limits->batchSize = 1;
         foreach (['id', 'scientific_name', 'vernacular_name', 'taxon_identifier', 'rank_title',
-            'taxon_group_title', 'conservation_status', 'blocked'] as $sort) {
+            'taxon_group_title', 'gb_red_list', 'gb_status', 'blocked'] as $sort) {
             foreach (['asc', 'desc'] as $direction) {
                 $search = new TaxonSearchService($this->exportDb);
                 $input = ['sort' => $sort, 'direction' => $direction];

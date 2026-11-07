@@ -340,8 +340,9 @@ final class TaxonSearchService
     {
         $sorts = $taxa
             ? ['id' => 't.id', 'taxon_identifier' => 't.taxon_identifier', 'scientific_name' => 't.scientific_name',
-                'vernacular_name' => 't.vernacular_name', 'conservation_status' => 't.conservation_status',
-                'taxon_group_title' => 'tg.title', 'rank_title' => 'tr.sort_order', 'blocked' => 't.blocked']
+                'vernacular_name' => 't.vernacular_name', 'gb_red_list' => 't.gb_red_list',
+                'gb_status' => 't.gb_status', 'taxon_group_title' => 'tg.title', 'rank_title' => 'tr.sort_order',
+                'blocked' => 't.blocked']
             : ['id' => 'o.id', 'unique_key' => 'o.unique_key', 'from_date' => 'o.from_date', 'to_date' => 'o.to_date',
                 'grid_ref' => 'o.grid_ref', 'data_source_id' => 'o.data_source_id', 'blocked' => 'o.blocked',
                 'taxon_id' => 'o.taxon_id', 'taxon_name_id' => 'o.taxon_name_id',
@@ -438,7 +439,7 @@ final class TaxonSearchService
             $columns[$alias . '_name'] = $rank['rank'];
         }
         return $columns + ($taxa
-            ? ['conservation_status' => 'Conservation status', 'taxon_identifier' => 'Taxon identifier',
+            ? ['gb_red_list' => 'GB Red List', 'gb_status' => 'GB Status', 'taxon_identifier' => 'Taxon identifier',
                 'blocked' => 'Blocked']
             : ['regions' => 'Geographic regions', 'grid_ref' => 'Grid ref', 'data_source_title' => 'Data source',
                 'unique_key' => 'Unique key', 'blocked' => 'Blocked']);
@@ -678,7 +679,7 @@ final class TaxonSearchService
         $this->applyNameSearch($builder, $term, 't');
         $columns = ['t.id', 't.taxon_identifier', 't.scientific_name_identifier', 'tg.title', 'tg.friendly'];
         $columns = array_merge($columns, $taxa
-            ? ['t.conservation_status', 't.rarity_group_name', 't.taxon_remarks']
+            ? ['t.gb_red_list', 't.gb_status', 't.rarity_group_name', 't.taxon_remarks']
             : ['o.id', 'o.unique_key', 'o.grid_ref', 'o.locality', 'o.recorded_by', 'o.identified_by',
                 'recorded.name', 'ds.title', 'ds.abbr']);
         foreach ($this->classifications as $alias => $rank) {

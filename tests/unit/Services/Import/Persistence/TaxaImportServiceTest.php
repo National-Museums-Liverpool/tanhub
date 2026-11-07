@@ -63,7 +63,8 @@ final class TaxaImportServiceTest extends CIUnitTestCase
             taxon_group_id INTEGER NOT NULL,
             id_difficulty INTEGER NULL,
             recording_scheme_id INTEGER NULL,
-            conservation_status VARCHAR(10) NULL,
+            gb_red_list TEXT NULL,
+            gb_status TEXT NULL,
             rarity_group_name VARCHAR(100) NOT NULL,
             rarity_category INTEGER NULL,
             exclude_from_rarity_calculations INTEGER NOT NULL DEFAULT 0,
@@ -121,7 +122,7 @@ final class TaxaImportServiceTest extends CIUnitTestCase
             'taxon_group_id' => 1,
             'recording_scheme_id' => 1,
             'taxon_rank_id' => 1,
-            'conservation_status' => null,
+            'gb_red_list' => null,
             'rarity_group_name' => 'Manual rarity',
             'exclude_from_rarity_calculations' => 1,
             'exclude_from_rarity_calculations_comment' => 'Curated exclusion',
@@ -195,6 +196,59 @@ final class TaxaImportServiceTest extends CIUnitTestCase
         $this->assertNotNull($row);
         $this->assertNotNull($parent);
         $this->assertSame((int) $parent['id'], (int) $row['parent_taxon_id']);
+    }
+
+    /**
+     * Lists are stable, lossless beyond the old field limit, and cleared on refresh.
+     */
+    public function testDesignationListsAreNormalizedAndClearedOnReimport(): void
+    {
+        $this->seedSharedLookupRows();
+        $row = [
+            'taxon_identifier' => 'TX-LISTS',
+            'scientific_name_identifier' => 'SCI-LISTS',
+            'scientific_name' => 'Designation test',
+            'vernacular_name' => '',
+            'taxon_group_external_key' => 'group-a',
+            'recording_scheme_external_key' => 'scheme-a',
+            'taxon_rank' => 'Family',
+            'gb_red_list' => ' VU;LC;VU; ;EN ',
+            'gb_status' => 'Nb;Nationally Rare;Na;Nb',
+        ];
+        $service = new TaxaImportService();
+        $this->assertSame(1, $service->import([$row])['inserted']);
+        $stored = $this->db->table('taxa')->where('taxon_identifier', 'TX-LISTS')->get()->getRowArray();
+        $this->assertSame('EN;LC;VU', $stored['gb_red_list']);
+        $this->assertSame('Na;Nationally Rare;Nb', $stored['gb_status']);
+        $this->assertSame(1, $service->import([$row])['updated']);
+        $this->assertSame(1, $this->db->table('taxa')->countAllResults());
+        unset($row['gb_red_list']);
+        $row['gb_status'] = ' ; ';
+        $this->assertSame(1, $service->import([$row])['updated']);
+        $stored = $this->db->table('taxa')->where('taxon_identifier', 'TX-LISTS')->get()->getRowArray();
+        $this->assertNull($stored['gb_red_list']);
+        $this->assertNull($stored['gb_status']);
+    }
+
+    /**
+     * Invalid or oversized values stop the import without a truncated successful insert.
+     */
+    public function testUnrepresentableDesignationListsFailBeforeWriting(): void
+    {
+        $this->seedSharedLookupRows();
+        $service = new TaxaImportService();
+        foreach ([str_repeat('a', 65536), "\xff", "LC\0VU", ['LC']] as $value) {
+            $counts = $service->import([[
+                'taxon_identifier' => 'TX-INVALID',
+                'scientific_name_identifier' => 'SCI-INVALID',
+                'scientific_name' => 'Invalid designation',
+                'taxon_group_external_key' => 'group-a',
+                'taxon_rank' => 'Family',
+                'gb_status' => $value,
+            ]]);
+            $this->assertSame(1, $counts['errors']);
+            $this->assertSame(0, $this->db->table('taxa')->countAllResults());
+        }
     }
 
     private function seedSharedLookupRows(): void

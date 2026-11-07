@@ -638,6 +638,32 @@ final class ExportsTest extends CIUnitTestCase
     }
 
     /**
+     * New CSVs include both lists while unfinished v3 exports keep their old column and sort.
+     */
+    public function testDesignationColumnsAndLegacyRenameCompatibility(): void
+    {
+        db_connect()->table('taxa')->where('id', 1)->update([
+            'gb_red_list' => 'LC;VU', 'gb_status' => 'Na;Nb',
+        ]);
+        $rows = $this->records($this->finish($this->exports->create(1, 'taxa', [], 'grid')));
+        $this->assertContains('GB Red List', $rows[0]);
+        $this->assertContains('GB Status', $rows[0]);
+        $this->assertSame('Na;Nb', $rows[4][array_search('GB Status', $rows[0], true)]);
+
+        $job = $this->exports->create(1, 'taxa', ['sort' => 'gb_red_list'], 'grid');
+        $contract = json_decode($job['contract'], true);
+        $contract['version'] = 3;
+        $contract['columns'] = ['scientific_name' => 'Scientific name',
+            'conservation_status' => 'Conservation status'];
+        $contract['ordering']['column'] = 't.conservation_status';
+        $contract['ordering']['sort'] = 'conservation_status';
+        db_connect()->table('export_jobs')->where('id', $job['id'])->update(['contract' => json_encode($contract)]);
+        $rows = $this->records($this->finish($job));
+        $this->assertSame(['Scientific name', 'Conservation status'], $rows[0]);
+        $this->assertContains(['Zulu', 'LC;VU'], $rows);
+    }
+
+    /**
      * Live occurrence evidence stays filter-equivalent when taxa candidates are bounded.
      */
     public function testTaxonOccurrenceEvidenceAndCancelledCleanup(): void

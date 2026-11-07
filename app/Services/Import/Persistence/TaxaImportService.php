@@ -44,7 +44,8 @@ class TaxaImportService implements EntityImportServiceInterface
      *                                                  `scientific_name`, `scientific_name_authorship`,
      *                                                  `vernacular_name`, `taxon_group_external_key`,
      *                                                  `recording_scheme_external_key`, `taxon_rank`,
-     *                                                  `id_difficulty`, `conservation_status`,
+     *                                                  `id_difficulty`, `gb_red_list`, `gb_status`
+     *                                                  (nullable semicolon-separated abbreviations),
      *                                                  `higher_taxa` (list of ancestor objects with
      *                                                  `taxon_rank` and `organism_key`).
      * @param bool                             $dryRun When true, compute counts without
@@ -150,7 +151,8 @@ class TaxaImportService implements EntityImportServiceInterface
                     'recording_scheme_id' => $schemeId,
                     'taxon_rank_id' => $taxonRankId,
                     'parent_taxon_id' => null,
-                    'conservation_status' => $this->nullableString($row['conservation_status'] ?? null, 10),
+                    'gb_red_list' => $this->designationList($row['gb_red_list'] ?? null),
+                    'gb_status' => $this->designationList($row['gb_status'] ?? null),
                     'blocked' => 0,
                     'blocked_reason' => null,
                     'deleted_at' => null,
@@ -231,6 +233,36 @@ class TaxaImportService implements EntityImportServiceInterface
         }
 
         return $counts;
+    }
+
+    /**
+     * Validate normalized designation strings against portable TEXT storage limits.
+     *
+     * Source abbreviation boundaries are validated by the adapter before list encoding.
+     * Reject invalid UTF-8, NULs and oversized lists rather than accept driver truncation.
+     * Existing per-row import error handling logs failures and stops the batch.
+     *
+     * @param mixed $value Normalized semicolon-separated abbreviation list or null.
+     * @return string|null Distinct bytewise-sorted list, or null when empty.
+     * @throws \RuntimeException If a list cannot be stored losslessly.
+     */
+    private function designationList(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (! is_string($value) || ! mb_check_encoding($value, 'UTF-8') || str_contains($value, "\0")) {
+            throw new \RuntimeException('Taxon designation lists must be valid UTF-8 strings without NULs.');
+        }
+        $values = array_values(array_unique(array_filter(array_map('trim', explode(';', $value)),
+            static fn (string $abbreviation): bool => $abbreviation !== '')));
+        sort($values, SORT_STRING);
+        $list = implode(';', $values);
+        if (strlen($list) > 65535) {
+            throw new \RuntimeException('Taxon designation list exceeds the 65535-byte TEXT storage limit.');
+        }
+
+        return $list === '' ? null : $list;
     }
 
     /**

@@ -88,6 +88,16 @@
                             </label>
                             <input class="form-control" id="recording_scheme_id" type="text" value="<?= esc((string) ($page['referenceLabels']['recording_scheme_id'] ?? '')) ?>" disabled>
                         </div>
+                        <?php foreach (['gb_red_list' => 'GB Red List', 'gb_status' => 'GB Status'] as $field => $label): ?>
+                            <div class="col-md-6">
+                                <label class="form-label" for="<?= esc($field) ?>">
+                                    <?= esc($label) ?>
+                                    <span class="badge bg-secondary ms-2">Read-only</span>
+                                </label>
+                                <input class="form-control" id="<?= esc($field) ?>" type="text" value="<?= esc((string) ($page['taxon'][$field] ?? '')) ?>" disabled>
+                                <div class="form-text">Imported designation abbreviations, separated by semicolons.</div>
+                            </div>
+                        <?php endforeach; ?>
                         <div class="col-md-6">
                             <label class="form-label" for="rarity_group_name">
                                 Rarity group name

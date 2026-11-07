@@ -265,7 +265,8 @@ directly to a Darwin Core concept, this is indicated in the description.
 | taxon_group_id             | BIGINT       | NO   | FK  |                   | ID of the taxon reporting group                                                     |
 | id_difficulty              | TINYINT      | YES  |     |                   | Record Cleaner ID difficulty (1-5)                                                  |
 | recording_scheme_id        | BIGINT       | YES  | FK  |                   | ID of the associated recording scheme                                               |
-| conservation_status        | VARCHAR(10)  | YES  |     |                   | Abbreviation of the taxon's conservation designation                                |
+| gb_red_list                | TEXT         | YES  |     | NULL              | Distinct GB Red List abbreviations, sorted and semicolon-separated                    |
+| gb_status                  | TEXT         | YES  |     | NULL              | Distinct GB Status abbreviations, sorted and semicolon-separated                      |
 | taxon_remarks              | TEXT         | YES  |     |                   | Species account text if provided, DwC taxonRemarks                                  |
 | rarity_group_name          | VARCHAR(100) | NO   |     |                   | Grouping of taxa whose rarities are compared together when calculating the category |
 | rarity_category            | TINYINT      | YES  |     |                   | Assigned category of rarity from 1 (rare) to 5 (common), populated by `php spark stats:taxon-rarity`            |
@@ -300,7 +301,22 @@ Note that when tanhub is linked to UKSI as its source of taxonomic data, the fol
   and unique ID for the API.
 - scientific_name_identifier will contain the unique identifier of the accepted taxon name, the
   `TAXON_VERSION_KEY`.
-- conservation_status will hold the GB Red List designation's abbreviation, e.g. LC or VU.
+- `gb_red_list` holds GB Red List abbreviations, e.g. `LC` or `LC;VU`.
+- `gb_status` holds GB Status abbreviations, e.g. `Na;Nb`.
+
+Both fields include all non-deleted designation types within their respective warehouse category,
+including old and provisional types. Lists are trimmed, deduplicated and sorted bytewise, joined
+with `;` without spaces; no abbreviations means null. Embedded semicolons in source abbreviations
+are rejected by the importer. National designations are read-only and independent of local rarity
+calculations and curated regional statuses.
+
+The designation migration preserves `conservation_status` values as `gb_red_list`, widens storage
+to TEXT and adds nullable `gb_status`. MySQL uses Forge column changes; SQLite requires version
+3.35 or later and uses add/copy/native-drop operations to retain indexes, triggers and foreign-key
+actions without rebuilding taxa. No designation indexes are added. Imports reject lists exceeding
+MySQL TEXT's 65,535-byte limit rather than silently truncate data. Rollback refuses red-list values
+longer than the original 10-character column and discards GB Status data when its column is dropped.
+See [designation refresh](./import.md#refreshing-gb-designations) for deployment and reimport steps.
 
 ### taxon_media
 

@@ -355,6 +355,7 @@ CORS_ALLOWED_HEADERS=Origin,Content-Type,Accept,Authorization,X-Requested-With
    projects/tanhub/geographic_regions.xml
    projects/tanhub/recording_schemes.xml
    projects/tanhub/taxa.xml
+   projects/tanhub/taxon_attributes.xml
    projects/tanhub/taxon_groups.xml
    projects/tanhub/taxon_names.xml
    projects/tanhub/taxon_ranks.xml
@@ -364,6 +365,10 @@ CORS_ALLOWED_HEADERS=Origin,Content-Type,Accept,Authorization,X-Requested-With
    `indicia-warehouse-module/tanhub/reports/projects/tanhub/` to the warehouse before importing.
    Local XML edits do not change the running warehouse. Both geography reports must use the same
    region identifiers. For upgrades, see the [v1.1.0 changelog](../CHANGELOG.md#110).
+
+   For an existing connection, add `projects/tanhub/taxon_attributes.xml` to its allowed reports
+   when enabling taxon attribute imports. Uploading the report does not grant the REST API client
+   permission to run it. A missing permission causes HTTP 403 for entity `taxon_attributes`.
 
 7. Tick "Allow sensitive records" if you want sensitive records at blurred precision. Do not
    tick "Allow confidential records" or "Full precision sensitive records" as the API for tanhub

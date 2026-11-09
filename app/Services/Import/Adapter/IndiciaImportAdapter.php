@@ -322,7 +322,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
     private function normaliseTaxaRow(array $row): array
     {
         if (! array_key_exists('gb_red_list', $row) || ! array_key_exists('gb_status', $row)) {
-            throw new RuntimeException('Indicia taxa report is missing GB designation columns. Deploy the updated taxa.xml before importing.');
+            throw new RuntimeException('Indicia taxa report is missing GB designation columns. Deploy the updated taxa.xml before importing.' . var_export($row, TRUE));
         }
         return [
             'taxon_identifier' => (string) ($row['taxon_identifier'] ?? ''),

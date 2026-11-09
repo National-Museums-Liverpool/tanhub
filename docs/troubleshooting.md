@@ -70,6 +70,20 @@ the Indicia warehouse.
 The full warehouse-side setup is documented in
 [Installation](installation.md#6-link-tanhub-to-an-indicia-warehouse).
 
+## Taxon attribute imports fail with HTTP 403
+
+If an import reports `Indicia request failed with status 403 for entity taxon_attributes` after
+deploying the new reports, check the REST API connection's allowed reports. In the warehouse, open
+**Admin > REST API Clients**, edit the client configured for Tanhub, then open its **Connections**
+tab. Edit the connection matching `Config\Import.indiciaProjId`, add
+`projects/tanhub/taxon_attributes.xml` to **allow reports**, and save.
+
+Deploying the XML report does not automatically grant the client permission to run it. Keep the
+existing allowed reports, including `projects/tanhub/taxa.xml`. Once access is corrected, use
+**Retry** for the failed request on Tanhub's Imports page; no further progress reset is needed.
+If the 403 persists, check the client credentials and connection using the
+[warehouse connection setup](installation.md#6-link-tanhub-to-an-indicia-warehouse).
+
 ## A browser API request is blocked by CORS
 
 Add the calling application's exact origin to `CORS_ALLOWED_ORIGINS`, or add a

@@ -8,8 +8,13 @@ Both websites use the same warehouse and species list. Enable the required defin
 
 Deploy the updated `indicia-warehouse-module/tanhub/reports/projects/tanhub/taxa.xml` and its
 companion `taxon_attributes.xml` first.
-It accepts `taxon_attribute_ids` and returns versioned JSON metadata/value arrays. Controlled terms
-resolve `int_value` through `cache_termlists_terms`; integer attributes retain the number.
+Add `projects/tanhub/taxon_attributes.xml` to **allow reports** on the warehouse REST API client
+connection used by Tanhub, including when upgrading an existing connection. Uploading the XML alone
+does not grant access; without this permission the metadata request fails with HTTP 403.
+See [warehouse connection setup](installation.md#6-link-tanhub-to-an-indicia-warehouse).
+The taxa report accepts `taxon_attribute_ids` and returns versioned JSON metadata/value arrays.
+Controlled terms resolve `int_value` through `cache_termlists_terms`; integer attributes retain
+the number.
 The adapter verifies requested definitions, types and cardinality before persistence.
 The metadata report runs once per taxa batch, independently of taxon pagination, so missing
 definitions still fail validation when there are no taxa to import. It is not a new import task.

@@ -22,6 +22,26 @@ info:
 servers:
   - url: /api/v1
     description: API v1
+x-tanhub-configured-attribute-filters:
+  resources: [taxa, taxon-names, occurrences, taxon-stats, taxon-year-stats]
+  queryNamePattern: '^attribute__[a-z][a-z0-9_]{0,62}$'
+  description: >-
+    Deployment-defined keys are discovered through taxon-attributes. Related resources require
+    include=taxon. Scalar equality or bracketed operators are supported: integer eq/in/gte/lte,
+    term eq/in with stable indicia:<id> keys. eq=null matches absence, never zero, and cannot
+    combine with other predicates. Alternatives match OR, attributes match AND, and numeric bounds
+    match one assignment. in accepts up to 100 alternatives. Unknown keys/operators, malformed
+    values and reversed bounds return 400. Query-name patterns use this extension because OpenAPI
+    cannot declare deployment-dependent query parameter names.
+  examples:
+    numeric: 'attribute__pantheon_sqs[gte]=1'
+    membership: 'attribute__pantheon_habitat[in]=indicia:101,indicia:102'
+  sorting: >-
+    sort=attribute__<key> or -attribute__<key> supports every enabled attribute. Integer sorting
+    is numeric; term sorting uses display labels under normal database collation. Multi-values use
+    MIN ascending/MAX descending; single-valued attributes sort their sole retained value.
+    Missing values are last in both directions. A resource-key tie-break stabilizes pages.
+    Attribute hydration is optional for filtering/sorting. Values describe the exact result taxon.
 security:
   - bearerAuth: []
 tags:
@@ -37,6 +57,49 @@ tags:
   - name: taxon-stats
   - name: taxon-year-stats
 paths:
+  /taxon-attributes:
+    get:
+      summary: Discover enabled taxon attribute definitions
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          $ref: '#/components/responses/ListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /taxon-attributes/{key}:
+    get:
+      summary: Get an enabled attribute definition by stable configuration key
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/ItemResponse'
+        '404':
+          $ref: '#/components/responses/Problem'
+  /taxon-attribute-terms:
+    get:
+      summary: Discover currently retained terms on publicly visible taxa
+      description: Terms are scoped by attribute, not the complete warehouse vocabulary.
+      parameters:
+        - name: attribute_key
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          $ref: '#/components/responses/ListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
   /data-sources:
     get:
       tags: [data-sources]
@@ -493,7 +556,9 @@ components:
     Sort:
       name: sort
       in: query
-      description: Sort fields, e.g. sort=field,-other_field
+      description: >-
+        Sort fields, e.g. sort=field,-other_field. Taxon-related resources also accept
+        attribute__<configured-key>; see x-tanhub-configured-attribute-filters.
       schema:
         type: string
     ReportingOnly:
@@ -514,7 +579,7 @@ components:
         Comma-separated related fields to include. Supported values are data-source,
         geographic-region, grid-square-stats, taxon, taxon-name, taxon-media,
         taxon-rank, taxon-group, parent-taxa. taxon-media, taxon-rank,
-        taxon-group and parent-taxa require taxon.
+        taxon-group and parent-taxa require taxon. taxon-attributes also requires taxon.
       schema:
         type: string
         example: taxon,taxon-media,grid-square-stats
@@ -523,7 +588,8 @@ components:
       in: query
       description: >-
         Comma-separated related fields to include. Supported values are
-        parent-taxon, parent-taxa, recording-scheme, taxon-media, taxon-group, taxon-rank.
+        parent-taxon, parent-taxa, recording-scheme, taxon-media, taxon-group, taxon-rank,
+        taxon-attributes.
       schema:
         type: string
         example: taxon-media,taxon-group
@@ -533,6 +599,7 @@ components:
       description: >-
         Comma-separated related fields to include. Supported values are
         parent-taxon, parent-taxa, taxon, taxon-media, taxon-group, taxon-rank.
+        taxon-attributes is also supported and requires taxon.
       schema:
         type: string
         example: taxon,taxon-media
@@ -550,7 +617,7 @@ components:
         Comma-separated related fields to include. Supported values are
         geographic-region, taxon, taxon-media, taxon-rank, taxon-group,
         parent-taxon, parent-taxa. taxon-media, taxon-rank, taxon-group and parent-taxa
-        require taxon.
+        require taxon. taxon-attributes is also supported and requires taxon.
       schema:
         type: string
         example: taxon,taxon-media,geographic-region
@@ -561,7 +628,7 @@ components:
         Comma-separated related fields to include. Supported values are
         geographic-region, taxon, taxon-media, taxon-rank, taxon-group,
         parent-taxon, parent-taxa. taxon-media, taxon-rank, taxon-group and parent-taxa
-        require taxon.
+        require taxon. taxon-attributes is also supported and requires taxon.
       schema:
         type: string
         example: taxon,taxon-media,geographic-region
@@ -628,6 +695,8 @@ components:
       additionalProperties: true
       description: Generic placeholder resource schema for the starter contract.
       properties:
+        taxon_attributes:
+          $ref: '#/components/schemas/TaxonAttributeValues'
         gb_red_list:
           $ref: '#/components/schemas/GbDesignationList'
         gb_status:
@@ -636,6 +705,47 @@ components:
           $ref: '#/components/schemas/GbDesignationList'
         taxon__gb_status:
           $ref: '#/components/schemas/GbDesignationList'
+    TaxonAttributeValues:
+      type: object
+      description: >-
+        Present only with include=taxon-attributes; related resources also require taxon.
+        Every configured key maps to an array, even for single-valued definitions (zero/one item).
+        Missing is []; empty configuration is {}. Integer arrays contain numbers; term arrays
+        contain key/label objects. No parent/child inheritance or contributing-taxa union.
+      additionalProperties:
+        anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: array
+            items:
+              $ref: '#/components/schemas/TaxonAttributeTerm'
+    TaxonAttributeTerm:
+      type: object
+      required: [key, label]
+      properties:
+        key:
+          type: string
+          pattern: '^indicia:[1-9][0-9]*$'
+        label:
+          type: string
+    TaxonAttributeDefinition:
+      type: object
+      required: [key, label, type, multi_value, source_id, termlist_id]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+          enum: [integer, term]
+        multi_value:
+          type: boolean
+        source_id:
+          type: integer
+        termlist_id:
+          type: [integer, 'null']
     GbDesignationList:
       type: [string, 'null']
       description: >-

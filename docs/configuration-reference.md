@@ -1,5 +1,33 @@
 # Configuration reference
 
+## Taxon attributes
+
+`taxonAttributes.attributes` is an optional JSON object, empty by default. Each stable key defines
+an Indicia attribute `id`, display `label`, `type` (`integer` or `term`) and boolean `multiValue`.
+For Pantheon, use the example in `env`:
+
+| Key | ID | Type | multiValue |
+|---|---|---|---|
+| `pantheon_sqs` | 24 | integer | false |
+| `pantheon_broad_biotope` | 15 | term | true |
+| `pantheon_habitat` | 16 | term | true |
+| `pantheon_sat` | 20 | term | false |
+
+Term attributes use Indicia type `L`; SQS uses `I`. These three Pantheon controlled attributes
+currently share termlist 627; termlist identity is imported metadata, not hardcoded application
+logic. Keys must start with a lowercase letter, contain only lowercase letters, digits and
+underscores, and have at most 63 characters. IDs must be positive, distinct integers.
+
+Single-valued attributes retain one warehouse assignment; if conflicting rows exist, lowest
+value-row ID selects an arbitrary but repeatable value. APIs and CSV cells still use arrays.
+Attribute configuration must agree with the warehouse's type and `multi_value` metadata.
+Changing cardinality requires a full taxa refresh, not resuming a differently configured import.
+Attribute keys cannot be silently reassigned to another source ID/type.
+
+All attributes support API sorting: numbers numerically, terms by label under the database's normal
+text collation. Multiple assignments use minimum ascending/maximum descending, missing last.
+See [Import](import.md#taxon-attribute-import) before enabling this configuration.
+
 ## Admin CSV exports
 
 Exports are disabled until all three positive byte limits are configured:

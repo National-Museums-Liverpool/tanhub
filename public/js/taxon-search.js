@@ -86,6 +86,17 @@ document.querySelectorAll('[data-taxon-search]').forEach((form) => {
             if (element.name !== 'taxon_id' && element.name !== 'rank_id'
                 && element.name !== 'geographic_region_id' && element.name !== 'data_source_id'
                 && element.name !== 'blocked' && element.value !== '') {
+                if (element.multiple) {
+                    for (const option of element.selectedOptions) {
+                        url.searchParams.append(element.name, option.value);
+                    }
+                } else {
+                    url.searchParams.set(element.name, element.value);
+                }
+            }
+        }
+        for (const element of form.querySelectorAll('input[name^="attribute__"]')) {
+            if (element.value !== '') {
                 url.searchParams.set(element.name, element.value);
             }
         }
@@ -172,9 +183,9 @@ document.querySelectorAll('[data-taxon-search]').forEach((form) => {
         clearTimeout(timer);
         close();
     });
-    form.querySelectorAll('select').forEach((element) => {
+    form.querySelectorAll('select, input[name^="attribute__"]').forEach((element) => {
         if (!['taxon_id', 'rank_id', 'geographic_region_id', 'data_source_id', 'blocked'].includes(element.name)) {
-            element.addEventListener('change', () => {
+            element.addEventListener(element.tagName === 'SELECT' ? 'change' : 'input', () => {
                 // Discard stale suggestions, but retain deliberate selections: contradictory
                 // filters should produce no matches rather than silently changing the chosen taxon.
                 version += 1;

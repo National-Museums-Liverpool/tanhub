@@ -2,6 +2,9 @@
 
 namespace App\Services\Search;
 
+use App\Services\TaxonAttributeService;
+use InvalidArgumentException;
+
 /**
  * Validated, bookmarkable staff search criteria independent of pagination.
  *
@@ -12,8 +15,11 @@ namespace App\Services\Search;
  */
 final class SearchCriteria
 {
-    /** @var array<string, string> Submitted scalar values. */
+    /** @var array<string, mixed> Submitted scalar values and nested attribute predicates. */
     public array $values = [];
+
+    /** @var array<string, array<string, mixed>> Validated exact-taxon attribute predicates. */
+    public array $attributeCriteria = [];
 
     /** @var array<string, string> User-facing validation errors. */
     public array $errors = [];
@@ -42,7 +48,8 @@ final class SearchCriteria
             $keys[] = $alias . '_id';
         }
         foreach ($input as $key => $value) {
-            if (str_ends_with((string) $key, '_id') && ! in_array($key, $keys, true)) {
+            if (str_ends_with((string) $key, '_id') && ! str_starts_with((string) $key, 'attribute__')
+                && ! in_array($key, $keys, true)) {
                 $this->errors[$key] = 'This filter is not available on this page.';
             }
         }
@@ -69,6 +76,24 @@ final class SearchCriteria
             }
         }
         $this->parseDates();
+        $attributes = new TaxonAttributeService();
+        foreach ($input as $key => $value) {
+            if (! str_starts_with((string) $key, 'attribute__')) {
+                continue;
+            }
+            if (is_array($value)) {
+                $value = array_filter($value, static fn (mixed $part): bool => $part !== '' && $part !== []);
+            }
+            if ($value === '' || $value === []) {
+                continue;
+            }
+            $this->values[$key] = $value;
+            try {
+                $this->attributeCriteria += $attributes->criteria([$key => $value]);
+            } catch (InvalidArgumentException $exception) {
+                $this->errors[$key] = $exception->getMessage();
+            }
+        }
     }
 
     /**

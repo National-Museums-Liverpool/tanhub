@@ -140,6 +140,11 @@ final class ExportService
                 'filters' => $criteria->values, 'ordering' => $ordering,
                 'classifications' => $classifications, 'columns' => $columns,
                 'estimated_total' => $estimatedTotal];
+            $attributes = new \App\Services\TaxonAttributeService($this->db);
+            if ($attributes->definitions() !== [] && ($template !== 'grid' || $criteria->attributeCriteria !== [])) {
+                $contract['attribute_definitions'] = $attributes->definitions();
+                $contract['attribute_signature'] = $attributes->fingerprint();
+            }
             if ($template === 'stats') {
                 $contract['statistics_scope'] = $this->statisticsScope($criteria->value('geographic_region_id'));
             }
@@ -179,7 +184,7 @@ final class ExportService
             $lock = $this->fileLock($uuid, LOCK_EX);
             try {
                 $contract = json_decode($job['contract'], true, 512, JSON_THROW_ON_ERROR);
-                if (! in_array($contract['version'], [1, 2, 3, ExportTemplate::VERSION], true)) {
+                if (! in_array($contract['version'], [1, 2, 3, 4, ExportTemplate::VERSION], true)) {
                     throw new RuntimeException('The export template changed. Cancel and create a new export.');
                 }
                 if ($job['phase'] === 'capturing') {
@@ -341,6 +346,10 @@ final class ExportService
      */
     private function capture(array $job, array $contract): void
     {
+        $attributes = new \App\Services\TaxonAttributeService($this->db);
+        if (isset($contract['attribute_signature']) && $contract['attribute_signature'] !== $attributes->fingerprint()) {
+            throw new RuntimeException('Taxon attribute configuration changed. Create a new export.');
+        }
         // Frozen pre-v4 exports retain their old headings and sort contracts after the rename.
         if ($contract['version'] < 4 && $contract['ordering']['column'] === 't.conservation_status') {
             $contract['ordering']['column'] = 't.gb_red_list';
@@ -361,6 +370,11 @@ final class ExportService
                 array_map(static fn (string $rank): string => $rank . '_id',
                     array_keys($contract['classifications']))
             )));
+            foreach ($contract['filters'] as $key => $value) {
+                if (str_starts_with($key, 'attribute__')) {
+                    $candidateFilters[$key] = $value;
+                }
+            }
             $candidateCriteria = new SearchCriteria(
                 $candidateFilters, array_keys($contract['classifications']), true
             );
@@ -380,6 +394,25 @@ final class ExportService
         $rows = $search->hydrate($query->get($this->config->batchSize)->getResultArray(), $taxa);
         if ($contract['template'] === 'stats' && $rows !== []) {
             $this->hydrateStats($rows, $contract['filters']['geographic_region_id']);
+        }
+        $attributeColumns = array_filter(array_keys($contract['columns']),
+            static fn (string $key): bool => str_starts_with($key, 'attribute__'));
+        if ($attributeColumns !== [] && $rows !== []) {
+            $byTaxon = $attributes->read(array_map(
+                static fn (array $row): int => (int) ($taxa ? $row['id'] : $row['taxon_id']), $rows
+            ));
+            foreach ($rows as &$row) {
+                $values = $byTaxon[(int) ($taxa ? $row['id'] : $row['taxon_id'])];
+                foreach ($attributeColumns as $field) {
+                    $key = substr($field, 11);
+                    $items = $values->{$key};
+                    if ($contract['attribute_definitions'][$key]['type'] === 'term') {
+                        $items = array_column($items, 'label');
+                    }
+                    $row[$field] = json_encode($items, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+                }
+            }
+            unset($row);
         }
         $staged = [];
         $bytes = 0;

@@ -154,6 +154,61 @@ final class TaxonSearchTest extends CIUnitTestCase
     }
 
     /**
+     * Share exact-taxon criteria across staff pages, suggestions and export candidates.
+     */
+    public function testConfiguredAttributeFiltersPreserveArraysWithoutInheritance(): void
+    {
+        require_once APPPATH . 'Database/Migrations/2026-11-09-100000_CreateTaxonAttributes.php';
+        (new \App\Database\Migrations\CreateTaxonAttributes(\Config\Database::forge()))->up();
+        $configuration = config(\Config\TaxonAttributes::class);
+        $previous = $configuration->attributes;
+        $configuration->attributes = [
+            'sqs' => ['id' => 24, 'label' => 'SQS', 'type' => 'integer', 'multiValue' => false],
+            'habitat' => ['id' => 16, 'label' => 'Habitat', 'type' => 'term', 'multiValue' => true],
+        ];
+        $db = db_connect();
+        try {
+            foreach (['taxon_attribute_values', 'taxon_attribute_terms', 'taxon_attributes'] as $table) {
+                $db->table($table)->emptyTable();
+            }
+            $attributes = new \App\Services\TaxonAttributeService($db);
+            foreach ([30 => 9, 40 => 1] as $taxonId => $score) {
+                $db->transBegin();
+                $attributes->replace($taxonId, [
+                    'sqs' => ['termlist_id' => null, 'values' => [['value' => $score, 'label' => null]]],
+                    'habitat' => ['termlist_id' => 627, 'values' => [
+                        ['value' => $taxonId, 'label' => 'Habitat ' . $taxonId],
+                        ['value' => $taxonId + 100, 'label' => 'Other habitat ' . $taxonId],
+                    ]],
+                ]);
+                $this->assertTrue($db->transCommit());
+            }
+            $input = ['attribute__sqs' => ['gte' => '1', 'lte' => '1'],
+                'attribute__habitat' => ['in' => ['indicia:40', 'indicia:140']]];
+            $this->assertSame([40], $this->ids($input));
+            $this->assertSame([30], $this->ids(['attribute__sqs' => '9']));
+            $this->assertSame([8], $this->ids(['attribute__sqs' => '9'], false));
+            $search = new TaxonSearchService($db);
+            $criteria = $search->criteria($input, true);
+            $this->assertSame($input['attribute__habitat'], $criteria->values['attribute__habitat']);
+            $this->assertSame([40], array_map('intval', array_column(
+                $search->query($criteria, true, [30, 40, 41], true)->get()->getResultArray(), 'id'
+            )));
+            $this->assertSame([40], array_column($search->lookup('Agrotis', $criteria), 'id'));
+            $html = view('search/filters', ['page' => $search->page($input, true)]);
+            $this->assertStringContainsString('name="attribute__habitat[in][]"', $html);
+            $this->assertStringContainsString('value="indicia:140" selected', $html);
+            $invalid = $search->criteria(['attribute__sqs' => ['gte' => '4', 'lte' => '2']], true);
+            $this->assertArrayHasKey('attribute__sqs', $invalid->errors);
+        } finally {
+            $configuration->attributes = $previous;
+            foreach (['taxon_attribute_values', 'taxon_attribute_terms', 'taxon_attributes'] as $table) {
+                $db->table($table)->emptyTable();
+            }
+        }
+    }
+
+    /**
      * Match descendant evidence at the independent requested rank.
      */
     public function testReportingAncestorsAndIndependentRankFilter(): void

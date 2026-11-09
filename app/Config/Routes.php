@@ -88,6 +88,9 @@ $routes->group('api/v1', ['filter' => ['cors', 'api-rate-limit']], static functi
 
 	$routes->get('taxa', 'Api\\V1\\Taxa::index');
 	$routes->get('taxa/(:segment)', 'Api\\V1\\Taxa::show/$1');
+	$routes->get('taxon-attributes', 'Api\\V1\\TaxonAttributes::index');
+	$routes->get('taxon-attributes/(:segment)', 'Api\\V1\\TaxonAttributes::show/$1');
+	$routes->get('taxon-attribute-terms', 'Api\\V1\\TaxonAttributeTerms::index');
 
 	$routes->get('taxon-names', 'Api\\V1\\TaxonNames::index');
 	$routes->get('taxon-names/(:segment)', 'Api\\V1\\TaxonNames::show/$1');

@@ -65,19 +65,35 @@ class ImportTaskDependencyService
     }
 
     /**
-     * Return incomplete dependency source keys for a task.
+     * Return incomplete direct and indirect dependency source keys for a task.
+     *
+     * Completed intermediate tasks retain their progress, but cannot hide an
+     * unfinished prerequisite that was restarted after they completed.
      *
      * @param string $sourceKey Task source key.
-     * @return array<int, string> Incomplete dependency source keys.
+     * @return array<int, string> Distinct incomplete dependency source keys.
      */
     public function blockedBy(string $sourceKey): array
     {
         $offsetModel = $this->importOffsetModel ?? model(ImportOffsetModel::class);
 
-        return array_values(array_filter(
-            $this->dependenciesOf($sourceKey),
-            static fn (string $dependency): bool => ! $offsetModel->isComplete($dependency),
-        ));
+        $pending = $this->dependenciesOf($sourceKey);
+        $visited = [];
+        $blocked = [];
+
+        while ($pending !== []) {
+            $dependency = array_shift($pending);
+            if (isset($visited[$dependency])) {
+                continue;
+            }
+            $visited[$dependency] = true;
+            if (! $offsetModel->isComplete($dependency)) {
+                $blocked[] = $dependency;
+            }
+            $pending = array_merge($pending, $this->dependenciesOf($dependency));
+        }
+
+        return $blocked;
     }
 
     /**

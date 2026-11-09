@@ -1,5 +1,18 @@
 # Administering a tanhub server
 
+## Taxon attribute configuration changes
+
+See [Taxon attribute import](import.md#taxon-attribute-import) for deployment order and refresh
+instructions. Attribute updates use the existing taxa import lock and transaction boundaries.
+Restart from offset zero after adding definitions or changing cardinality; a changed configuration
+fingerprint rejects unsafe resume. Disabling definitions hides them but preserves stored data.
+
+If a single-valued warehouse attribute has multiple assignments, Tanhub retains one arbitrary
+assignment selected by lowest value-row ID. Correct the data in Indicia if a particular value is
+required, then refresh taxa. SQS calculations beyond numeric API filtering/sorting are not added.
+Active attribute-bearing exports must be recreated after configuration changes; completed captured
+values remain immutable. No statistics rebuild is needed solely for attribute changes.
+
 ## Bulk taxon media import
 
 Staff can stage a CSV and its image files from **Taxonomy > Bulk media import**. The upload request

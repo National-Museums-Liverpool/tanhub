@@ -6,12 +6,25 @@ Admins and managers can use **Download CSV**, next to Search on the taxa and occ
 It exports all matching rows using the applied filters and grid sort, not just the current page.
 Apply edited form values with Search first: download confirmation uses the displayed search.
 
-Choose a grid-equivalent template, detailed occurrences, or taxa with stored all-date statistics.
+Choose a grid-equivalent template, detailed taxa/occurrences, or taxa with stored all-date
+statistics.
 Detailed occurrences include raw dates, identifiers, recorder/identifier, locality, coordinates
 and moderation context. Stored statistics use the selected region, or global scope; year/source
 filters select qualifying taxa but do not recalculate the stored statistics.
 Statistics headings use short names such as **Occurrences count** and **Stats available**.
 The shared statistics scope appears in export metadata rather than repeating in every CSV row.
+
+Configured taxon attributes appear as advanced filters on taxa and occurrences, not grid columns.
+Term selections match any selected alternative; integer minimum/maximum bounds are inclusive.
+Different attribute filters combine with AND and describe the exact displayed taxon, not its
+parents/children. Controls also work without JavaScript.
+
+Detailed taxa, Detailed occurrences and taxon statistics CSVs append configured attribute columns.
+Both grid templates remain unchanged. Attribute cells contain JSON arrays: numeric scores or term
+labels, with `[]` for missing values and zero/one items for single-valued definitions.
+Attribute labels containing commas, semicolons or newlines remain intact. Columns/cardinality are
+frozen at creation and values at capture. Changed attribute configuration during capture requires
+a new export; already captured cells do not change. Older exports retain their frozen layouts.
 
 New exports start processing automatically when the progress page opens. Capture shows
 committed row counts against the estimated total passed from the grid. This estimate can change

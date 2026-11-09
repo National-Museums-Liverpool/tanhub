@@ -1,5 +1,68 @@
 # Testing guide
 
+## Configurable taxon attributes
+
+Portable tests cover deployed cardinality metadata, tolerated singleton source conflicts,
+multi-value membership, numeric/label sorting and API/export integration:
+
+```bash
+vendor/bin/phpunit -c phpunit.dist.xml --no-coverage \
+  tests/unit/Services/TaxonAttributeServiceTest.php
+vendor/bin/phpunit -c phpunit.dist.xml --no-coverage \
+  tests/Feature/ApiV1LookupResourcesTest.php --filter 'testConfiguredAttributes|testAttributeDiscovery'
+vendor/bin/phpunit -c phpunit.dist.xml --no-coverage \
+  tests/Feature/ExportsTest.php --filter testAttributeTemplates
+```
+
+The optional warehouse SQL test executes the actual XML query using temporary PostgreSQL
+fixtures. It accepts only database names ending in `_attributes_validation` and rolls back
+all fixture work; it does not contact the real warehouse:
+
+```bash
+TANHUB_ATTRIBUTE_PG_DSN='pgsql:host=127.0.0.1;dbname=tanhub_attributes_validation' \
+TANHUB_ATTRIBUTE_PG_USER=test_user \
+vendor/bin/phpunit -c phpunit.dist.xml --no-coverage \
+  tests/Integration/IndiciaTaxonAttributesReportTest.php
+```
+
+Set `TANHUB_ATTRIBUTE_PG_PASSWORD` locally when needed. Never provide production connection details.
+Native MySQL-compatible collation and migration checks use a separate opt-in test.
+Create an empty, dedicated validation database first, grant the test account DDL permissions,
+then run:
+
+```bash
+TANHUB_ATTRIBUTE_MYSQL_DATABASE=tanhub_attributes_validation \
+vendor/bin/phpunit -c phpunit.dist.xml --no-coverage tests/Integration/TaxonAttributeMySqlTest.php
+```
+
+The test uses random table prefixes, removes only its own fixtures and accepts only database
+names ending in `_attributes_validation`. Connection settings default to the configured connection;
+override `TANHUB_ATTRIBUTE_MYSQL_HOST`, `_USER`, `_PASSWORD` and `_PORT` locally when needed.
+SQLite verifies portable semantics but cannot certify MySQL label collation or query performance.
+
+To run a synthetic query diagnostic with 100,000 taxa, 1,000,000 assignments and 2,000,000
+occurrences, also set `TANHUB_ATTRIBUTE_MYSQL_SCALE=1`. This deliberately expensive opt-in check
+seeds isolated fixtures, checks row/hydration counts and reports five warm query-plus-hydration
+measurements per shape after a warm-up. It does not assert API response-time budgets: it omits
+HTTP processing, API totals, production joins and export work, and uses a uniform distribution
+without missing values. Use the full acceptance procedure below before deployment.
+
+The current occurrence-sort performance is accepted for now. A local MariaDB 11.7.2 diagnostic
+at that scale measured roughly 3-5.2 seconds for occurrence sorting plus hydration; taxa sorts
+were roughly 0.24-1.18 seconds. These limited measurements are not an API latency guarantee.
+Further sort projections are deferred; the targets below remain provisional future goals.
+
+Before production acceptance, benchmark a dedicated MySQL-compatible validation database with
+100,000 taxa, four attributes, up to 1,000,000 assignments and 2,000,000 occurrences.
+Include common/rare terms, missing values, multiple habitats/biotopes and singleton SQS/SAT.
+Measure accurate counts, filters, hydration, both attribute sort directions and mixed sorts.
+
+Provisional warm-cache targets are API p95 <= 1 second for limit 50/offset zero, <= 2 seconds at
+offset 10,000, and <= 10% regression on requests without attributes. Use at least 30 runs per
+shape and record database version, collation, host resources, distributions and index sizes.
+Existing 500-row export batches target <= 5 seconds and <= 128 MiB peak PHP memory.
+Confirm targets against actual production scale/hosting; do not infer them from portable tests.
+
 Use focused tests while changing API, taxonomy, or media code, then run the full suite before you
 commit. The commands below start with the quickest checks and include project-specific regressions.
 

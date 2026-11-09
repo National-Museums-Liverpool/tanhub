@@ -1,5 +1,68 @@
 # Tanhub REST API (v1)
 
+## Configurable taxon attributes
+
+Attributes are deployment-specific and disabled by default. Discover enabled definitions with
+`GET /api/v1/taxon-attributes` or `GET /api/v1/taxon-attributes/{key}`. Definitions expose `key`,
+`label`, `type`, `multi_value`, Indicia `source_id` and nullable `termlist_id`.
+`GET /api/v1/taxon-attribute-terms?attribute_key=pantheon_habitat` lists retained, currently used
+terms as `attribute_key`, `key` and `label`, with normal pagination. It excludes terms used only
+by blocked/deleted taxa and is not the complete warehouse vocabulary. Term identity is scoped to
+an attribute; labels are not identities. Discovery sorting uses stable attribute/term keys to
+break equal-label ties, keeping pagination repeatable.
+
+Attribute sorting can be expensive on large occurrence lists: a small page limit does not bound
+the number of rows the database must aggregate and sort. See the
+[testing guide](testing.md#configurable-taxon-attributes) for diagnostic results and limitations.
+
+On taxa, use `include=taxon-attributes`. On taxon-names, occurrences, taxon-stats and
+taxon-year-stats, use `include=taxon,taxon-attributes`. Responses add `taxon_attributes`, an object
+with every enabled key, for example:
+
+```json
+{
+  "taxon_attributes": {
+    "pantheon_sqs": [1],
+    "pantheon_broad_biotope": [
+      {"key": "indicia:101", "label": "open habitats"},
+      {"key": "indicia:102", "label": "tree-associated"}
+    ],
+    "pantheon_habitat": [],
+    "pantheon_sat": []
+  }
+}
+```
+
+Values are always arrays: single-valued attributes have zero or one item; multi-valued attributes
+have zero or more distinct items. Missing values use `[]`; empty configuration returns `{}` for
+the whole object. Requests without the include retain their existing response shape.
+
+Filter/sort with `attribute__<configured-key>`. These operations do not require the attribute
+include; related resources still require `include=taxon`. Examples:
+
+```text
+/api/v1/taxa?attribute__pantheon_sqs[gte]=1&attribute__pantheon_sqs[lte]=5
+/api/v1/taxa?attribute__pantheon_habitat[in]=indicia:101,indicia:102
+/api/v1/taxa?sort=attribute__pantheon_habitat,-attribute__pantheon_sqs
+/api/v1/occurrences?include=taxon&attribute__pantheon_sat=indicia:105
+```
+
+Integer attributes support `eq`, `in`, `gte` and `lte`; controlled terms support `eq` and `in`
+using public term keys, not labels. `eq=null` means no assignment and cannot be combined with
+other operators. Unknown attributes, unsupported operators, malformed values and conflicting
+bounds return a 400 problem response. An `in` predicate accepts at most 100 alternatives.
+Alternatives match OR; attributes match AND. Numeric bounds must match the same assignment.
+
+All attributes are sortable. Integer values sort numerically; controlled terms sort by display
+label under normal database text collation. Multi-values use minimum ascending and maximum
+descending. Singleton sorting uses the retained value, not discarded warehouse alternatives.
+Missing values sort last in both directions. Requested sorts end with a stable resource-key
+tie-break. Filtering does not hide nonmatching values from the returned arrays.
+
+Attributes always describe the result's exact taxon: no parent/child inheritance, synonym
+expansion at query time or aggregation across contributing occurrence taxa. Import already unions
+entries sharing one taxon meaning. Existing reporting-only and moderation rules still apply.
+
 This document is the canonical human-readable reference for API behaviour.
 Keep the machine-readable [OpenAPI v1 specification](openapi.v1.yaml) consistent
 with it.

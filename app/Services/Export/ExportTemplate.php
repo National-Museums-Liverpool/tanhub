@@ -11,7 +11,7 @@ use RuntimeException;
 final class ExportTemplate
 {
     /** @var int Frozen template schema version. */
-    public const VERSION = 4;
+    public const VERSION = 5;
 
     /** @var list<string> Typed numeric fields that must not receive formula quoting. */
     private const NUMBERS = ['id', 'taxon_id', 'taxon_name_id', 'data_source_id', 'latitude',
@@ -26,7 +26,8 @@ final class ExportTemplate
      */
     public static function choices(bool $taxa): array
     {
-        return $taxa ? ['grid' => 'Taxon grid', 'stats' => 'Taxon grid with stored all-date statistics']
+        return $taxa ? ['grid' => 'Taxon grid', 'details' => 'Detailed taxa',
+            'stats' => 'Taxon grid with stored all-date statistics']
             : ['grid' => 'Occurrence grid', 'details' => 'Detailed occurrences'];
     }
 
@@ -57,7 +58,7 @@ final class ExportTemplate
             : ['regions' => 'Geographic regions', 'grid_ref' => 'Grid ref',
                 'data_source_title' => 'Data source', 'unique_key' => 'Unique key'];
         $columns['blocked'] = 'Blocked';
-        if ($template === 'details') {
+        if ($template === 'details' && ! $taxa) {
             $columns += ['id' => 'Occurrence ID', 'taxon_id' => 'Exact taxon ID',
                 'taxon_name_id' => 'Recorded name ID', 'recorded_name' => 'Recorded name',
                 'from_date' => 'From date', 'to_date' => 'To date', 'recorded_by' => 'Recorder',
@@ -66,6 +67,11 @@ final class ExportTemplate
                 'grid_ref_2km' => '2 km grid ref', 'sex' => 'Sex', 'life_stage' => 'Life stage',
                 'organism_quantity' => 'Quantity', 'data_source_id' => 'Data source ID',
                 'blocked_reason' => 'Blocked reason'];
+        }
+        if ($template === 'details' && $taxa) {
+            $columns += ['id' => 'Taxon ID', 'scientific_name_identifier' => 'Scientific name identifier',
+                'scientific_name_authorship' => 'Authorship', 'id_difficulty' => 'Identification difficulty',
+                'taxon_remarks' => 'Taxon remarks', 'parent_taxon_id' => 'Parent taxon ID'];
         }
         if ($template === 'stats') {
             $columns['stats_available'] = 'Stats available';
@@ -76,6 +82,12 @@ final class ExportTemplate
                 'first_verified_record_date', 'last_verified_record_date',
                 'first_verified_recorder', 'last_verified_recorder'] as $field) {
                 $columns[$field] = ucfirst(str_replace('_', ' ', $field));
+            }
+        }
+
+        if ($template !== 'grid') {
+            foreach (config(\Config\TaxonAttributes::class)->definitions() as $key => $definition) {
+                $columns['attribute__' . $key] = $definition['label'];
             }
         }
 

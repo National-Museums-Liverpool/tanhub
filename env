@@ -176,3 +176,5 @@ Config\Import.indiciaOccurrencesEsEndpoint= 'es'
 # exports.inactivitySeconds = 86400
 # Optional Nginx internal location mapped to writable/exports; never expose it publicly.
 # exports.xAccelRedirectPrefix = '/private-exports/'
+# Optional deployment-specific taxonomy attributes (JSON object; disabled by default).
+# taxonAttributes.attributes = '{"pantheon_sqs":{"id":24,"label":"Pantheon SQS","type":"integer","multiValue":false},"pantheon_broad_biotope":{"id":15,"label":"Pantheon broad biotope","type":"term","multiValue":true},"pantheon_habitat":{"id":16,"label":"Pantheon habitat","type":"term","multiValue":true},"pantheon_sat":{"id":20,"label":"Pantheon SAT","type":"term","multiValue":false}}'

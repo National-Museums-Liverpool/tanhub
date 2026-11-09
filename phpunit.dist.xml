@@ -48,6 +48,7 @@
         <!-- Isolate installation scope from the developer's local .env. -->
         <env name="import.geographicRegions" value='{"vice-counties":{"indiciaLocationType":"Vice County","nbnField":"cl254","locations":[{"irecordName":"Cheshire"},{"irecordName":"South Lancashire"},{"irecordName":"West Lancashire"}]}}' force="true"/>
         <env name="import.geographicRegionLocationType" value="null" force="true"/>
+        <env name="taxonAttributes.attributes" value="{}" force="true"/>
         <!-- Directory containing phpunit.xml -->
         <const name="HOMEPATH" value="./"/>
         <!-- Directory containing the Paths config file -->

@@ -12,13 +12,144 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
 {
     use FeatureTestTrait;
 
+    /**
+     * Prepare lookup fixtures and independent anonymous route budgets for each test.
+     */
     protected function setUp(): void
     {
         parent::setUp();
 
+        $this->clearAttributeApiBuckets();
         $this->ensureLookupTables();
 
         $this->seedLookupData();
+    }
+
+    /**
+     * Expand and filter the same exact taxon's attributes on every supported resource.
+     */
+    public function testConfiguredAttributesAcrossTaxonResources(): void
+    {
+        $configuration = config(\Config\TaxonAttributes::class);
+        $previous = $configuration->attributes;
+        $migration = $this->seedAttributeData();
+        try {
+            foreach (['taxa', 'taxon-names', 'occurrences', 'taxon-stats', 'taxon-year-stats'] as $resource) {
+                $include = $resource === 'taxa' ? 'taxon-attributes' : 'taxon,taxon-attributes';
+                $result = $this->get('api/v1/' . $resource . '?' . http_build_query([
+                    'include' => $include, 'attribute__sqs' => ['gte' => '1'],
+                    'attribute__habitat' => ['in' => 'indicia:101,indicia:102'],
+                    'sort' => '-attribute__habitat,attribute__sqs',
+                ]));
+                $result->assertStatus(200);
+                $json = json_decode((string) $result->response()->getBody(), true, 512, JSON_THROW_ON_ERROR);
+                $this->assertNotEmpty($json['data'], $resource);
+                foreach ($json['data'] as $row) {
+                    $this->assertSame([1], $row['taxon_attributes']['sqs'], $resource);
+                    $this->assertCount(2, $row['taxon_attributes']['habitat'], $resource);
+                    $this->assertArrayNotHasKey('__attribute_taxon_id', $row);
+                }
+                $this->assertSame(count($json['data']), $json['meta']['total'], $resource);
+            }
+            $result = $this->get('api/v1/taxa/NHMSYS0021054498?include=taxon-attributes');
+            $result->assertStatus(200);
+            $item = json_decode((string) $result->response()->getBody(), true, 512, JSON_THROW_ON_ERROR);
+            $this->assertSame([1], $item['taxon_attributes']['sqs']);
+        } finally {
+            $migration->down();
+            $configuration->attributes = $previous;
+        }
+    }
+
+    /**
+     * Public discovery is scoped, typed and does not expose blocked-only terms.
+     */
+    public function testAttributeDiscoveryAndInvalidPredicates(): void
+    {
+        $configuration = config(\Config\TaxonAttributes::class);
+        $previous = $configuration->attributes;
+        $migration = $this->seedAttributeData();
+        try {
+            $result = $this->get('api/v1/taxon-attributes/sqs');
+            $result->assertStatus(200);
+            $item = json_decode((string) $result->response()->getBody(), true, 512, JSON_THROW_ON_ERROR);
+            $this->assertFalse($item['multi_value']);
+            $result = $this->get('api/v1/taxon-attribute-terms?attribute_key=habitat');
+            $result->assertStatus(200);
+            $json = json_decode((string) $result->response()->getBody(), true, 512, JSON_THROW_ON_ERROR);
+            $this->assertCount(2, $json['data']);
+            db_connect()->table('taxon_attribute_terms')->update(['label' => 'Same label']);
+            db_connect()->table('taxon_attributes')->update(['label' => 'Same label']);
+            foreach ([0 => ['habitat', 'indicia:101'], 1 => ['sqs', 'indicia:102']] as $offset => [$key, $term]) {
+                foreach ([
+                    'taxon-attributes' => $key,
+                    'taxon-attribute-terms' => $term,
+                ] as $resource => $expected) {
+                    $page = $this->get('api/v1/' . $resource . '?sort=label&limit=1&offset=' . $offset);
+                    $page->assertStatus(200);
+                    $body = json_decode((string) $page->response()->getBody(), true, 512, JSON_THROW_ON_ERROR);
+                    $this->assertSame($expected, $body['data'][0]['key']);
+                }
+            }
+            foreach ([
+                'attribute__sqs[gte]=1.5', 'attribute__habitat[contains]=wood',
+                'attribute__unknown=1', 'attribute__sqs[eq]=null&attribute__sqs[gte]=1',
+                'sort=attribute__unknown',
+            ] as $query) {
+                $this->get('api/v1/taxa?' . $query)->assertStatus(400);
+            }
+            $this->get('api/v1/occurrences?include=taxon-attributes')->assertStatus(400);
+            $this->get('api/v1/occurrences?attribute__sqs=1')->assertStatus(400);
+        } finally {
+            $migration->down();
+            $configuration->attributes = $previous;
+        }
+    }
+
+    /**
+     * Install real attribute tables alongside the existing lookup fixtures.
+     *
+     * @return \App\Database\Migrations\CreateTaxonAttributes Migration used for scoped cleanup.
+     */
+    private function seedAttributeData(): \App\Database\Migrations\CreateTaxonAttributes
+    {
+        require_once APPPATH . 'Database/Migrations/2026-11-09-100000_CreateTaxonAttributes.php';
+        $migration = new \App\Database\Migrations\CreateTaxonAttributes(\Config\Database::forge());
+        $migration->up();
+        $db = db_connect();
+        foreach (['taxon_attribute_values', 'taxon_attribute_terms', 'taxon_attributes'] as $table) {
+            $db->table($table)->emptyTable();
+        }
+        config(\Config\TaxonAttributes::class)->attributes = [
+            'sqs' => ['id' => 24, 'label' => 'SQS', 'type' => 'integer', 'multiValue' => false],
+            'habitat' => ['id' => 16, 'label' => 'Habitat', 'type' => 'term', 'multiValue' => true],
+        ];
+        $service = new \App\Services\TaxonAttributeService($db);
+        $db->transBegin();
+        $service->replace(1, [
+            'sqs' => ['termlist_id' => null, 'values' => [['value' => 1, 'label' => null]]],
+            'habitat' => ['termlist_id' => 627, 'values' => [
+                ['value' => 101, 'label' => 'Woodland'], ['value' => 102, 'label' => 'Scrub'],
+            ]],
+        ]);
+        $this->assertTrue($db->transCommit());
+
+        return $migration;
+    }
+
+    /**
+     * Reset only affected anonymous lookup buckets without touching rate-limit test fixtures.
+     */
+    private function clearAttributeApiBuckets(): void
+    {
+        foreach (['taxa', 'taxon-names', 'occurrences', 'taxon-stats', 'taxon-year-stats',
+            'taxon-attributes', 'taxon-attribute-terms', 'taxon-attributes/sqs', 'taxa/NHMSYS0021054498'] as $resource) {
+            foreach (['api/v1/', '/api/v1/'] as $prefix) {
+                foreach (['ip:127.0.0.1', 'ip:::1', 'ip:0.0.0.0'] as $identity) {
+                    service('throttler')->remove('api_v1_' . sha1($prefix . $resource . '|' . $identity));
+                }
+            }
+        }
     }
 
     public function testDataSourcesListReturnsEnvelope(): void

@@ -18,6 +18,35 @@ use RuntimeException;
 final class IndiciaImportAdapterTest extends CIUnitTestCase
 {
     /**
+     * Missing definitions fail preflight even if the subsequent taxa page would be empty.
+     */
+    public function testMissingConfiguredMetadataFailsBeforeFetchingTaxa(): void
+    {
+        $configuration = config(\Config\TaxonAttributes::class);
+        $previous = $configuration->attributes;
+        $configuration->attributes = [
+            'sqs' => ['id' => 24, 'label' => 'SQS', 'type' => 'integer', 'multiValue' => false],
+        ];
+        try {
+            $config = new Import();
+            $config->indiciaWarehouseUrl = 'https://warehouse.test';
+            $client = $this->createMock(CURLRequest::class);
+            $client->expects($this->once())->method('get')->with(
+                'https://warehouse.test/index.php/services/rest/reports/projects/tanhub/taxon_attributes.xml',
+                $this->callback(static fn (array $options): bool =>
+                    $options['query']['taxon_attribute_ids'] === '24' && $options['query']['limit'] === 1)
+            )->willReturn($this->response([[
+                'taxon_attributes' => json_encode(['version' => 1, 'attributes' => []], JSON_THROW_ON_ERROR),
+            ]]));
+            $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage('Missing or incompatible warehouse attribute: sqs');
+            (new IndiciaImportAdapter($client, $config, []))->fetchBatch('taxa', 100, 50);
+        } finally {
+            $configuration->attributes = $previous;
+        }
+    }
+
+    /**
      * Pair the selected type with iRecord names and retain the active type in rows.
      */
     public function testSelectedGroupFiltersAndNormalizesRegion(): void

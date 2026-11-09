@@ -150,6 +150,18 @@ class EntityImportOrchestrator
         ]);
 
         try {
+            if ($entityKey === 'taxa') {
+                $attributes = new \App\Services\TaxonAttributeService();
+                $signature = $attributes->fingerprint();
+                $storedSignature = $importOffsetModel->getCheckpoint($sourceEntityKey);
+                if ($offset > 0 && ($attributes->definitions() !== [] || $storedSignature !== null)
+                    && $storedSignature !== $signature) {
+                    throw new RuntimeException('Taxon attribute configuration changed. Restart the taxa import from offset zero.');
+                }
+                if (! $dryRun && ($attributes->definitions() !== [] || $storedSignature !== null)) {
+                    $importOffsetModel->setCheckpoint($sourceEntityKey, $signature);
+                }
+            }
             if ($onRunCreated !== null) {
                 $onRunCreated($runId);
             }

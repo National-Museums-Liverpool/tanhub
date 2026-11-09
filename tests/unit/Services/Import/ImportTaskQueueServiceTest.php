@@ -122,6 +122,64 @@ final class ImportTaskQueueServiceTest extends CIUnitTestCase
     }
 
     /**
+     * Restarted taxa block queued year statistics through completed occurrence imports.
+     */
+    public function testQueuedYearStatsWaitForRestartedTaxaWithoutRestartingOccurrences(): void
+    {
+        $offsets = model(ImportOffsetModel::class);
+        $offsets->setCompletion('indicia-taxonomy:taxa', false);
+        $offsets->setCompletion('derived-stats:taxon_year_stats', false);
+        $offsets->setOffset('indicia-occurrences:occurrences', 123);
+        $offsets->setCheckpoint('nbn-occurrences:occurrences', 'saved-occurrence-checkpoint');
+        $queue = service('importTaskQueueService');
+        $queue->enqueue('derived-stats:taxon_year_stats');
+        $queue->enqueue('indicia-taxonomy:taxa');
+
+        $dependencies = service('importTaskDependencyService');
+        $this->assertSame(
+            ['indicia-taxonomy:taxa'],
+            $dependencies->blockedBy('derived-stats:taxon_year_stats'),
+        );
+        $this->assertFalse($dependencies->isRunnable('derived-stats:taxon_year_stats'));
+        $task = service('autoImportService')->select();
+        $this->assertSame('indicia-taxonomy:taxa', $task['source_key']);
+        $this->assertSame('derived-stats:taxon_year_stats', $task['requested_source_key']);
+        $this->assertSame(['indicia-taxonomy:taxa'], $queue->rows()[0]['blocked_by']);
+        $this->assertCount(2, $queue->rows());
+
+        $offsets->setCompletion('indicia-taxonomy:taxa', true);
+
+        $this->assertSame('derived-stats:taxon_year_stats', $queue->select()['source_key']);
+        $this->assertTrue($dependencies->isRunnable('derived-stats:taxon_year_stats'));
+        $this->assertTrue($offsets->isComplete('indicia-occurrences:occurrences'));
+        $this->assertTrue($offsets->isComplete('nbn-occurrences:occurrences'));
+        $this->assertSame(123, $offsets->getOffset('indicia-occurrences:occurrences'));
+        $this->assertSame(
+            'saved-occurrence-checkpoint',
+            $offsets->getCheckpoint('nbn-occurrences:occurrences'),
+        );
+    }
+
+    /**
+     * A failed indirect prerequisite requires retry instead of running year statistics.
+     */
+    public function testFailedTaxaBlockYearStatsThroughCompletedOccurrences(): void
+    {
+        model(ImportOffsetModel::class)->setCompletion('indicia-taxonomy:taxa', false);
+        model(ImportOffsetModel::class)->setCompletion('derived-stats:taxon_year_stats', false);
+        $queue = service('importTaskQueueService');
+        $queue->enqueue('derived-stats:taxon_year_stats');
+        $queue->enqueue('indicia-taxonomy:taxa');
+        db_connect()->table('import_task_queue')
+            ->where('source_key', 'indicia-taxonomy:taxa')->update(['status' => 'failed']);
+
+        $this->assertNull($queue->select());
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('indicia-taxonomy:taxa is awaiting Retry');
+        $queue->assertRunnable('derived-stats:taxon_year_stats');
+    }
+
+    /**
      * A failed batch remains visible and cannot be silently retried by automation.
      */
     public function testFailedBatchRequiresRetryAndPreservesCheckpoint(): void

@@ -251,6 +251,66 @@ final class TaxaImportServiceTest extends CIUnitTestCase
         }
     }
 
+    /**
+     * Dry runs and failed replacements must not change taxa or their existing attributes.
+     */
+    public function testAttributeReplacementIsTransactionalAndRetryable(): void
+    {
+        require_once APPPATH . 'Database/Migrations/2026-11-09-100000_CreateTaxonAttributes.php';
+        $migration = new \App\Database\Migrations\CreateTaxonAttributes(\Config\Database::forge());
+        $migration->up();
+        $configuration = config(\Config\TaxonAttributes::class);
+        $previous = $configuration->attributes;
+        $configuration->attributes = [
+            'sqs' => ['id' => 24, 'label' => 'SQS', 'type' => 'integer', 'multiValue' => false],
+            'habitat' => ['id' => 16, 'label' => 'Habitat', 'type' => 'term', 'multiValue' => true],
+        ];
+        try {
+            foreach (['taxon_attribute_values', 'taxon_attribute_terms', 'taxon_attributes'] as $table) {
+                $this->db->table($table)->emptyTable();
+            }
+            $this->seedSharedLookupRows();
+            $row = ['taxon_identifier' => 'ATTR-TAXON', 'scientific_name_identifier' => 'ATTR-NAME',
+                'scientific_name' => 'Original taxon', 'taxon_group_external_key' => 'group-a',
+                'recording_scheme_external_key' => 'scheme-a', 'taxon_rank' => 'Family',
+                'taxon_attributes' => [
+                    'sqs' => ['termlist_id' => null, 'values' => [['value' => 1, 'label' => null]]],
+                    'habitat' => ['termlist_id' => 627, 'values' => [['value' => 101, 'label' => 'Woodland']]],
+                ]];
+            $service = new TaxaImportService();
+            $this->assertSame(1, $service->import([$row], true)['inserted']);
+            $this->assertSame(0, $this->db->table('taxon_attributes')->countAllResults());
+            $this->assertSame(0, $this->db->table('taxa')->countAllResults());
+            $this->assertSame(1, $service->import([$row])['inserted']);
+            $invalid = $row;
+            $invalid['scientific_name'] = 'Should roll back';
+            $invalid['taxon_attributes']['habitat']['termlist_id'] = 628;
+            $counts = $service->import([$invalid]);
+            $this->assertSame(1, $counts['errors']);
+            $this->assertSame(0, $counts['processed']);
+            $this->assertSame(0, $counts['updated']);
+            $stored = $this->db->table('taxa')->get()->getRowArray();
+            $this->assertSame('Original taxon', $stored['scientific_name']);
+            $attributes = new \App\Services\TaxonAttributeService($this->db);
+            $this->assertSame([['key' => 'indicia:101', 'label' => 'Woodland']],
+                $attributes->read([(int) $stored['id']])[(int) $stored['id']]->habitat);
+            $this->assertSame(1, $service->import([$row])['updated']);
+            $this->assertSame(2, $this->db->table('taxon_attribute_values')->countAllResults());
+            foreach ($row['taxon_attributes'] as &$attribute) {
+                $attribute['values'] = [];
+            }
+            unset($attribute);
+            $this->assertSame(1, $service->import([$row])['updated']);
+            $this->assertSame(0, $this->db->table('taxon_attribute_values')->countAllResults());
+        } finally {
+            $migration->down();
+            $configuration->attributes = $previous;
+        }
+    }
+
+    /**
+     * Seed required group, rank and optional recording-scheme identities.
+     */
     private function seedSharedLookupRows(): void
     {
         $this->db->table('taxon_groups')->insert([

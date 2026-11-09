@@ -2,6 +2,8 @@
 
 namespace App\Services\Import\Persistence;
 
+use App\Services\TaxonAttributeService;
+
 /**
  * Persists normalized taxa rows and accepted taxon names.
  *
@@ -47,7 +49,11 @@ class TaxaImportService implements EntityImportServiceInterface
      *                                                  `id_difficulty`, `gb_red_list`, `gb_status`
      *                                                  (nullable semicolon-separated abbreviations),
      *                                                  `higher_taxa` (list of ancestor objects with
-     *                                                  `taxon_rank` and `organism_key`).
+     *                                                  `taxon_rank` and `organism_key`), and
+     *                                                  `taxon_attributes` when configured. The latter
+     *                                                  maps keys to `{termlist_id: ?int,
+     *                                                  values: list<{value: int, label: ?string}>}`,
+     *                                                  as returned by TaxonAttributeService::normalize().
      * @param bool                             $dryRun When true, compute counts without
      *                                                  writing changes (foreign-key self-reference
      *                                                  updates are also skipped).
@@ -66,13 +72,17 @@ class TaxaImportService implements EntityImportServiceInterface
             'errors' => 0,
         ];
 
-        if ($rows === []) {
-            return $counts;
-        }
-
         $db = db_connect();
+        $attributes = new TaxonAttributeService($db);
+        $withAttributes = $attributes->definitions() !== [];
 
         try {
+            if ($withAttributes && ! $dryRun) {
+                $attributes->synchronizeDefinitions();
+            }
+            if ($rows === []) {
+                return $counts;
+            }
             $groupMap = $this->prepareLookup('taxon_groups', 'external_key', 'id');
             $schemeMap = $this->prepareLookup('recording_schemes', 'external_key', 'id');
             $schemeTitleMap = $this->prepareStringLookup('recording_schemes', 'external_key', 'title');
@@ -113,6 +123,8 @@ class TaxaImportService implements EntityImportServiceInterface
         }
 
         foreach ($rows as $row) {
+            $transaction = false;
+            $operation = null;
             try {
                 $taxonIdentifier = trim((string) ($row['taxon_identifier'] ?? ''));
                 $sciNameIdentifier = trim((string) ($row['scientific_name_identifier'] ?? ''));
@@ -190,9 +202,21 @@ class TaxaImportService implements EntityImportServiceInterface
                 }
 
                 $existingTaxa = $knownTaxa[$taxonIdentifier] ?? null;
+                if ($withAttributes && ! isset($row['taxon_attributes'])) {
+                    throw new \RuntimeException('Missing normalized taxon attributes.');
+                }
+                if ($withAttributes) {
+                    $attributes->validateValues($row['taxon_attributes']);
+                }
+                if ($withAttributes && ! $dryRun) {
+                    if (! $db->transBegin()) {
+                        throw new \RuntimeException('Could not begin taxon attribute transaction.');
+                    }
+                    $transaction = true;
+                }
 
                 if ($existingTaxa === null) {
-                    $counts['inserted']++;
+                    $operation = 'inserted';
                     $insertPayload = $taxaPayload;
                     $insertPayload['rarity_group_name'] = $this->defaultRarityGroupName($schemeExternalKey, $schemeTitleMap);
 
@@ -202,7 +226,7 @@ class TaxaImportService implements EntityImportServiceInterface
                         $knownTaxa[$taxonIdentifier] = $insertPayload + ['id' => $taxaId];
                     }
                 } else {
-                    $counts['updated']++;
+                    $operation = 'updated';
                     $taxaId = (int) $existingTaxa['id'];
                     if (! $dryRun) {
                         $db->table('taxa')->where('id', $existingTaxa['id'])->update($taxaPayload);
@@ -224,8 +248,19 @@ class TaxaImportService implements EntityImportServiceInterface
                         }
                     }
                 }
+                if ($withAttributes && ! $dryRun) {
+                    $attributes->replace((int) $taxaId, $row['taxon_attributes']);
+                    if (! $db->transStatus() || ! $db->transCommit()) {
+                        throw new \RuntimeException('Taxon attribute transaction failed.');
+                    }
+                    $transaction = false;
+                }
+                $counts[$operation]++;
                 $counts['processed']++;
             } catch (\Throwable $exception) {
+                if ($transaction) {
+                    $db->transRollback();
+                }
                 log_message('error', $exception->getMessage());
                 $counts['errors']++;
                 break;

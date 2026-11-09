@@ -1,5 +1,53 @@
 # Database schema
 
+## Configurable taxon attributes
+
+### taxon_attributes
+
+Definitions have a unique `attribute_key`, Indicia `source_id`, label, `data_type` (`integer` or
+`term`), `multi_value` flag and nullable `termlist_id`. This installation uses its single configured
+Indicia taxonomy warehouse; changing warehouse identity requires restarting the full taxonomy
+import.
+Deployment configuration enables definitions; no Pantheon definitions are seeded by migrations.
+Disabling a definition retains its data but removes it from public queries and new export columns.
+
+### taxon_attribute_terms
+
+Each term belongs to one attribute and retains its Indicia `source_id`, public `term_key`
+(`indicia:<source-id>`) and display label. Source IDs and public keys are unique within an
+attribute, not by label: different terms may have identical labels. A composite `(attribute_id, id)`
+key supports ownership validation. Label updates affect live display and native-collation sorting,
+without changing membership or already captured export cells.
+
+### taxon_attribute_values
+
+Each row links an exact taxon and attribute to exactly one `integer_value` or `term_id`.
+A CHECK enforces the alternate payloads on SQLite and modern MySQL-compatible drivers; older
+MySQL versions may ignore CHECKs, so the shared write path validates them as well.
+The composite term/attribute FK rejects cross-attribute term assignments. Shared persistence
+enforces single-valued cardinality; value-identity unique keys alone do not enforce it.
+
+Unique `(taxon_id, attribute_id, integer_value)` and `(taxon_id, attribute_id, term_id)` keys
+deduplicate assignments and support hydration. Attribute-first indexes ending in `taxon_id`
+support numeric ranges and term membership. Numeric sorting uses integer aggregates; controlled
+sorting joins terms and aggregates their labels, not numeric IDs. It may still require a filesort.
+
+Import replaces configured assignments transactionally per taxon. Multi-valued attributes retain
+distinct values; single-valued attributes retain one source row, selected by lowest value-row ID.
+Conflicting singleton source rows do not duplicate taxa or fail the import. Empty arrays clear old
+assignments; missing/malformed source contracts do not. Dictionary entries remain for stable
+identity, while discovery only returns currently assigned terms on eligible taxa.
+Physical taxon deletion cascades to assignments; soft deletion/blocking controls visibility without
+deleting dictionary entries. Attribute deletion cascades to its terms/values; ordinary configuration
+changes do not delete definitions. Physical term deletion also cascades its assignments: this avoids
+conflicting cascade paths when InnoDB removes a definition's terms before its values. Application
+imports retain dictionary rows rather than deleting terms.
+Term IDs are immutable; the composite FK does not cascade ID updates because MySQL-compatible
+drivers prohibit update-cascaded columns in CHECK expressions.
+MySQL tables use InnoDB; SQLite provides the portable test implementation.
+Composite indexes and foreign keys use compact names so deployment table prefixes do not exceed
+MySQL's 64-character identifier limit.
+
 ## Temporary admin export storage
 
 ### export_jobs

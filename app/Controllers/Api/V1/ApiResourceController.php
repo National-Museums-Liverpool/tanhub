@@ -5,6 +5,8 @@ namespace App\Controllers\Api\V1;
 use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\RawSql;
 use CodeIgniter\HTTP\ResponseInterface;
+use App\Services\TaxonAttributeService;
+use InvalidArgumentException;
 
 /**
  * Base class implementing the shared list/show REST pattern for `api/v1` resources.
@@ -30,6 +32,68 @@ use CodeIgniter\HTTP\ResponseInterface;
  */
 abstract class ApiResourceController extends ApiController
 {
+    /** @var TaxonAttributeService|null Request-scoped dictionary/query collaborator. */
+    private ?TaxonAttributeService $attributeService = null;
+
+    /**
+     * Resolve the shared attribute service once for this response.
+     *
+     * @return TaxonAttributeService Attribute collaborator.
+     */
+    private function attributes(): TaxonAttributeService
+    {
+        return $this->attributeService ??= new TaxonAttributeService();
+    }
+
+    /**
+     * Identify resources whose base query owns the exact taxon alias.
+     *
+     * @return bool Whether attribute expansion is supported.
+     */
+    private function supportsAttributes(): bool
+    {
+        return $this instanceof Taxa || $this instanceof TaxonNames || $this instanceof Occurrences
+            || $this instanceof TaxonStats || $this instanceof TaxonYearStats;
+    }
+
+    /**
+     * Allow attribute predicates independently of hydration, respecting relationship gates.
+     *
+     * @param array<string, bool> $includes Validated includes.
+     * @return array<string, string> Public sort/filter markers, never raw request SQL.
+     */
+    private function attributeFields(array $includes): array
+    {
+        if (! $this->supportsAttributes() || (! $this instanceof Taxa && ! $this->hasInclude($includes, 'taxon'))) {
+            return [];
+        }
+        $fields = [];
+        foreach ($this->attributes()->definitions() as $key => $definition) {
+            $fields['attribute__' . $key] = 'attribute__' . $key;
+        }
+
+        return $fields;
+    }
+
+    /**
+     * Attach bounded attribute data without changing existing expansion implementations.
+     *
+     * @param list<array<string, mixed>> $rows Result rows, modified in place.
+     * @param array<string, bool> $includes Validated includes.
+     */
+    private function hydrateAttributes(array &$rows, array $includes): void
+    {
+        if (! $this->hasInclude($includes, 'taxon-attributes')) {
+            return;
+        }
+        $byId = $this->attributes()->read(array_map(
+            static fn (array $row): int => (int) $row['__attribute_taxon_id'], $rows
+        ));
+        foreach ($rows as &$row) {
+            $row['taxon_attributes'] = $byId[(int) $row['__attribute_taxon_id']] ?? (object) [];
+            unset($row['__attribute_taxon_id']);
+        }
+    }
     /** @var string Effective species flag shared by selection and filtering. */
     private const RARITY_EXCLUSION_FLAG = '(COALESCE(exclusion_species.exclude_from_rarity_calculations, 0))';
 
@@ -271,22 +335,31 @@ abstract class ApiResourceController extends ApiController
 
         $this->reportingOnly = $reportingOnly;
 
-        $sorts = $this->getSorts($this->allowedSorts($includes));
+        $attributeFields = $this->attributeFields($includes);
+        $sorts = $this->getSorts($this->allowedSorts($includes) + $attributeFields);
 
         if ($sorts instanceof ResponseInterface) {
             return $sorts;
         }
 
-        $filters = $this->getFilters($this->allowedFilters($includes));
+        $filters = $this->getFilters($this->allowedFilters($includes) + $attributeFields);
 
         if ($filters instanceof ResponseInterface) {
             return $filters;
+        }
+        try {
+            $attributeCriteria = $attributeFields === [] ? [] : $this->attributes()->criteria($this->request->getGet());
+        } catch (InvalidArgumentException $exception) {
+            return $this->respondProblem(400, 'Invalid attribute filter', $exception->getMessage());
         }
 
         $db = db_connect();
         $builder = $this->getBuilder($db, $includes);
 
         $this->applyFilters($builder, $filters);
+        if ($attributeCriteria !== []) {
+            $this->attributes()->apply($builder, $attributeCriteria);
+        }
         if ($reportingOnly !== null) {
             $this->applyReportingOnly($builder, $reportingOnly);
         }
@@ -300,6 +373,7 @@ abstract class ApiResourceController extends ApiController
             ->getResultArray();
 
         $this->augmentResponseData($data, $includes);
+        $this->hydrateAttributes($data, $includes);
         $this->normalizeRarityExclusionData($data);
 
         $this->removeInternalFields($data, $includes);
@@ -342,6 +416,7 @@ abstract class ApiResourceController extends ApiController
         $rows = [$item];
 
         $this->augmentResponseData($rows, $includes);
+        $this->hydrateAttributes($rows, $includes);
         $this->normalizeRarityExclusionData($rows);
 
         $this->removeInternalFields($rows, $includes);
@@ -557,6 +632,9 @@ abstract class ApiResourceController extends ApiController
     protected function getFieldSql(array $includes = []): string
     {
         $fields = array_merge($this->getInternalFields($includes), $this->getAllowedFields($includes));
+        if ($this->hasInclude($includes, 'taxon-attributes')) {
+            $fields['__attribute_taxon_id'] = 't.id';
+        }
         $selects = [];
 
         foreach ($fields as $alias => $column) {
@@ -756,6 +834,9 @@ abstract class ApiResourceController extends ApiController
 
         foreach ($filters as $filter) {
             $column = (string) $filter['column'];
+            if (str_starts_with($column, 'attribute__')) {
+                continue;
+            }
             $operator = (string) $filter['operator'];
             $value = $filter['value'];
 
@@ -802,9 +883,20 @@ abstract class ApiResourceController extends ApiController
      */
     protected function applySorts(BaseBuilder $builder, array $sorts): void
     {
+        $attributeSort = false;
         foreach ($sorts as $sort) {
+            if (str_starts_with($sort['column'], 'attribute__')) {
+                $expression = $this->attributes()->sortExpression(substr($sort['column'], 11), $sort['direction']);
+                $builder->orderBy('(' . $expression . ' IS NULL)', 'ASC', false)
+                    ->orderBy($expression, $sort['direction'], false);
+                $attributeSort = true;
+                continue;
+            }
             // Sort columns come from allow-lists and may include aliases/expressions.
             $builder->orderBy($sort['column'], $sort['direction'], false);
+        }
+        if ($attributeSort) {
+            $builder->orderBy($this->getDefaultKeyColumn(), 'ASC', false);
         }
     }
 
@@ -855,6 +947,9 @@ abstract class ApiResourceController extends ApiController
 
         $parts = array_filter(array_map('trim', explode(',', strtolower($raw))), static fn (string $item): bool => $item !== '');
         $supported = $this->getAllowedIncludes($parts);
+        if ($this->supportsAttributes() && ($this instanceof Taxa || in_array('taxon', $parts, true))) {
+            $supported[] = 'taxon-attributes';
+        }
         $includes = [];
 
         foreach ($parts as $part) {

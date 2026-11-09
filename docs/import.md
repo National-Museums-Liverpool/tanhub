@@ -1,5 +1,36 @@
 # Import
 
+## Taxon attribute import
+
+Taxon attributes use the existing Indicia taxa import, not a separate Pantheon website request.
+Both websites use the same warehouse and species list. Enable the required definitions using
+[Taxon attributes configuration](configuration-reference.md#taxon-attributes).
+
+Deploy the updated `indicia-warehouse-module/tanhub/reports/projects/tanhub/taxa.xml` and its
+companion `taxon_attributes.xml` first.
+It accepts `taxon_attribute_ids` and returns versioned JSON metadata/value arrays. Controlled terms
+resolve `int_value` through `cache_termlists_terms`; integer attributes retain the number.
+The adapter verifies requested definitions, types and cardinality before persistence.
+The metadata report runs once per taxa batch, independently of taxon pagination, so missing
+definitions still fail validation when there are no taxa to import. It is not a new import task.
+
+Values are collected across taxon-list entries sharing the accepted taxon's meaning within the
+configured list. Multi-valued attributes retain distinct values. Single-valued attributes retain
+one source assignment selected by lowest value-row ID, tolerating conflicting warehouse values.
+Selection happens before aggregation, so neither multiplicity nor multiple designations duplicate
+emitted taxa or change the taxon offset.
+
+Run local migrations, configure attributes, then restart the taxa import from offset zero.
+Its checkpoint includes a configuration fingerprint; changed definitions/cardinality or source
+identity cannot silently resume an older partial import. Existing dependencies still apply.
+Dry runs validate without changing attribute dictionaries or assignments.
+
+Each taxon and its replacement assignments commit together. Failed rows do not advance the
+processed offset. Empty arrays clear configured assignments; missing/invalid report data fails
+rather than clearing previously imported values. Only actually retained term identities are
+imported; there is no complete-vocabulary import. Disabling an attribute preserves stored data.
+Deployments with empty configuration do not require new report fields from an older warehouse.
+
 ## Data sources
 
 ### iRecord
@@ -138,6 +169,10 @@ processed before the requested task. See [queue controls](./admin-ui.md#imports)
 The dependency rules are shared with the `import:auto` command. A task that is shown as blocked
 here is skipped by automation until all its prerequisite tasks are complete. Automatic scheduling
 does not bypass these checks when selecting stale statistics or occurrence sources.
+Checks include indirect prerequisites, even when an intermediate task is already complete.
+For example, restarting `taxa` blocks queued `taxon_year_stats` until taxa finish, even if both
+occurrence imports are complete. Their completion flags and checkpoints remain unchanged; they
+do not need to be imported again.
 
 The following imports are for simple population of lookup tables and should not need to be run
 again after completion:

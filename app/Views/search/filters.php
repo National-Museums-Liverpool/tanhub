@@ -65,6 +65,40 @@ foreach ($filters as $key => $value) {
         <details id="advanced-search" <?= $advancedActive ? 'open' : '' ?>>
             <summary class="mb-2">Advanced<?= $advancedActive ? ' (filters active)' : '' ?></summary>
             <div class="row g-3 border rounded-3 bg-body-tertiary p-3 mx-0 mt-0">
+                <?php foreach ($page['attributeDefinitions'] ?? [] as $attributeKey => $definition): ?>
+                    <?php
+                    $field = 'attribute__' . $attributeKey;
+                    $submitted = $filters[$field] ?? [];
+                    $submitted = is_array($submitted) ? $submitted : ['eq' => $submitted];
+                    $selectedTerms = $submitted['in'] ?? $submitted['eq'] ?? [];
+                    $selectedTerms = is_array($selectedTerms) ? $selectedTerms : explode(',', (string) $selectedTerms);
+                    ?>
+                    <div class="col-12 col-md-6" id="<?= esc($field) ?>">
+                        <label class="form-label" for="<?= esc($field . '_value') ?>"><?= esc($definition['label']) ?></label>
+                        <?php if ($definition['type'] === 'term'): ?>
+                            <select class="form-select" multiple id="<?= esc($field . '_value') ?>" name="<?= esc($field) ?>[in][]">
+                                <?php
+                                $choices = $page['attributeChoices'][$attributeKey] ?? [];
+                                $available = array_column($choices, 'term_key');
+                                ?>
+                                <?php foreach ($choices as $choice): ?>
+                                    <option value="<?= esc($choice['term_key']) ?>" <?= in_array($choice['term_key'], $selectedTerms, true) ? 'selected' : '' ?>><?= esc($choice['label']) ?></option>
+                                <?php endforeach; ?>
+                                <?php foreach ($selectedTerms as $selectedTerm): ?>
+                                    <?php if (is_string($selectedTerm) && ! in_array($selectedTerm, $available, true)): ?>
+                                        <option selected value="<?= esc($selectedTerm) ?>">Unavailable: <?= esc($selectedTerm) ?></option>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                            </select>
+                            <div class="form-text">Match any selected value.</div>
+                        <?php else: ?>
+                            <div class="d-flex gap-2">
+                                <input class="form-control" type="number" step="1" id="<?= esc($field . '_value') ?>" name="<?= esc($field) ?>[gte]" value="<?= esc(is_scalar($submitted['gte'] ?? '') ? (string) ($submitted['gte'] ?? '') : '') ?>" aria-label="<?= esc($definition['label'] . ' minimum') ?>" placeholder="Minimum">
+                                <input class="form-control" type="number" step="1" name="<?= esc($field) ?>[lte]" value="<?= esc(is_scalar($submitted['lte'] ?? '') ? (string) ($submitted['lte'] ?? '') : '') ?>" aria-label="<?= esc($definition['label'] . ' maximum') ?>" placeholder="Maximum">
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                <?php endforeach; ?>
                 <div class="col-12 col-md-6 col-lg-3">
                     <label class="form-label" for="year"><?= esc($labels['year']) ?></label>
                     <input class="form-control <?= isset($page['errors']['year']) ? 'is-invalid' : '' ?>" id="year" name="year" value="<?= esc($filters['year']) ?>" placeholder="e.g. 2010 or 2010-2015" aria-describedby="year-help">

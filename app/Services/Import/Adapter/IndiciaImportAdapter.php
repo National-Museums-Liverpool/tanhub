@@ -3,6 +3,7 @@
 namespace App\Services\Import\Adapter;
 
 use CodeIgniter\HTTP\CURLRequest;
+use App\Services\TaxonAttributeService;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -11,6 +12,9 @@ use RuntimeException;
  */
 class IndiciaImportAdapter implements ImportSourceAdapterInterface
 {
+    /** @var TaxonAttributeService|null Batch-shared definition validator. */
+    private ?TaxonAttributeService $attributes = null;
+
     /**
      * @var \Config\Import|array<string, mixed>
      */
@@ -53,7 +57,12 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
     }
 
     /**
-     * Fetch one normalized import batch.
+     * Fetch one normalized import batch, preflighting configured taxon metadata independently.
+     *
+     * @param string $entity Supported taxonomy entity.
+     * @param int $limit Maximum source rows.
+     * @param int $offset Resume position.
+     * @return ImportBatch Normalized rows and source-based pagination.
      */
     public function fetchBatch(string $entity, int $limit, int $offset): ImportBatch
     {
@@ -66,6 +75,13 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
         $batchLimit = max(1, $limit);
         $batchOffset = max(0, $offset);
 
+        if ($entityKey === 'taxa' && config(\Config\TaxonAttributes::class)->definitions() !== []) {
+            $metadata = $this->fetchImportData('taxon_attributes', 1, 0);
+            if (count($metadata) !== 1) {
+                throw new RuntimeException('Invalid taxon attribute metadata report response.');
+            }
+            ($this->attributes ??= new TaxonAttributeService())->normalize($metadata[0]['taxon_attributes'] ?? null);
+        }
         $rawRows = $this->fetchImportData($entityKey, $batchLimit, $batchOffset);
         $normalisedRows = $this->normaliseRows($entityKey, $rawRows);
 
@@ -79,7 +95,12 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * Fetch one stable report page with installation-specific taxonomy parameters.
+     *
+     * @param string $entity Supported report name.
+     * @param int $limit Maximum rows.
+     * @param int $offset Resume position.
+     * @return array<int, array<string, mixed>> Raw source rows.
      */
     private function fetchImportData(string $entity, int $limit, int $offset): array
     {
@@ -97,6 +118,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
             case 'geographic_regions':
             case 'grid_square_stats':
             case 'taxon_names':
+            case 'taxon_attributes':
                 $report = $entity;
                 break;
 
@@ -113,6 +135,12 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
         ];
         if ($report === 'taxa') {
             $query['reporting_taxon_ranks'] = $this->getConfigListAsReportParam('taxonRanks');
+        }
+        if (in_array($report, ['taxa', 'taxon_attributes'], true)) {
+            $definitions = config(\Config\TaxonAttributes::class)->definitions();
+            if ($definitions !== []) {
+                $query['taxon_attribute_ids'] = implode(',', array_column($definitions, 'id'));
+            }
         }
         if ($report === 'taxon_groups') {
             $query['taxon_groups'] = $this->getConfigListAsReportParam('taxonGroups');
@@ -285,7 +313,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
     }
 
     /**
-     * Normalize taxonomy and encode warehouse designation arrays as stable string lists.
+     * Normalize taxonomy, designation lists and configured typed attribute arrays.
      *
      * @param array<string, mixed> $row
      * @return array<string, mixed>
@@ -312,6 +340,7 @@ class IndiciaImportAdapter implements ImportSourceAdapterInterface
             'taxon_rank' => (string) ($row['taxon_rank'] ?? ''),
             'parent_taxon_identifier' => trim((string) ($row['parent_taxon_identifier'] ?? '')),
             'higher_taxa' => json_decode((string) ($row['higher_taxa'] ?? '[]')),
+            'taxon_attributes' => ($this->attributes ??= new TaxonAttributeService())->normalize($row['taxon_attributes'] ?? null),
         ];
     }
 

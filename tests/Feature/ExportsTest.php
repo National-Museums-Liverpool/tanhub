@@ -134,6 +134,76 @@ final class ExportsTest extends CIUnitTestCase
     }
 
     /**
+     * Detailed/statistics templates retain attribute arrays and exact search membership.
+     */
+    public function testAttributeTemplatesAndFrozenConfiguration(): void
+    {
+        require_once APPPATH . 'Database/Migrations/2026-11-09-100000_CreateTaxonAttributes.php';
+        (new \App\Database\Migrations\CreateTaxonAttributes(\Config\Database::forge()))->up();
+        $configuration = config(\Config\TaxonAttributes::class);
+        $previous = $configuration->attributes;
+        $configuration->attributes = [
+            'sqs' => ['id' => 24, 'label' => 'Pantheon SQS', 'type' => 'integer', 'multiValue' => false],
+            'habitat' => ['id' => 16, 'label' => 'Pantheon habitat', 'type' => 'term', 'multiValue' => true],
+        ];
+        $db = db_connect();
+        try {
+            foreach (['taxon_attribute_values', 'taxon_attribute_terms', 'taxon_attributes'] as $table) {
+                $db->table($table)->emptyTable();
+            }
+            $attributes = new \App\Services\TaxonAttributeService($db);
+            $db->transBegin();
+            $attributes->replace(1, [
+                'sqs' => ['termlist_id' => null, 'values' => [['value' => 1, 'label' => null]]],
+                'habitat' => ['termlist_id' => 627, 'values' => [
+                    ['value' => 1, 'label' => "A; \"quoted\"\nwoodland"],
+                    ['value' => 2, 'label' => '=Formula-like label'],
+                ]],
+            ]);
+            $this->assertTrue($db->transCommit());
+            $input = ['attribute__sqs' => ['gte' => '1', 'lte' => '1'],
+                'attribute__habitat' => ['in' => ['indicia:1', 'indicia:2']]];
+            foreach ([['taxa', 'details'], ['taxa', 'stats'], ['occurrences', 'details']] as [$resource, $template]) {
+                $job = $this->finish($this->exports->create(1, $resource, $input, $template));
+                $records = $this->records($job);
+                $this->assertCount(2, $records);
+                $this->assertSame('[1]', $records[1][array_search('Pantheon SQS', $records[0], true)]);
+                $labels = json_decode($records[1][array_search('Pantheon habitat', $records[0], true)], true, 512, JSON_THROW_ON_ERROR);
+                $this->assertContains("A; \"quoted\"\nwoodland", $labels);
+                $this->assertContains('=Formula-like label', $labels);
+            }
+            $grid = ExportTemplate::columns(true, 'grid', []);
+            $this->assertArrayNotHasKey('attribute__sqs', $grid);
+            $job = $this->exports->create(1, 'taxa', $input, 'details');
+            $configuration->attributes['sqs']['multiValue'] = true;
+            $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage('Taxon attribute configuration changed');
+            $this->exports->process($job['uuid'], 1);
+        } finally {
+            $configuration->attributes = $previous;
+            foreach (['taxon_attribute_values', 'taxon_attribute_terms', 'taxon_attributes'] as $table) {
+                $db->table($table)->emptyTable();
+            }
+        }
+    }
+
+    /**
+     * Version-four jobs retain their frozen columns after the attribute template bump.
+     */
+    public function testVersionFourExportsRemainReadable(): void
+    {
+        $job = $this->exports->create(1, 'taxa', [], 'grid');
+        $contract = json_decode($job['contract'], true, 512, JSON_THROW_ON_ERROR);
+        $contract['version'] = 4;
+        db_connect()->table('export_jobs')->where('id', $job['id'])->update([
+            'contract' => json_encode($contract, JSON_THROW_ON_ERROR),
+        ]);
+        $records = $this->records($this->finish($job));
+        $this->assertSame(array_values($contract['columns']), $records[0]);
+        $this->assertCount(5, $records);
+    }
+
+    /**
      * ID capture freezes values; later inserts and name edits cannot reorder captured rows.
      */
     public function testRollingCaptureUsesIdsAndFrozenGridSorting(): void

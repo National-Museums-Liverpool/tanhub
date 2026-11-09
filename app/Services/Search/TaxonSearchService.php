@@ -6,6 +6,7 @@ use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\BaseConnection;
 use Config\TaxonSearch;
 use RuntimeException;
+use App\Services\TaxonAttributeService;
 
 /**
  * Reusable live queries and batch row preparation for staff indexes.
@@ -212,6 +213,9 @@ final class TaxonSearchService
         if ($criteria->value('q') !== '') {
             $this->applyTextSearch($builder, $criteria->value('q'), $taxa);
         }
+        if ($criteria->attributeCriteria !== []) {
+            (new TaxonAttributeService($this->db))->apply($builder, $criteria->attributeCriteria);
+        }
         if ($taxa && $criteria->needsOccurrences()) {
             $matches = $this->matchingTaxa($criteria, $candidateIds);
             $builder->join(
@@ -321,6 +325,8 @@ final class TaxonSearchService
         }
 
         return array_merge($options, [
+            'attributeDefinitions' => config(\Config\TaxonAttributes::class)->definitions(),
+            'attributeChoices' => (new TaxonAttributeService($this->db))->choices(),
             $taxa ? 'taxa' : 'occurrences' => $this->hydrate($rows, $taxa),
             'isTaxa' => $taxa, 'filters' => $criteria->values, 'errors' => $criteria->errors,
             'q' => $criteria->value('q'), 'sort' => $sort, 'direction' => $direction,
@@ -466,6 +472,12 @@ final class TaxonSearchService
         $summary = [];
         foreach ($criteria->values as $key => $value) {
             if ($value === '') {
+                continue;
+            }
+            if (str_starts_with($key, 'attribute__')) {
+                $definition = config(\Config\TaxonAttributes::class)->definitions()[substr($key, 11)] ?? null;
+                $summary[] = ['label' => $definition['label'] ?? $key,
+                    'value' => json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)];
                 continue;
             }
             if (isset($references[$key])) {

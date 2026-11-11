@@ -316,6 +316,18 @@ widening the results. Downloads are not implemented in this iteration.
 See [Staff search presentation](configuration-reference.md#staff-search-presentation) to choose
 which classification ranks appear.
 
+### Taxon attributes
+
+The taxon details page shows a read-only **Taxon attributes** section when attributes are
+[configured](configuration-reference.md#taxon-attributes), including Pantheon SQS, habitats and
+SATs.
+Admins and managers can view these values. Each configured attribute appears in configuration
+order, with numeric values or readable term labels and each assignment listed separately.
+**Not available** means no value has been imported for that attribute on this taxon, including
+before the first import. Values belong to the exact taxon and are not inherited from parents
+or children.
+The section is hidden when no attributes are configured; imported values cannot be edited here.
+
 ## Users
 
 Access:

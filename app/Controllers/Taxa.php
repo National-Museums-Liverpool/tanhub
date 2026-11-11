@@ -6,6 +6,7 @@ use App\Models\TaxonModel;
 use App\Services\Search\TaxonSearchService;
 use App\Services\Stats\TaxonRarityExclusionService;
 use App\Services\Stats\TaxonRarityStatusService;
+use App\Services\TaxonAttributeService;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\HTTP\Files\UploadedFile;
 use CodeIgniter\HTTP\RedirectResponse;
@@ -73,8 +74,8 @@ class Taxa extends BaseController
      * Show taxon details with associated taxon names.
      *
      * Also resolves human-readable labels for classification foreign keys,
-     * loads associated media, occupancy measurements and scoped curated decisions, and computes the
-     * current user's edit/moderate permissions for the view.
+     * loads configured attributes for this exact taxon, associated media, occupancy measurements
+     * and scoped curated decisions, and computes the current user's edit/moderate permissions.
      * Species exclusions are resolved through the owning species for descendant details.
      *
      * @param int $id Taxon identifier.
@@ -103,6 +104,7 @@ class Taxa extends BaseController
         $referenceLabels = $this->referenceLabels($taxon);
         $hierarchy = $this->hierarchyDetails($taxon);
         $taxonMedia = service('taxonMediaReadService')->getByTaxonId($id);
+        $attributes = new TaxonAttributeService();
         $keySpeciesRegions = $this->activeGeographicRegions();
         $keySpeciesByScope = service('taxonKeySpeciesService')->getForTaxon($id);
         $user = auth()->user();
@@ -116,6 +118,8 @@ class Taxa extends BaseController
             'taxon' => $taxon,
             'taxonNames' => $taxonNames,
             'taxonMedia' => $taxonMedia,
+            'attributeDefinitions' => $attributes->definitions(),
+            'taxonAttributes' => $attributes->read([$id])[$id],
             'keySpeciesRegions' => $keySpeciesRegions,
             'keySpeciesByScope' => $keySpeciesByScope,
             'rarityByScope' => (new TaxonRarityStatusService())->getForTaxon($id),

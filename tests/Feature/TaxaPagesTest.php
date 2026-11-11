@@ -7,7 +7,9 @@ use App\Models\ImportOffsetModel;
 use App\Services\Stats\TaxonRarityExclusionService;
 use App\Services\Import\DerivedImportRunner;
 use App\Services\Stats\GridSquareStatsCountsService;
+use App\Services\TaxonAttributeService;
 use Config\Auth;
+use Config\TaxonAttributes;
 use CodeIgniter\Shield\Models\UserModel;
 use CodeIgniter\Shield\Test\AuthenticationTesting;
 use CodeIgniter\Test\CIUnitTestCase;
@@ -77,6 +79,107 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->assertSame('LC;VU', $row['gb_red_list']);
         $this->assertSame('<rare>;Nb', $row['gb_status']);
         $this->get('taxa?q=Nb')->assertSee('GB Status');
+    }
+
+    /**
+     * Details show every imported value with escaped labels and no editing controls.
+     */
+    public function testConfiguredAttributeDetailsAreEscapedAndReadOnly(): void
+    {
+        $configuration = config(TaxonAttributes::class);
+        $previous = $configuration->attributes;
+        $configuration->attributes = [
+            'sqs' => ['id' => 24, 'label' => 'Pantheon SQS', 'type' => 'integer', 'multiValue' => false],
+            'habitat' => ['id' => 16, 'label' => 'Habitat <label>', 'type' => 'term', 'multiValue' => true],
+            'sat' => ['id' => 20, 'label' => 'SAT', 'type' => 'term', 'multiValue' => false],
+            'biotope' => ['id' => 15, 'label' => 'Broad biotope', 'type' => 'term', 'multiValue' => true],
+        ];
+        $db = db_connect();
+        try {
+            foreach (['taxon_attribute_values', 'taxon_attribute_terms', 'taxon_attributes'] as $table) {
+                $db->table($table)->emptyTable();
+            }
+            (new TaxonAttributeService())->replace(1, [
+                'sqs' => ['termlist_id' => null, 'values' => [['value' => 0, 'label' => null]]],
+                'habitat' => ['termlist_id' => 627, 'values' => [
+                    ['value' => 101, 'label' => '<script>habitat</script>'],
+                    ['value' => 102, 'label' => 'Woodland & scrub'],
+                ]],
+                'sat' => ['termlist_id' => 627, 'values' => [['value' => 103, 'label' => 'Wood decay']]],
+                'biotope' => ['termlist_id' => 627, 'values' => []],
+            ]);
+            $this->authenticateAs('taxa-attributes@example.com', 'manager');
+            $result = $this->get('taxa/1');
+            $result->assertStatus(200);
+            foreach (['Pantheon SQS', 'Habitat <label>', 'SAT', 'Broad biotope'] as $label) {
+                $this->assertTrue($result->seeXPath('//*[@id="taxon-attributes"]//dt[text()="' . $label . '"]'));
+            }
+            foreach (['0', '<script>habitat</script>', 'Woodland & scrub', 'Wood decay'] as $value) {
+                $this->assertTrue($result->seeXPath('//*[@id="taxon-attributes"]//li[text()="' . $value . '"]'));
+            }
+            $result->assertSee('Not available', '#taxon-attributes');
+            $result->assertSee('Read-only', '#taxon-attributes');
+            $this->assertFalse($result->seeXPath(
+                '//*[@id="taxon-attributes"]//*[self::input or self::select or self::textarea]'
+            ));
+            $body = (string) $result->response()->getBody();
+            $this->assertStringContainsString('Habitat &lt;label&gt;', $body);
+            $this->assertStringContainsString('&lt;script&gt;habitat&lt;/script&gt;', $body);
+            $this->assertStringContainsString('Woodland &amp; scrub', $body);
+            $this->assertStringNotContainsString('<script>habitat</script>', $body);
+        } finally {
+            $configuration->attributes = $previous;
+            foreach (['taxon_attribute_values', 'taxon_attribute_terms', 'taxon_attributes'] as $table) {
+                $db->table($table)->emptyTable();
+            }
+        }
+    }
+
+    /**
+     * Details show missing values before import and never inherit a species' attributes.
+     */
+    public function testAttributeDetailsShowMissingValuesWithoutInheritance(): void
+    {
+        $configuration = config(TaxonAttributes::class);
+        $previous = $configuration->attributes;
+        $configuration->attributes = [
+            'sqs' => ['id' => 24, 'label' => 'Pantheon SQS', 'type' => 'integer', 'multiValue' => false],
+        ];
+        $db = db_connect();
+        try {
+            foreach (['taxon_attribute_values', 'taxon_attribute_terms', 'taxon_attributes'] as $table) {
+                $db->table($table)->emptyTable();
+            }
+            $this->authenticateAs('taxa-missing-attributes@example.com', 'admin');
+            $beforeImport = $this->get('taxa/1');
+            $beforeImport->assertStatus(200);
+            $beforeImport->assertSee('Pantheon SQS', '#taxon-attributes');
+            $beforeImport->assertSee('Not available', '#taxon-attributes');
+            (new TaxonAttributeService())->replace(1, [
+                'sqs' => ['termlist_id' => null, 'values' => [['value' => 9, 'label' => null]]],
+            ]);
+            $db->table('taxa')->where('id', 2)->update(['parent_taxon_id' => 1, 'species_id' => 1]);
+            $descendant = $this->get('taxa/2');
+            $descendant->assertStatus(200);
+            $descendant->assertSee('Not available', '#taxon-attributes');
+            $this->assertFalse($descendant->seeXPath('//*[@id="taxon-attributes"]//li'));
+        } finally {
+            $configuration->attributes = $previous;
+            foreach (['taxon_attribute_values', 'taxon_attribute_terms', 'taxon_attributes'] as $table) {
+                $db->table($table)->emptyTable();
+            }
+        }
+    }
+
+    /**
+     * Installations without configured attributes do not show an empty section.
+     */
+    public function testAttributeDetailsAreHiddenWhenDisabled(): void
+    {
+        $this->authenticateAs('taxa-disabled-attributes@example.com', 'manager');
+        $result = $this->get('taxa/1');
+        $result->assertStatus(200);
+        $result->assertDontSeeElement('#taxon-attributes');
     }
 
     /**

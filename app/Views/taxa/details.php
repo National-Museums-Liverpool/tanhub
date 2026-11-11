@@ -355,6 +355,30 @@
 </section>
 
 <section class="page-section pt-0">
+    <?php if ($page['attributeDefinitions'] !== []): ?>
+        <div class="auth-card p-3 p-md-4 mb-4" id="taxon-attributes">
+            <h2 class="section-heading mb-2">Taxon attributes</h2>
+            <p class="text-muted">Imported values for this taxon only; values are not inherited from parents or children. <span class="badge bg-secondary">Read-only</span></p>
+            <dl class="row mb-0">
+                <?php foreach ($page['attributeDefinitions'] as $key => $definition): ?>
+                    <dt class="col-sm-4"><?= esc($definition['label']) ?></dt>
+                    <dd class="col-sm-8">
+                        <?php $values = $page['taxonAttributes']->{$key}; ?>
+                        <?php if ($values === []): ?>
+                            <span class="text-muted">Not available</span>
+                        <?php else: ?>
+                            <ul class="list-unstyled mb-0">
+                                <?php foreach ($values as $value): ?>
+                                    <li><?= esc($definition['type'] === 'integer' ? (string) $value : $value['label']) ?></li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php endif; ?>
+                    </dd>
+                <?php endforeach; ?>
+            </dl>
+        </div>
+    <?php endif; ?>
+
     <div class="auth-card p-3 p-md-4 mb-4">
         <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
             <div>

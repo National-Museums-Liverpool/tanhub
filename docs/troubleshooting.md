@@ -101,5 +101,5 @@ For `429` responses, wait for the `Retry-After` value before retrying. Review
 the configured anonymous and authenticated limits if the expected traffic is
 being throttled.
 
-See [API reference](api.md#21-jwt-endpoints) and
+See [API reference](api.md#21-token-endpoints) and
 [Configuration reference](configuration-reference.md#api-access).

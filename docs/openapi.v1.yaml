@@ -43,6 +43,7 @@ x-tanhub-configured-attribute-filters:
     Missing values are last in both directions. A resource-key tie-break stabilizes pages.
     Attribute hydration is optional for filtering/sorting. Values describe the exact result taxon.
 security:
+  - {}
   - bearerAuth: []
 tags:
   - name: data-sources
@@ -56,10 +57,18 @@ tags:
   - name: grid-square-stats
   - name: taxon-stats
   - name: taxon-year-stats
+  - name: taxon-attributes
+  - name: taxon-attribute-terms
 paths:
   /taxon-attributes:
     get:
+      tags: [taxon-attributes]
       summary: Discover enabled taxon attribute definitions
+      description: >-
+        Exposes key, label, type (integer or term), multi_value (boolean), source_id, and nullable
+        termlist_id. Only enabled definitions stored on this installation are returned.
+        Scalar fields support the standard filters. Default sorting is label, with key as a
+        stable tie-break. An installation with no configured attributes returns an empty list.
       parameters:
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
@@ -71,6 +80,7 @@ paths:
           $ref: '#/components/responses/Problem'
   /taxon-attributes/{key}:
     get:
+      tags: [taxon-attributes]
       summary: Get an enabled attribute definition by stable configuration key
       parameters:
         - name: key
@@ -85,8 +95,13 @@ paths:
           $ref: '#/components/responses/Problem'
   /taxon-attribute-terms:
     get:
+      tags: [taxon-attribute-terms]
       summary: Discover currently retained terms on publicly visible taxa
-      description: Terms are scoped by attribute, not the complete warehouse vocabulary.
+      description: >-
+        Exposes attribute_key, key, and label for terms retained on publicly visible taxa.
+        Terms are scoped by attribute, not the complete warehouse vocabulary. All exposed fields
+        support the standard filters. Default sorting is label, with attribute_key and key as
+        stable tie-breaks. There is no single-term endpoint.
       parameters:
         - name: attribute_key
           in: query
@@ -133,6 +148,7 @@ paths:
       tags: [geographic-regions]
       summary: List geographic regions
       parameters:
+        - $ref: '#/components/parameters/GeographicRegionsInclude'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Sort'
@@ -146,6 +162,7 @@ paths:
       tags: [geographic-regions]
       summary: Get one geographic region
       parameters:
+        - $ref: '#/components/parameters/GeographicRegionsInclude'
         - name: higher_geography_identifier
           in: path
           required: true
@@ -176,6 +193,7 @@ paths:
       tags: [occurrences]
       summary: Get one occurrence
       parameters:
+        - $ref: '#/components/parameters/OccurrencesInclude'
         - name: unique_key
           in: path
           required: true
@@ -235,6 +253,7 @@ paths:
       tags: [taxa]
       summary: Get one taxon
       parameters:
+        - $ref: '#/components/parameters/TaxaInclude'
         - name: taxon_identifier
           in: path
           required: true
@@ -294,6 +313,7 @@ paths:
       tags: [taxon-names]
       summary: Get one taxon name
       parameters:
+        - $ref: '#/components/parameters/TaxonNamesInclude'
         - name: uuid
           in: path
           required: true
@@ -310,6 +330,7 @@ paths:
       tags: [taxon-ranks]
       summary: List taxon ranks
       parameters:
+        - $ref: '#/components/parameters/ReportingOnly'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Sort'
@@ -352,6 +373,7 @@ paths:
       tags: [grid-square-stats]
       summary: Get one grid square stats row
       parameters:
+        - $ref: '#/components/parameters/GridSquareStatsInclude'
         - name: uuid
           in: path
           required: true
@@ -416,6 +438,7 @@ paths:
         for non-species, insufficient-data, and unclear rows and ranges from 0 to 100, with stable
         taxa represented by 50. Use taxon_rank=species, or another rank, to review one level.
       parameters:
+        - $ref: '#/components/parameters/TaxonStatsInclude'
         - name: uuid
           in: path
           required: true
@@ -448,6 +471,7 @@ paths:
       tags: [taxon-year-stats]
       summary: Get one taxon year stats row
       parameters:
+        - $ref: '#/components/parameters/TaxonYearStatsInclude'
         - name: uuid
           in: path
           required: true
@@ -461,7 +485,12 @@ paths:
           $ref: '#/components/responses/Problem'
   /auth/token:
     post:
-      summary: Obtain JWT access token
+      summary: Obtain an access and refresh token pair
+      description: >-
+        Accepts the account email address in username and the account password.
+        Returns opaque CodeIgniter Shield bearer tokens, not JWTs. The access token lasts
+        3600 seconds; the refresh token lasts 30 days. Missing credentials return 400;
+        invalid credentials return 401.
       security: []
       requestBody:
         required: true
@@ -480,7 +509,11 @@ paths:
           $ref: '#/components/responses/Problem'
   /auth/token/refresh:
     post:
-      summary: Refresh JWT access token
+      summary: Rotate a refresh token and issue a new token pair
+      description: >-
+        Revokes the submitted refresh token and returns a new access/refresh pair.
+        Save the replacement refresh token for the next refresh. Missing refresh_token
+        returns 400; invalid, expired, or already-used refresh tokens return 401.
       security: []
       requestBody:
         required: true
@@ -499,9 +532,14 @@ paths:
           $ref: '#/components/responses/Problem'
   /auth/token/revoke:
     post:
-      summary: Revoke JWT token(s)
+      summary: Revoke access or refresh tokens
+      description: >-
+        Revokes either or both tokens supplied in the JSON body. If neither field is supplied,
+        revokes the bearer token in the Authorization header instead. Returns 204 with no body,
+        including for unknown or already-revoked tokens. No authentication is required.
+      security: []
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
@@ -516,12 +554,15 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
+      description: >-
+        Optional opaque CodeIgniter Shield access token. Valid bearer tokens select the
+        authenticated rate-limit allowance, not additional data access. Missing or invalid
+        tokens on data requests use the anonymous allowance.
   parameters:
     Limit:
       name: limit
       in: query
-      description: Page size, default 1000, max 10000 (configurable).
+      description: Page size, default 1000, minimum 1, maximum 10000.
       schema:
         type: integer
         minimum: 1
@@ -572,14 +613,22 @@ components:
       schema:
         type: boolean
         default: true
+    GeographicRegionsInclude:
+      name: include
+      in: query
+      description: Comma-separated related fields to include. Supported value is data-source.
+      schema:
+        type: string
+        example: data-source
     OccurrencesInclude:
       name: include
       in: query
       description: >-
         Comma-separated related fields to include. Supported values are data-source,
         geographic-region, grid-square-stats, taxon, taxon-name, taxon-media,
-        taxon-rank, taxon-group, parent-taxa. taxon-media, taxon-rank,
-        taxon-group and parent-taxa require taxon. taxon-attributes also requires taxon.
+        taxon-rank, taxon-group, parent-taxon, parent-taxa, taxon-attributes.
+        taxon-media, taxon-rank, taxon-group, parent-taxon, parent-taxa and taxon-attributes
+        require taxon.
       schema:
         type: string
         example: taxon,taxon-media,grid-square-stats
@@ -606,18 +655,18 @@ components:
     GridSquareStatsInclude:
       name: include
       in: query
-      description: Comma-separated related fields to include. Supported value is geographic_region.
+      description: Comma-separated related fields to include. Supported value is geographic-region.
       schema:
         type: string
-        example: geographic_region
+        example: geographic-region
     TaxonStatsInclude:
       name: include
       in: query
       description: >-
         Comma-separated related fields to include. Supported values are
         geographic-region, taxon, taxon-media, taxon-rank, taxon-group,
-        parent-taxon, parent-taxa. taxon-media, taxon-rank, taxon-group and parent-taxa
-        require taxon. taxon-attributes is also supported and requires taxon.
+        parent-taxon, parent-taxa, taxon-attributes. taxon-media, taxon-rank, taxon-group,
+        parent-taxon, parent-taxa and taxon-attributes require taxon.
       schema:
         type: string
         example: taxon,taxon-media,geographic-region
@@ -627,8 +676,8 @@ components:
       description: >-
         Comma-separated related fields to include. Supported values are
         geographic-region, taxon, taxon-media, taxon-rank, taxon-group,
-        parent-taxon, parent-taxa. taxon-media, taxon-rank, taxon-group and parent-taxa
-        require taxon. taxon-attributes is also supported and requires taxon.
+        parent-taxon, parent-taxa, taxon-attributes. taxon-media, taxon-rank, taxon-group,
+        parent-taxon, parent-taxa and taxon-attributes require taxon.
       schema:
         type: string
         example: taxon,taxon-media,geographic-region
@@ -793,7 +842,7 @@ components:
           type: string
     TokenResponse:
       type: object
-      required: [access_token, token_type, expires_in]
+      required: [access_token, token_type, expires_in, refresh_token]
       properties:
         access_token:
           type: string

@@ -18,6 +18,11 @@ info:
     taxon__gb_status with include=taxon. Old and provisional types are included within the
     GB Red List and GB Status warehouse categories. Equality/in compare whole lists;
     contains is substring matching, not exact membership. Sorting is lexical over whole lists.
+    GB fields return each exact taxon's non-blank local override, otherwise its imported value.
+    Null, empty and ASCII whitespace-only overrides fall back independently for each field.
+    Reads, filters and sorting all use these effective values, including taxon__ expansions.
+    Overrides do not inherit from parents, affect rarity calculations or add public raw fields.
+    Managers/admins edit overrides in the staff UI; this API remains read-only.
     This replaces conservation_status and taxon__conservation_status without legacy aliases.
 servers:
   - url: /api/v1
@@ -802,6 +807,10 @@ components:
         Distinct designation abbreviations, sorted bytewise and semicolon-separated.
         Null means no available abbreviations. Equality/in compare the entire string;
         contains matches substrings rather than exact members. Old/provisional types are included.
+        The exact taxon's non-blank local override takes precedence over its imported list.
+        Null, empty and ASCII whitespace-only overrides fall back to the imported value unchanged.
+        Reads, filtering and lexical sorting use the same effective value; overrides do not inherit.
+        Raw override fields are not public API fields, filters or sorts.
       examples: ['LC;VU', 'Na;Nb', null]
     Problem:
       type: object

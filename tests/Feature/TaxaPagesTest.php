@@ -82,6 +82,81 @@ final class TaxaPagesTest extends CIUnitTestCase
     }
 
     /**
+     * Both staff roles can normalize, preserve omitted overrides and clear to imported values.
+     *
+     * @param string $role Staff role with details-editing permission.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('gbEditingRoles')]
+    public function testStaffCanEditAndClearGbOverrides(string $role): void
+    {
+        $db = db_connect();
+        $db->table('taxa')->where('id', 1)->update(['gb_red_list' => 'LC', 'gb_status' => 'Nb']);
+        $this->authenticateAs('gb-overrides-' . $role . '@example.com', $role);
+        $this->post('taxa/1', [
+            'gb_red_list_override' => ' VU ; EN;VU ', 'gb_status_override' => '<rare>;Na',
+            'gb_red_list' => 'ignored',
+        ])->assertRedirectTo(site_url('taxa/1'));
+        $row = model(TaxonModel::class)->find(1);
+        $this->assertSame('EN;VU', $row['gb_red_list_override']);
+        $this->assertSame('<rare>;Na', $row['gb_status_override']);
+        $this->assertSame('LC', $row['gb_red_list']);
+        $details = $this->get('taxa/1');
+        $details->assertSee('Current effective value: EN;VU');
+        $this->assertStringContainsString('&lt;rare&gt;;Na', (string) $details->response()->getBody());
+        $this->post('taxa/1', ['taxon_remarks' => 'An unrelated edit'])->assertStatus(302);
+        $this->assertSame('EN;VU', model(TaxonModel::class)->find(1)['gb_red_list_override']);
+        $this->post('taxa/1', [
+            'gb_red_list_override' => " \t\n", 'gb_status_override' => ' ; ',
+        ])->assertStatus(302);
+        $row = model(TaxonModel::class)->find(1);
+        $this->assertNull($row['gb_red_list_override']);
+        $this->assertNull($row['gb_status_override']);
+        $this->get('taxa/1')->assertSee('Current effective value: LC');
+    }
+
+    /**
+     * Run permission-sensitive edits in separate authenticated sessions.
+     *
+     * @return array<string, array{string}> Independently tested editing roles.
+     */
+    public static function gbEditingRoles(): array
+    {
+        return ['manager' => ['manager'], 'admin' => ['admin']];
+    }
+
+    /**
+     * Invalid overrides cannot partially save other submitted details or the second override.
+     */
+    public function testInvalidGbOverrideEditsAreAtomic(): void
+    {
+        $this->authenticateAs('gb-validation@example.com', 'manager');
+        foreach ([['VU'], "VU\0", "\xFF", str_repeat('é', 32768)] as $invalid) {
+            $this->post('taxa/1', [
+                'gb_red_list_override' => $invalid, 'gb_status_override' => 'Na',
+                'taxon_remarks' => 'Must not be saved',
+            ])->assertStatus(302);
+            $this->assertArrayHasKey('gb_red_list_override', session('errors'));
+            $row = model(TaxonModel::class)->find(1);
+            $this->assertNull($row['gb_status_override']);
+            $this->assertNotSame('Must not be saved', $row['taxon_remarks']);
+        }
+    }
+
+    /**
+     * Non-editing staff cannot write designation overrides even with a crafted request.
+     */
+    public function testUserCannotEditGbOverrides(): void
+    {
+        $this->authenticateAs('gb-read-only@example.com', 'user');
+        $this->post('taxa/1', [
+            'gb_red_list_override' => 'VU', 'gb_status_override' => 'Na',
+        ])->assertStatus(302);
+        $row = model(TaxonModel::class)->find(1);
+        $this->assertNull($row['gb_red_list_override']);
+        $this->assertNull($row['gb_status_override']);
+    }
+
+    /**
      * Details show every imported value with escaped labels and no editing controls.
      */
     public function testConfiguredAttributeDetailsAreEscapedAndReadOnly(): void

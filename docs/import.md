@@ -220,6 +220,18 @@ Errors stop the batch and are reported through the existing import logs/run stat
 If either designation column is absent, importing fails with an instruction to update the warehouse
 report rather than silently clearing stored values.
 
+Taxonomy refreshes update only the imported designation fields. They preserve
+`gb_red_list_override` and `gb_status_override`, which managers/admins edit on each taxon's details
+page. A non-blank override takes precedence in API reads, filtering/sorting, the staff checklist
+and new exports. Clearing it restores the latest imported value. Overrides are exact-taxon
+decisions and do not affect rarity calculations.
+
+Apply the override migration before deploying code that reads these columns. It adds nullable
+TEXT fields without populating them. Manual population should use the same canonical,
+distinct, bytewise-sorted semicolon-list format as imports; NULL, empty and ASCII whitespace-only
+overrides fall back to source values. CSV loading, identifier matching and population queries are
+manual administration tasks, not part of the importer.
+
 To upgrade an existing deployment:
 
 1. Stop scheduled imports, wait for active imports/exports to finish, and back up the database.

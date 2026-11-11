@@ -35,7 +35,13 @@ lets you return and click **Resume**. Closing the tab pauses work. Without JavaS
 **Process next batch** advances one batch
 at a time. Confirmation displays search-control captions and selected names rather than internal
 IDs. Progress identifies the chosen column template by its full name; its version identifies the
-column layout, not the data version.
+column layout and query semantics, not a point-in-time data version.
+
+New taxon exports (contract version 6) use effective GB designation overrides for text search,
+CSV cells and sorting, matching the checklist and API. Older contracts retain imported designation
+values and search/sort semantics, even when resumed. Previously captured rows and completed files
+are not rewritten. GB text sort keys retain the existing 255-character staging limit; longer keys
+fail explicitly rather than being truncated.
 
 This is a rolling capture, not a point-in-time snapshot. Capture applies the search filters in SQL,
 then selects a batch of matching IDs in ascending order up to the ID ceiling set at creation.
@@ -513,16 +519,17 @@ List page:
 - Generic search: `q` across taxon_identifier, scientific_name, vernacular_name, and
   gb_red_list and gb_status.
 - GB Red List and GB Status show semicolon-separated designation abbreviations. Both columns
-  support whole-string sorting and appear in new taxon CSV exports. Previously created exports
-  retain their frozen headings, including Conservation status.
+  use effective overrides for display, text search, whole-string sorting and new taxon CSV exports.
+  Previously created exports retain their frozen headings and imported-value behavior, including
+  Conservation status where applicable.
 - Filters: taxon_group, taxon_rank, recording_scheme, blocked.
 - Default sort: scientific_name asc.
 
 Detail/edit page:
 
-Allows you to review the details stored for a taxon, including the names. Admins and managers can
-block a taxon from appearing in reports and set its blocked reason. Admins and managers can specify
-remarks for a taxon and override the rarity group name. The rarity group name defaults to the
+Allows you to review the details stored for a taxon, including the names. Admins can block a taxon
+from appearing in reports and set its blocked reason. Admins and managers can specify remarks,
+GB designation overrides and the rarity group name. The rarity group name defaults to the
 associated recording scheme name and groups taxa together into collections within which they can be
 compared for rarity calculations, so they are only compared to similarly recorded taxa.
 
@@ -533,7 +540,18 @@ compared for rarity calculations, so they are only compared to similarly recorde
 - Classification FKs are dynamic self-references on taxa (for example order_id, family_id,
   species_id) rather than separate order, family, or superfamily tables.
 - Read-only table: associated taxon names (name, given_name_identifier, accepted, scientific).
-- Editable: blocked, blocked_reason, taxon_remarks, rarity_group_name (manager or admin only).
+- Editable by managers/admins: taxon_remarks, rarity_group_name, gb_red_list_override,
+  gb_status_override. Moderation fields blocked and blocked_reason are admin-only.
+- GB overrides:
+  - The imported value remains read-only beside its editable override and current effective value.
+  - Enter semicolon-separated abbreviations, for example `EN;VU` or `Na;Nb`. Saves trim entries,
+    discard empty/duplicate entries and sort bytewise. No fixed vocabulary is enforced.
+  - Clear an override to restore the latest imported value. Empty lists become NULL; blank values
+    do not suppress a designation. Invalid text and lists over 65,535 UTF-8 bytes are rejected.
+  - Applies to any exact taxon, with no inheritance to descendants and no effect on calculated
+    rarity, regional expert decisions or exclusions.
+  - Regular imports preserve overrides. The API, checklist and new exports use effective values;
+    filters match the override instead of the hidden imported value.
 - Taxon media upload:
   - Route: POST /taxa/{id}/media.
   - Roles allowed: admin and manager.

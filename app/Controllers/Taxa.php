@@ -7,6 +7,7 @@ use App\Services\Search\TaxonSearchService;
 use App\Services\Stats\TaxonRarityExclusionService;
 use App\Services\Stats\TaxonRarityStatusService;
 use App\Services\TaxonAttributeService;
+use App\Services\TaxonDesignationService;
 use CodeIgniter\Exceptions\PageNotFoundException;
 use CodeIgniter\HTTP\Files\UploadedFile;
 use CodeIgniter\HTTP\RedirectResponse;
@@ -17,7 +18,7 @@ use CodeIgniter\HTTP\ResponseInterface;
  *
  * Combines read-only taxonomic data (imported via {@see \App\Services\Import})
  * with two editable concerns layered on top: manager-level detail fields
- * (rarity group, remarks and scoped curated decisions) and admin-level moderation (blocked/blocked
+ * (GB designation overrides, rarity group, remarks and scoped curated decisions) and admin-level moderation (blocked/blocked
  * reason), plus taxon media upload/edit delegated to
  * {@see \App\Services\TaxonMediaUploadService} and
  * {@see \App\Services\TaxonMediaReadService}.
@@ -116,6 +117,12 @@ class Taxa extends BaseController
             'metaDescription' => 'Taxon details and moderation settings.',
             'bodyClass' => 'app-shell',
             'taxon' => $taxon,
+            'effectiveDesignations' => array_combine(TaxonDesignationService::FIELDS, array_map(
+                static fn (string $field): ?string => TaxonDesignationService::resolve(
+                    $taxon[$field], $taxon[$field . '_override']
+                ),
+                TaxonDesignationService::FIELDS
+            )),
             'taxonNames' => $taxonNames,
             'taxonMedia' => $taxonMedia,
             'attributeDefinitions' => $attributes->definitions(),
@@ -283,7 +290,7 @@ class Taxa extends BaseController
      * Update admin moderation fields for a taxon.
      *
      * Which fields are accepted depends on the current user's role: managers
-     * (and admins) may update `rarity_group_name`, `taxon_remarks`, and
+     * (and admins) may update GB designation overrides, `rarity_group_name`, `taxon_remarks`, and
      * key-species, species rarity decisions and global species exclusions; admins may additionally update `blocked` and
      * `blocked_reason`. Only fields present in the submitted data and
      * permitted for the user's role are validated and written.
@@ -306,6 +313,20 @@ class Taxa extends BaseController
         $postData = $this->request->getPost();
 
         $rules = [];
+        $designationUpdates = [];
+        $designationErrors = [];
+        if ($canEditDetails && is_array($postData)) {
+            foreach (TaxonDesignationService::FIELDS as $field) {
+                $override = $field . '_override';
+                if (array_key_exists($override, $postData)) {
+                    try {
+                        $designationUpdates[$override] = TaxonDesignationService::normalize($postData[$override]);
+                    } catch (\InvalidArgumentException $exception) {
+                        $designationErrors[$override] = $exception->getMessage();
+                    }
+                }
+            }
+        }
         $keySpeciesScopes = null;
         $keySpeciesError = null;
         $rarityError = null;
@@ -352,8 +373,8 @@ class Taxa extends BaseController
         }
 
         $valid = $rules === [] || $this->validate($rules);
-        if (! $valid || $keySpeciesError !== null || $rarityError !== null || $exclusionError !== null) {
-            $errors = $this->validator?->getErrors() ?? [];
+        if (! $valid || $designationErrors !== [] || $keySpeciesError !== null || $rarityError !== null || $exclusionError !== null) {
+            $errors = $designationErrors + ($this->validator?->getErrors() ?? []);
             if ($keySpeciesError !== null) {
                 $errors['key_species'] = $keySpeciesError;
             }
@@ -375,7 +396,7 @@ class Taxa extends BaseController
             throw PageNotFoundException::forPageNotFound();
         }
 
-        $updateData = [];
+        $updateData = $designationUpdates;
 
         if ($canEditDetails && is_array($postData) && array_key_exists('rarity_group_name', $postData)) {
             $updateData['rarity_group_name'] = trim((string) $this->request->getPost('rarity_group_name'));

@@ -325,6 +325,110 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
         }
     }
 
+    /**
+     * Every API uses overrides for actual result values, filters, counts and both sort directions.
+     */
+    public function testGbOverridesAcrossApiResources(): void
+    {
+        $db = db_connect();
+        $db->table('taxa')->where('id', 1)->update([
+            'gb_red_list' => 'SOURCE', 'gb_status' => 'SOURCE',
+            'gb_red_list_override' => 'BB;CC', 'gb_status_override' => 'BB;CC',
+        ]);
+        $db->table('taxa')->where('id', 2)->update([
+            'blocked' => 0, 'gb_red_list' => 'ZZ', 'gb_status' => 'ZZ',
+            'gb_red_list_override' => 'AA', 'gb_status_override' => 'AA',
+        ]);
+        $db->table('occurrences')->where('id', 2)->update(['blocked' => 0, 'taxon_id' => 2]);
+        foreach (['taxa', 'occurrences', 'taxon-names', 'taxon-stats', 'taxon-year-stats'] as $resource) {
+            $prefix = $resource === 'taxa' ? '' : 'taxon__';
+            $base = 'api/v1/' . $resource . '?include=' . ($resource === 'taxa' ? '' : 'taxon');
+            foreach (['gb_red_list', 'gb_status'] as $field) {
+                $this->clearAttributeApiBuckets();
+                $key = $prefix . $field;
+                foreach ([
+                    ['eq', 'BB;CC', ['BB;CC']],
+                    ['in', 'AA,BB;CC', ['AA', 'BB;CC']],
+                    ['contains', 'BB', ['BB;CC']],
+                    ['eq', 'SOURCE', []],
+                    ['eq', 'ZZ', []],
+                    ['gte', 'BB', ['BB;CC']],
+                    ['lte', 'AA', ['AA']],
+                ] as [$operator, $value, $expected]) {
+                    $result = $this->get($base . '&' . http_build_query([
+                        $key => [$operator => $value], 'sort' => $key,
+                    ]));
+                    $result->assertStatus(200);
+                    $json = json_decode((string) $result->response()->getBody(), true, 512, JSON_THROW_ON_ERROR);
+                    $this->assertSame($expected, array_values(array_unique(array_column($json['data'], $key))),
+                        $resource . ':' . $key . ':' . $operator . ':' . $value);
+                    $this->assertSame(count($json['data']), $json['meta']['total']);
+                    foreach ($json['data'] as $row) {
+                        $this->assertArrayNotHasKey($key . '_override', $row);
+                        $this->assertSame($row[$key] === 'AA' ? 'NHMSYS0099999999' : 'NHMSYS0021054498',
+                            $row['taxon_identifier']);
+                    }
+                }
+                foreach (['' => ['AA', 'BB;CC'], '-' => ['BB;CC', 'AA']] as $direction => $expected) {
+                    $result = $this->get($base . '&' . http_build_query([
+                        $key => ['in' => 'AA,BB;CC'], 'sort' => $direction . $key,
+                    ]));
+                    $result->assertStatus(200);
+                    $json = json_decode((string) $result->response()->getBody(), true, 512, JSON_THROW_ON_ERROR);
+                    $this->assertSame($expected, array_values(array_unique(array_column($json['data'], $key))));
+                }
+                $this->get($base . '&' . $key . '_override[eq]=AA')->assertStatus(400);
+                $this->get($base . '&sort=' . $key . '_override')->assertStatus(400);
+            }
+        }
+    }
+
+    /**
+     * Blank database overrides fall back independently, without inheriting parent designations.
+     */
+    public function testGbOverrideFallbackAndSingleTaxonRead(): void
+    {
+        $db = db_connect();
+        $db->table('taxa')->where('id', 3)->update(['gb_red_list_override' => 'PARENT']);
+        foreach ([null, '', ' ', "\t \n\r\v"] as $blank) {
+            $db->table('taxa')->where('id', 1)->update([
+                'gb_red_list' => 'LC', 'gb_status' => null,
+                'gb_red_list_override' => $blank, 'gb_status_override' => 'Na',
+            ]);
+            foreach (['taxa', 'occurrences', 'taxon-names', 'taxon-stats', 'taxon-year-stats'] as $resource) {
+                $prefix = $resource === 'taxa' ? '' : 'taxon__';
+                $result = $this->get('api/v1/' . $resource . '?' . http_build_query([
+                    'include' => $resource === 'taxa' ? '' : 'taxon',
+                    $prefix . 'gb_red_list' => ['eq' => 'LC'],
+                ]));
+                $result->assertStatus(200);
+                $json = json_decode((string) $result->response()->getBody(), true, 512, JSON_THROW_ON_ERROR);
+                $this->assertNotEmpty($json['data']);
+                foreach ($json['data'] as $row) {
+                    $this->assertSame('LC', $row[$prefix . 'gb_red_list']);
+                    $this->assertSame('Na', $row[$prefix . 'gb_status']);
+                }
+            }
+        }
+        $db->table('taxa')->where('id', 1)->update(['gb_red_list_override' => 'VU', 'gb_status_override' => null]);
+        $result = $this->get('api/v1/taxa/NHMSYS0021054498');
+        $result->assertStatus(200);
+        $json = json_decode((string) $result->response()->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertSame('VU', $json['gb_red_list']);
+        $this->assertNull($json['gb_status']);
+        $result = $this->get('api/v1/taxa?gb_status[eq]=null');
+        $result->assertStatus(200);
+        $json = json_decode((string) $result->response()->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertSame(1, $json['meta']['total']);
+        $this->assertSame('NHMSYS0021054498', $json['data'][0]['taxon_identifier']);
+        $db->table('taxa')->where('id', 1)->update(['gb_red_list_override' => null]);
+        $result = $this->get('api/v1/taxa?gb_red_list[eq]=LC');
+        $result->assertStatus(200);
+        $json = json_decode((string) $result->response()->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertSame('LC', $json['data'][0]['gb_red_list']);
+        $this->assertNull($json['data'][0]['gb_status']);
+    }
+
     public function testOccurrencesSupportsGteAndLteFilterOperators(): void
     {
         $gteResult = $this->get('api/v1/occurrences?from_date[gte]=2024-05-11');
@@ -1658,6 +1762,8 @@ final class ApiV1LookupResourcesTest extends CIUnitTestCase
             recording_scheme_id INTEGER NULL,
             gb_red_list TEXT NULL,
             gb_status TEXT NULL,
+            gb_red_list_override TEXT NULL,
+            gb_status_override TEXT NULL,
             taxon_remarks TEXT NULL,
             rarity_group_name VARCHAR(100) NOT NULL,
             rarity_category INTEGER NULL,

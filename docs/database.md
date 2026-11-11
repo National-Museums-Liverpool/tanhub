@@ -315,6 +315,8 @@ directly to a Darwin Core concept, this is indicated in the description.
 | recording_scheme_id        | BIGINT       | YES  | FK  |                   | ID of the associated recording scheme                                               |
 | gb_red_list                | TEXT         | YES  |     | NULL              | Distinct GB Red List abbreviations, sorted and semicolon-separated                    |
 | gb_status                  | TEXT         | YES  |     | NULL              | Distinct GB Status abbreviations, sorted and semicolon-separated                      |
+| gb_red_list_override       | TEXT         | YES  |     | NULL              | Locally curated GB Red List; blank falls back to the imported field |
+| gb_status_override         | TEXT         | YES  |     | NULL              | Locally curated GB Status; blank falls back to the imported field |
 | taxon_remarks              | TEXT         | YES  |     |                   | Species account text if provided, DwC taxonRemarks                                  |
 | rarity_group_name          | VARCHAR(100) | NO   |     |                   | Grouping of taxa whose rarities are compared together when calculating the category |
 | rarity_category            | TINYINT      | YES  |     |                   | Assigned category of rarity from 1 (rare) to 5 (common), populated by `php spark stats:taxon-rarity`            |
@@ -357,8 +359,23 @@ Note that when tanhub is linked to UKSI as its source of taxonomic data, the fol
 Both fields include all non-deleted designation types within their respective warehouse category,
 including old and provisional types. Lists are trimmed, deduplicated and sorted bytewise, joined
 with `;` without spaces; no abbreviations means null. Embedded semicolons in source abbreviations
-are rejected by the importer. National designations are read-only and independent of local rarity
-calculations and curated regional statuses.
+are rejected by the importer. Imported national designations remain read-only and independent of
+local rarity calculations and curated regional statuses.
+
+Managers and admins can edit `gb_red_list_override` and `gb_status_override` for any exact taxon.
+Overrides do not inherit through the hierarchy. Staff saves normalize lists using the import
+format and store empty lists as NULL; invalid UTF-8, NULs and values exceeding 65,535 bytes are
+rejected. Normal taxonomy imports refresh source fields without overwriting overrides.
+
+Each effective designation uses its non-blank override, otherwise the imported value unchanged.
+NULL, empty and ASCII whitespace-only overrides fall back; they cannot suppress an imported
+designation. APIs, the staff checklist, text search, sorting and new CSV exports use effective
+values. Existing export contracts retain imported-value semantics.
+
+The override migration adds nullable TEXT columns without backfilling data. MySQL matches each
+source column's charset/collation explicitly. SQLite uses native column addition and native
+rollback drops (SQLite 3.35+, already required by the preceding designation migration), retaining
+taxonomy keys, indexes and unrelated triggers. Rollback discards overrides only.
 
 The designation migration preserves `conservation_status` values as `gb_red_list`, widens storage
 to TEXT and adds nullable `gb_status`. MySQL uses Forge column changes; SQLite requires version

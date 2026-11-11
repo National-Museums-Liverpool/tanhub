@@ -11,7 +11,7 @@ use RuntimeException;
 final class ExportTemplate
 {
     /** @var int Frozen template schema version. */
-    public const VERSION = 5;
+    public const VERSION = 6;
 
     /** @var list<string> Typed numeric fields that must not receive formula quoting. */
     private const NUMBERS = ['id', 'taxon_id', 'taxon_name_id', 'data_source_id', 'latitude',

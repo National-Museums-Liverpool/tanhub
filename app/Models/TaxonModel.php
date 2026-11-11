@@ -27,6 +27,7 @@ class TaxonModel extends Model
      * - `rarity_group_name` Rarity classification group computed by rarity stats commands.
      * - `rarity_category`   Numeric rarity category within the group.
      * - `taxon_remarks`     Free-text notes about the taxon.
+     * - `gb_red_list_override` / `gb_status_override` Local lists; blank restores imported values.
      * - `blocked`           Moderation flag; 1 hides this taxon from public counts/lists.
      * - `blocked_reason`    Free-text reason shown alongside `blocked`.
      * - `parent_taxon_id`   Immediate accepted parent taxon, when one exists.
@@ -40,6 +41,8 @@ class TaxonModel extends Model
         'rarity_group_name',
         'rarity_category',
         'taxon_remarks',
+        'gb_red_list_override',
+        'gb_status_override',
         'blocked',
         'blocked_reason',
         'exclude_from_rarity_calculations',

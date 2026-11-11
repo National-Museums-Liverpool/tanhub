@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Api\V1;
 
+use App\Services\TaxonDesignationService;
 use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\RawSql;
 
@@ -106,8 +107,8 @@ class TaxonNames extends ApiResourceController
             $fields['taxon__scientific_name_identifier'] = 't.scientific_name_identifier';
             $fields['taxon__vernacular_name'] = 't.vernacular_name';
             $fields['taxon__id_difficulty'] = 't.id_difficulty';
-            $fields['taxon__gb_red_list'] = 't.gb_red_list';
-            $fields['taxon__gb_status'] = 't.gb_status';
+            $fields['taxon__gb_red_list'] = TaxonDesignationService::effectiveSql('gb_red_list');
+            $fields['taxon__gb_status'] = TaxonDesignationService::effectiveSql('gb_status');
             $fields['taxon__rarity_category'] = 't.rarity_category';
             $fields += $this->rarityExclusionFields('taxon__');
         }

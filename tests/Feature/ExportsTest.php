@@ -734,6 +734,91 @@ final class ExportsTest extends CIUnitTestCase
     }
 
     /**
+     * Effective CSV values and captured sort keys agree across batches, NULLs and ties.
+     */
+    public function testGbOverridesInNewExportsAndCapturedRows(): void
+    {
+        $db = db_connect();
+        $db->table('taxa')->where('id', 1)->update([
+            'gb_red_list' => 'SOURCE', 'gb_status' => 'SOURCE',
+            'gb_red_list_override' => 'ZZ', 'gb_status_override' => 'ZZ',
+        ]);
+        $db->table('taxa')->whereIn('id', [2, 3])->update([
+            'gb_red_list' => 'AA', 'gb_status' => 'AA',
+            'gb_red_list_override' => "\t \n", 'gb_status_override' => '',
+        ]);
+        foreach (['gb_red_list' => 'GB Red List', 'gb_status' => 'GB Status'] as $sort => $heading) {
+            foreach (['asc' => ['4', '2', '3', '1'], 'desc' => ['1', '3', '2', '4']] as $direction => $ids) {
+                $rows = $this->records($this->finish($this->exports->create(1, 'taxa',
+                    ['sort' => $sort, 'direction' => $direction], 'details')));
+                $headers = array_shift($rows);
+                $this->assertSame($ids, array_column($rows, array_search('Taxon ID', $headers, true)));
+                $this->assertSame($direction === 'asc' ? ['', 'AA', 'AA', 'ZZ'] : ['ZZ', 'AA', 'AA', ''],
+                    array_column($rows, array_search($heading, $headers, true)));
+            }
+        }
+        $job = $this->exports->create(1, 'taxa', ['sort' => 'gb_red_list'], 'details');
+        $job = $this->exports->process($job['uuid'], 1);
+        $this->assertSame(1, (int) $job['capture_id']);
+        $db->table('taxa')->where('id', 1)->update(['gb_red_list_override' => 'CHANGED']);
+        $rows = $this->records($this->finish($job));
+        $headers = array_shift($rows);
+        $this->assertSame(['', 'AA', 'AA', 'ZZ'],
+            array_column($rows, array_search('GB Red List', $headers, true)));
+    }
+
+    /**
+     * Pre-override jobs retain imported CSV values, sort keys and text-search semantics.
+     */
+    public function testLegacyGbExportsKeepImportedSemantics(): void
+    {
+        $db = db_connect();
+        $db->table('taxa')->where('id', 1)->update([
+            'gb_red_list' => 'LEGACY-AA', 'gb_status' => 'LEGACY-AA',
+            'gb_red_list_override' => 'OVERRIDE', 'gb_status_override' => 'OVERRIDE',
+        ]);
+        $db->table('taxa')->where('id', 2)->update([
+            'gb_red_list' => 'LEGACY-ZZ', 'gb_status' => 'LEGACY-ZZ',
+            'gb_red_list_override' => 'AA', 'gb_status_override' => 'AA',
+        ]);
+        foreach (['gb_red_list' => 'GB Red List', 'gb_status' => 'GB Status'] as $field => $heading) {
+            $job = $this->exports->create(1, 'taxa', ['sort' => $field], 'details');
+            $contract = json_decode($job['contract'], true, 512, JSON_THROW_ON_ERROR);
+            $contract['version'] = 5;
+            $contract['ordering']['column'] = 't.' . $field;
+            $contract['filters']['q'] = 'LEGACY';
+            $db->table('export_jobs')->where('id', $job['id'])->update([
+                'contract' => json_encode($contract, JSON_THROW_ON_ERROR),
+            ]);
+            $rows = $this->records($this->finish($job));
+            $headers = array_shift($rows);
+            $this->assertSame(['1', '2'], array_column($rows, array_search('Taxon ID', $headers, true)));
+            $this->assertSame(['LEGACY-AA', 'LEGACY-ZZ'], array_column($rows, array_search($heading, $headers, true)));
+        }
+        $rows = $this->records($this->finish($this->exports->create(1, 'taxa', ['q' => 'LEGACY'], 'grid')));
+        $this->assertCount(1, $rows);
+    }
+
+    /**
+     * Oversized effective sort keys fail visibly without truncating or advancing captured data.
+     */
+    public function testLongGbOverrideSortKeyFailsExplicitly(): void
+    {
+        db_connect()->table('taxa')->where('id', 1)->update(['gb_red_list_override' => str_repeat('A', 256)]);
+        $job = $this->exports->create(1, 'taxa', ['sort' => 'gb_red_list'], 'grid');
+        try {
+            $this->exports->process($job['uuid'], 1);
+            $this->fail('Oversized designation sort key must not be truncated.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString('staged index capacity', $exception->getMessage());
+        }
+        $job = $this->exports->owned($job['uuid'], 1);
+        $this->assertSame('paused', $job['status']);
+        $this->assertSame(0, (int) $job['capture_id']);
+        $this->assertNotEmpty($job['error']);
+    }
+
+    /**
      * Live occurrence evidence stays filter-equivalent when taxa candidates are bounded.
      */
     public function testTaxonOccurrenceEvidenceAndCancelledCleanup(): void

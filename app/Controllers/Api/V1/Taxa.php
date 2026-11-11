@@ -2,6 +2,7 @@
 
 namespace App\Controllers\Api\V1;
 
+use App\Services\TaxonDesignationService;
 use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\RawSql;
 
@@ -83,8 +84,8 @@ class Taxa extends ApiResourceController
             'scientific_name_authorship' => 't.scientific_name_authorship',
             'vernacular_name' => 't.vernacular_name',
             'id_difficulty' => 't.id_difficulty',
-            'gb_red_list' => 't.gb_red_list',
-            'gb_status' => 't.gb_status',
+            'gb_red_list' => TaxonDesignationService::effectiveSql('gb_red_list'),
+            'gb_status' => TaxonDesignationService::effectiveSql('gb_status'),
             'taxon_remarks' => 't.taxon_remarks',
             'rarity_group_name' => 't.rarity_group_name',
             'rarity_category' => 't.rarity_category',

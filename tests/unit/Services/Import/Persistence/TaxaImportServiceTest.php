@@ -65,6 +65,8 @@ final class TaxaImportServiceTest extends CIUnitTestCase
             recording_scheme_id INTEGER NULL,
             gb_red_list TEXT NULL,
             gb_status TEXT NULL,
+            gb_red_list_override TEXT NULL,
+            gb_status_override TEXT NULL,
             rarity_group_name VARCHAR(100) NOT NULL,
             rarity_category INTEGER NULL,
             exclude_from_rarity_calculations INTEGER NOT NULL DEFAULT 0,
@@ -107,7 +109,7 @@ final class TaxaImportServiceTest extends CIUnitTestCase
     }
 
     /**
-     * Taxonomy refreshes preserve locally curated rarity groups and species exclusions.
+     * Taxonomy refreshes preserve locally curated rarity groups, exclusions and GB overrides.
      */
     public function testUpdateDoesNotOverwriteExistingRarityGroupName(): void
     {
@@ -123,6 +125,8 @@ final class TaxaImportServiceTest extends CIUnitTestCase
             'recording_scheme_id' => 1,
             'taxon_rank_id' => 1,
             'gb_red_list' => null,
+            'gb_red_list_override' => 'VU',
+            'gb_status_override' => 'Na',
             'rarity_group_name' => 'Manual rarity',
             'exclude_from_rarity_calculations' => 1,
             'exclude_from_rarity_calculations_comment' => 'Curated exclusion',
@@ -138,6 +142,8 @@ final class TaxaImportServiceTest extends CIUnitTestCase
                 'taxon_identifier' => 'TX-UPD-1',
                 'scientific_name_identifier' => 'SCI-UPD-1',
                 'scientific_name' => 'Existing taxon updated',
+                'gb_red_list' => 'LC',
+                'gb_status' => 'Nb',
                 'vernacular_name' => 'Updated vernacular',
                 'taxon_group_external_key' => 'group-a',
                 'recording_scheme_external_key' => 'scheme-a',
@@ -156,6 +162,10 @@ final class TaxaImportServiceTest extends CIUnitTestCase
         $this->assertSame('Existing taxon updated', (string) $row['scientific_name']);
         $this->assertSame(1, (int) $row['exclude_from_rarity_calculations']);
         $this->assertSame('Curated exclusion', $row['exclude_from_rarity_calculations_comment']);
+        $this->assertSame('LC', $row['gb_red_list']);
+        $this->assertSame('Nb', $row['gb_status']);
+        $this->assertSame('VU', $row['gb_red_list_override']);
+        $this->assertSame('Na', $row['gb_status_override']);
     }
 
     public function testPersistsImmediateParentIdentifier(): void

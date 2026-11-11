@@ -790,11 +790,22 @@ abbreviations separated by `;`, without spaces. Both include old and provisional
 warehouse categories `GB Red List` and `GB Status`. No available abbreviations means null.
 These are national designations, not the application's calculated or curated local rarity status.
 
+Both fields return effective values: a non-blank `gb_red_list_override` or `gb_status_override`
+replaces its corresponding imported value. NULL, empty and ASCII whitespace-only overrides fall
+back to the imported value unchanged. Each field resolves independently; clearing an override
+restores the latest imported designation rather than suppressing it. Overrides belong to the exact
+taxon and do not inherit from parents.
+
+The same effective values drive reads, all supported filters, sorting and pagination on taxa and
+the `taxon__` expansions of occurrences, taxon names, taxon stats and taxon-year stats. Raw override
+fields are not exposed as public fields, filters or sorts. Editing is available to managers/admins
+on the staff taxon details page, not through this read-only API.
+
 The former `conservation_status` and `taxon__conservation_status` fields are no longer returned or
 accepted as filters/sorts. Use `gb_red_list` and `taxon__gb_red_list` instead.
 Related resources also expose `taxon__gb_status` with `include=taxon`.
 
-Equality and `in` compare complete stored strings:
+Equality and `in` compare complete effective strings:
 
 - `gb_red_list[eq]=LC` does not match `LC;VU`.
 - `gb_red_list[eq]=LC%3BVU` matches the whole `LC;VU` list.
@@ -803,6 +814,8 @@ Equality and `in` compare complete stored strings:
 
 Sorting is lexical over the whole list. There is no individual-designation membership operator.
 The same rules apply to included `taxon__` fields.
+For example, imported `LC` overridden by `EN;VU` returns `EN;VU`, matches
+`gb_red_list[eq]=EN%3BVU`, and no longer matches `gb_red_list[eq]=LC`.
 
 #### Taxon media
 

@@ -5,6 +5,7 @@ namespace App\Services\Export;
 use App\Models\ExportJobModel;
 use App\Services\Search\SearchCriteria;
 use App\Services\Search\TaxonSearchService;
+use App\Services\TaxonDesignationService;
 use Closure;
 use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\BaseConnection;
@@ -184,7 +185,7 @@ final class ExportService
             $lock = $this->fileLock($uuid, LOCK_EX);
             try {
                 $contract = json_decode($job['contract'], true, 512, JSON_THROW_ON_ERROR);
-                if (! in_array($contract['version'], [1, 2, 3, 4, ExportTemplate::VERSION], true)) {
+                if (! in_array($contract['version'], [1, 2, 3, 4, 5, ExportTemplate::VERSION], true)) {
                     throw new RuntimeException('The export template changed. Cancel and create a new export.');
                 }
                 if ($job['phase'] === 'capturing') {
@@ -339,7 +340,7 @@ final class ExportService
     }
 
     /**
-     * Capture one bounded eligible-ID window and atomically advance its checkpoint.
+     * Capture an eligible-ID window, preserving pre-v6 imported-designation semantics.
      *
      * @param array<string, mixed> $job Current job.
      * @param array<string, mixed> $contract Frozen template and query criteria.
@@ -354,7 +355,7 @@ final class ExportService
         if ($contract['version'] < 4 && $contract['ordering']['column'] === 't.conservation_status') {
             $contract['ordering']['column'] = 't.gb_red_list';
         }
-        $search = new TaxonSearchService($this->db);
+        $search = new TaxonSearchService($this->db, $contract['version'] >= 6);
         if ($this->classificationContract($search) !== $contract['classifications']) {
             throw new RuntimeException('Classification configuration changed. Create a new export.');
         }
@@ -385,7 +386,7 @@ final class ExportService
             ->where($alias . '.id >', $job['capture_id'])->where($alias . '.id <=', $job['max_id'])
             ->orderBy($alias . '.id')->get($this->config->batchSize)->getResultArray(), 'id');
         $query = $search->query($criteria, $taxa, $taxa ? ($candidateIds ?: [0]) : null)
-            ->select($contract['ordering']['column'] . ' AS export_sort')
+            ->select($contract['ordering']['column'] . ' AS export_sort', false)
             ->whereIn($alias . '.id', $candidateIds === [] ? [0] : $candidateIds)
             ->orderBy($alias . '.id');
         if (! $taxa) {
@@ -768,12 +769,21 @@ final class ExportService
     /**
      * Reject source/staging collation differences instead of changing grid ordering.
      *
-     * @param string $column Safe SQL column from the shared allowlist.
+     * @param string $column Trusted column or effective-designation expression from the allow-list.
      */
     private function checkCollation(string $column): void
     {
         if ($this->db->DBDriver !== 'MySQLi') {
             return;
+        }
+        foreach (TaxonDesignationService::FIELDS as $field) {
+            if ($column === TaxonDesignationService::effectiveSql($field)) {
+                // Both CASE branches must retain the grid/staging collation; do not parse SQL.
+                $this->checkCollation('t.' . $field);
+                $this->checkCollation('t.' . $field . '_override');
+
+                return;
+            }
         }
         [$alias, $field] = explode('.', $column);
         $table = match ($alias) {

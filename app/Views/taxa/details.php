@@ -5,7 +5,7 @@
     <div class="mb-4">
         <span class="eyebrow mb-2">Taxonomy</span>
         <h1 class="section-heading mb-2">Taxon details</h1>
-        <p class="section-copy mb-0">Most fields are read-only. Manager and admin users can edit rarity group name, taxon remarks, key-species decisions, and species rarity decisions and exclusions.</p>
+        <p class="section-copy mb-0">Most fields are read-only. Manager and admin users can edit GB designation overrides, rarity group name, taxon remarks, key-species decisions, and species rarity decisions and exclusions.</p>
     </div>
     <div class="auth-card p-3 p-md-4">
                 <?php if (session()->getFlashdata('message')): ?>
@@ -96,6 +96,17 @@
                                 </label>
                                 <input class="form-control" id="<?= esc($field) ?>" type="text" value="<?= esc((string) ($page['taxon'][$field] ?? '')) ?>" disabled>
                                 <div class="form-text">Imported designation abbreviations, separated by semicolons.</div>
+                                <?php
+                                $override = $field . '_override';
+                                $oldOverride = old($override, (string) ($page['taxon'][$override] ?? ''));
+                                ?>
+                                <label class="form-label mt-2" for="<?= esc($override) ?>"><?= esc($label) ?> override</label>
+                                <input class="form-control<?= isset($errors[$override]) ? ' is-invalid' : '' ?>" id="<?= esc($override) ?>" name="<?= esc($override) ?>" type="text" value="<?= esc(is_string($oldOverride) ? $oldOverride : '') ?>" <?= $page['canEditDetails'] ? '' : 'disabled' ?>>
+                                <?php if (isset($errors[$override])): ?>
+                                    <div class="invalid-feedback d-block"><?= esc($errors[$override]) ?></div>
+                                <?php endif; ?>
+                                <div class="form-text">Use semicolon-separated abbreviations. Saving removes duplicates and sorts them. Leave blank to use the imported value. Applies only to this taxon, not its descendants.</div>
+                                <div class="form-text">Current effective value: <?= esc((string) ($page['effectiveDesignations'][$field] ?? 'Not set')) ?></div>
                             </div>
                         <?php endforeach; ?>
                         <div class="col-md-6">

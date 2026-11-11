@@ -60,6 +60,7 @@ final class ExportMySqlTest extends CIUnitTestCase
             '2026-09-29-120000_AllowNullTaxonStatsDates',
             '2026-10-13-090000_CreateExports',
             '2026-11-06-160000_AddGbDesignationLists',
+            '2026-11-11-120000_AddGbDesignationOverrides',
         ] as $filename) {
             require_once APPPATH . 'Database/Migrations/' . $filename . '.php';
             $class = 'App\\Database\\Migrations\\' . substr($filename, 18);
@@ -118,11 +119,19 @@ final class ExportMySqlTest extends CIUnitTestCase
     }
 
     /**
-     * MySQL case/accent ties retain ID order and indexed staging preserves the grid.
+     * MySQL case/accent ties and effective GB designations retain the grid's staged order.
      */
     public function testCollationAndEveryTaxonSort(): void
     {
         $this->limits->batchSize = 1;
+        // Unicode deliberately exercises native case/accent collation, not PHP ordering.
+        foreach ([1 => 'Éclair', 2 => 'eclair', 3 => 'Alpha', 4 => "\t \n"] as $id => $override) {
+            $this->exportDb->table('taxa')->where('id', $id)->update([
+                'gb_red_list' => $id === 4 ? 'Zulu' : 'SOURCE',
+                'gb_status' => $id === 4 ? null : 'SOURCE',
+                'gb_red_list_override' => $override, 'gb_status_override' => $override,
+            ]);
+        }
         foreach (['id', 'scientific_name', 'vernacular_name', 'taxon_identifier', 'rank_title',
             'taxon_group_title', 'gb_red_list', 'gb_status', 'blocked'] as $sort) {
             foreach (['asc', 'desc'] as $direction) {
@@ -130,7 +139,13 @@ final class ExportMySqlTest extends CIUnitTestCase
                 $input = ['sort' => $sort, 'direction' => $direction];
                 $query = $search->query($search->criteria([], true), true);
                 $search->orderQuery($query, $search->ordering($input, true), true);
-                $expected = array_column($query->get()->getResultArray(), 'scientific_name');
+                $gridRows = $query->get()->getResultArray();
+                if (in_array($sort, ['gb_red_list', 'gb_status'], true)) {
+                    $ids = $sort === 'gb_red_list' ? [3, 1, 2, 4] : [4, 3, 1, 2];
+                    $this->assertSame($direction === 'asc' ? $ids : array_reverse($ids),
+                        array_map('intval', array_column($gridRows, 'id')));
+                }
+                $expected = array_column($gridRows, 'scientific_name');
                 $job = $this->exports->create(1, 'taxa', $input, 'grid');
                 while ($job['status'] !== 'completed') {
                     $job = $this->exports->process($job['uuid'], 1);
@@ -147,6 +162,44 @@ final class ExportMySqlTest extends CIUnitTestCase
             }
         }
 
+    }
+
+    /**
+     * Effective sorting refuses staging/override collation mismatch instead of changing order.
+     */
+    public function testGbOverrideCollationMismatchIsRejected(): void
+    {
+        $table = $this->exportDb->escapeIdentifiers($this->exportDb->prefixTable('taxa'));
+        $this->exportDb->query('ALTER TABLE ' . $table
+            . ' MODIFY gb_red_list_override TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL');
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Export staging collation does not match');
+        $this->exports->create(1, 'taxa', ['sort' => 'gb_red_list'], 'grid');
+    }
+
+    /**
+     * MySQL rollback preserves imported values and re-addition copies non-default source collation.
+     */
+    public function testGbOverrideMigrationPreservesSourceCollation(): void
+    {
+        $migration = new \App\Database\Migrations\AddGbDesignationOverrides(\Config\Database::forge($this->exportDb));
+        $this->exportDb->table('taxa')->where('id', 1)->update([
+            'gb_red_list' => 'LC', 'gb_red_list_override' => 'VU',
+        ]);
+        $migration->down();
+        $table = $this->exportDb->escapeIdentifiers($this->exportDb->prefixTable('taxa'));
+        $this->exportDb->query('ALTER TABLE ' . $table
+            . ' MODIFY gb_red_list TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL');
+        $migration->up();
+        $row = $this->exportDb->table('taxa')->where('id', 1)->get()->getRowArray();
+        $this->assertSame('LC', $row['gb_red_list']);
+        $this->assertNull($row['gb_red_list_override']);
+        $columns = $this->exportDb->query('SELECT COLUMN_NAME, COLLATION_NAME
+            FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+            [$this->exportDb->prefixTable('taxa')])->getResultArray();
+        $collations = array_column($columns, 'COLLATION_NAME', 'COLUMN_NAME');
+        $this->assertSame('utf8mb4_bin', $collations['gb_red_list_override']);
+        $this->assertSame($collations['gb_status'], $collations['gb_status_override']);
     }
 
     /**

@@ -22,6 +22,11 @@
   filters and sorting; included taxon fields use `taxon__gb_red_list` and `taxon__gb_status`.
   Admin screens and new CSV exports show both lists. Apply migrations and refresh taxonomy using
   the [designation upgrade procedure](docs/import.md#refreshing-gb-designations).
+- Managers/admins can override GB Red List and GB Status per taxon while retaining imported data.
+  API reads, filters and sorting, the staff checklist and new exports use effective values;
+  clearing an override restores the imported value. Existing export jobs retain their original
+  designation behavior. Apply migrations before deploying the updated code. See
+  https://github.com/National-Museums-Liverpool/tanhub/issues/15.
 
 ### Bugfixes
 

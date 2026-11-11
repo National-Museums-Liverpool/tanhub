@@ -154,6 +154,37 @@ final class TaxonSearchTest extends CIUnitTestCase
     }
 
     /**
+     * Checklist values and text predicates agree with effective SQL ordering, including ties.
+     */
+    public function testGbOverridesDriveChecklistSearchAndOrdering(): void
+    {
+        $db = db_connect();
+        $db->table('taxa')->where('id', 40)->update([
+            'gb_red_list' => 'HIDDEN-SOURCE', 'gb_status' => 'HIDDEN-SOURCE',
+            'gb_red_list_override' => 'ZZ-OVERRIDE', 'gb_status_override' => 'ZZ-OVERRIDE',
+        ]);
+        $db->table('taxa')->whereIn('id', [41, 50])->update([
+            'gb_red_list' => 'AA-FALLBACK', 'gb_status' => 'AA-FALLBACK',
+            'gb_red_list_override' => "\t \n", 'gb_status_override' => '',
+        ]);
+        $this->assertSame([40], $this->ids(['q' => 'ZZ-OVERRIDE']));
+        $this->assertSame([], $this->ids(['q' => 'HIDDEN-SOURCE']));
+        $this->assertSame([41, 50], $this->ids(['q' => 'AA-FALLBACK']));
+        $search = new TaxonSearchService();
+        foreach (['gb_red_list', 'gb_status'] as $field) {
+            foreach (['asc' => [41, 50, 40], 'desc' => [40, 50, 41]] as $direction => $expected) {
+                $criteria = $search->criteria([], true);
+                $query = $search->query($criteria, true)->whereIn('t.id', [40, 41, 50]);
+                $search->orderQuery($query, $search->ordering(['sort' => $field, 'direction' => $direction], true), true);
+                $this->assertSame($expected[1], (int) (clone $query)->get(1, 1, false)->getRowArray()['id']);
+                $rows = $search->hydrate($query->get()->getResultArray(), true);
+                $this->assertSame($expected, array_map('intval', array_column($rows, 'id')));
+                $this->assertSame($direction === 'asc' ? 'AA-FALLBACK' : 'ZZ-OVERRIDE', $rows[0][$field]);
+            }
+        }
+    }
+
+    /**
      * Share exact-taxon criteria across staff pages, suggestions and export candidates.
      */
     public function testConfiguredAttributeFiltersPreserveArraysWithoutInheritance(): void
@@ -399,7 +430,7 @@ final class TaxonSearchTest extends CIUnitTestCase
         $this->assertSame('Nationally Rare;Nb', $page['taxa'][0]['gb_status']);
         $this->assertSame('GB Red List', $page['columnLabels']['gb_red_list']);
         $this->assertSame('GB Status', $page['columnLabels']['gb_status']);
-        $this->assertSame('t.gb_red_list', $search->ordering(['sort' => 'gb_red_list'], true)['column']);
+        $this->assertSame([], $search->ordering(['sort' => 'gb_red_list'], true)['errors']);
         $this->assertNotEmpty($search->ordering(['sort' => 'conservation_status'], true)['errors']);
     }
 

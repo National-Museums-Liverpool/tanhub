@@ -3,6 +3,7 @@
 namespace Tests;
 
 use App\Database\Migrations\AddGbDesignationLists;
+use App\Database\Migrations\AddGbDesignationOverrides;
 use CodeIgniter\Database\BaseConnection;
 use CodeIgniter\Test\CIUnitTestCase;
 use Config\Database;
@@ -98,6 +99,36 @@ final class GbDesignationListsMigrationTest extends CIUnitTestCase
         $this->assertSame('EN;LC;NT;VU', $row['gb_red_list']);
         $this->assertSame('Na;Nb', $row['gb_status']);
         $this->assertReferences();
+    }
+
+    /**
+     * Override addition and rollback retain source data, relationships and unrelated triggers.
+     */
+    public function testOverrideMigrationPreservesImportedDataAndTaxonomy(): void
+    {
+        $this->migration->up();
+        require_once APPPATH . 'Database/Migrations/2026-11-11-120000_AddGbDesignationOverrides.php';
+        $migration = new AddGbDesignationOverrides(Database::forge($this->isolatedDb));
+        $this->isolatedDb->query('CREATE TABLE gd_audit (taxon_id INTEGER)');
+        $this->isolatedDb->query('CREATE TRIGGER gd_taxa_audit AFTER UPDATE OF gb_red_list ON gd_taxa
+            BEGIN INSERT INTO gd_audit (taxon_id) VALUES (NEW.id); END');
+        $migration->up();
+        $row = $this->isolatedDb->table('taxa')->where('id', 1)->get()->getRowArray();
+        $this->assertSame('LC', $row['gb_red_list']);
+        $this->assertNull($row['gb_red_list_override']);
+        $this->assertNull($row['gb_status_override']);
+        $this->isolatedDb->table('taxa')->where('id', 1)->update([
+            'gb_red_list_override' => 'VU', 'gb_status_override' => 'Na',
+        ]);
+        $this->assertReferences();
+        $migration->down();
+        $row = $this->isolatedDb->table('taxa')->where('id', 1)->get()->getRowArray();
+        $this->assertSame('LC', $row['gb_red_list']);
+        $this->assertArrayNotHasKey('gb_red_list_override', $row);
+        $this->assertArrayNotHasKey('gb_status_override', $row);
+        $this->assertReferences();
+        $this->isolatedDb->table('taxa')->where('id', 1)->update(['gb_red_list' => 'EN']);
+        $this->assertSame(1, $this->isolatedDb->table('audit')->countAllResults());
     }
 
     /**

@@ -4,9 +4,11 @@ namespace App\Services\Search;
 
 use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\BaseConnection;
+use CodeIgniter\Database\RawSql;
 use Config\TaxonSearch;
 use RuntimeException;
 use App\Services\TaxonAttributeService;
+use App\Services\TaxonDesignationService;
 
 /**
  * Reusable live queries and batch row preparation for staff indexes.
@@ -30,6 +32,9 @@ final class TaxonSearchService
     /** @var array<string, array<string, mixed>> Visible classification ranks by safe alias. */
     private array $classifications = [];
 
+    /** @var bool False only when resuming an export contract predating designation overrides. */
+    private bool $effectiveDesignations;
+
     /**
      * Resolve reporting metadata and validate presentation configuration.
      *
@@ -37,11 +42,13 @@ final class TaxonSearchService
      * may become SQL identifiers; request values never define column names.
      *
      * @param BaseConnection|null $db Explicit connection for bounded export transactions.
+     * @param bool $effectiveDesignations Use overrides, except for frozen legacy export contracts.
      * @throws RuntimeException If a non-default classification setting is unavailable.
      */
-    public function __construct(?BaseConnection $db = null)
+    public function __construct(?BaseConnection $db = null, bool $effectiveDesignations = true)
     {
         $this->db = $db ?? db_connect();
+        $this->effectiveDesignations = $effectiveDesignations;
         $configured = config('Import')->taxonRanks;
         $configured = is_array($configured) ? $configured : explode(',', $configured);
         $metadata = $this->db->table('taxon_ranks')->where('deleted_at', null)
@@ -346,8 +353,10 @@ final class TaxonSearchService
     {
         $sorts = $taxa
             ? ['id' => 't.id', 'taxon_identifier' => 't.taxon_identifier', 'scientific_name' => 't.scientific_name',
-                'vernacular_name' => 't.vernacular_name', 'gb_red_list' => 't.gb_red_list',
-                'gb_status' => 't.gb_status', 'taxon_group_title' => 'tg.title', 'rank_title' => 'tr.sort_order',
+                'vernacular_name' => 't.vernacular_name',
+                'gb_red_list' => $this->effectiveDesignations ? TaxonDesignationService::effectiveSql('gb_red_list') : 't.gb_red_list',
+                'gb_status' => $this->effectiveDesignations ? TaxonDesignationService::effectiveSql('gb_status') : 't.gb_status',
+                'taxon_group_title' => 'tg.title', 'rank_title' => 'tr.sort_order',
                 'blocked' => 't.blocked']
             : ['id' => 'o.id', 'unique_key' => 'o.unique_key', 'from_date' => 'o.from_date', 'to_date' => 'o.to_date',
                 'grid_ref' => 'o.grid_ref', 'data_source_id' => 'o.data_source_id', 'blocked' => 'o.blocked',
@@ -387,7 +396,8 @@ final class TaxonSearchService
      */
     public function orderQuery(BaseBuilder $query, array $ordering, bool $taxa): void
     {
-        $query->orderBy($ordering['column'], $ordering['direction']);
+        // Ordering comes from the shared allow-list and can be a designation expression.
+        $query->orderBy($ordering['column'], $ordering['direction'], false);
         if (! $taxa && $ordering['sort'] === 'from_date') {
             $query->orderBy('o.to_date', $ordering['direction']);
         }
@@ -587,6 +597,7 @@ final class TaxonSearchService
      * Load all region labels for the batch, not just the region used to filter records.
      * Keep missing/unequal date bounds visible instead of presenting an uncertain date
      * as exact. The raw bounds and region list remain available separately from labels.
+     * Taxa expose effective national designations unless resuming a legacy export.
      *
      * @param list<array<string, mixed>> $rows A result batch.
      * @param bool $taxa Whether rows are taxa.
@@ -606,6 +617,11 @@ final class TaxonSearchService
             }
         }
         foreach ($rows as &$row) {
+            if ($taxa && $this->effectiveDesignations) {
+                foreach (TaxonDesignationService::FIELDS as $field) {
+                    $row[$field] = TaxonDesignationService::resolve($row[$field], $row[$field . '_override']);
+                }
+            }
             $row['taxon_group_label'] = $row['taxon_group_friendly'] ?: ($row['taxon_group_title'] ?? '');
             if (! $taxa) {
                 $row['regions'] = $regions[$row['id']] ?? [];
@@ -679,7 +695,7 @@ final class TaxonSearchService
     }
 
     /**
-     * Match supported descriptive fields and linked names/regions.
+     * Match descriptive fields, effective national designations and linked names/regions.
      *
      * @param BaseBuilder $builder Query being constrained.
      * @param string $term Search text.
@@ -691,7 +707,7 @@ final class TaxonSearchService
         $this->applyNameSearch($builder, $term, 't');
         $columns = ['t.id', 't.taxon_identifier', 't.scientific_name_identifier', 'tg.title', 'tg.friendly'];
         $columns = array_merge($columns, $taxa
-            ? ['t.gb_red_list', 't.gb_status', 't.rarity_group_name', 't.taxon_remarks']
+            ? ['t.rarity_group_name', 't.taxon_remarks']
             : ['o.id', 'o.unique_key', 'o.grid_ref', 'o.locality', 'o.recorded_by', 'o.identified_by',
                 'recorded.name', 'ds.title', 'ds.abbr']);
         foreach ($this->classifications as $alias => $rank) {
@@ -699,6 +715,12 @@ final class TaxonSearchService
         }
         foreach ($columns as $column) {
             $builder->orLike($column, $term);
+        }
+        if ($taxa) {
+            foreach (TaxonDesignationService::FIELDS as $field) {
+                $column = $this->effectiveDesignations ? TaxonDesignationService::effectiveSql($field) : 't.' . $field;
+                $builder->orLike(new RawSql($column), $term);
+            }
         }
         if (! $taxa) {
             $regions = $this->db->table('geographic_regions_occurrences gro')->select('1')

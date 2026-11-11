@@ -478,6 +478,11 @@ The task:
   occurrence into the grid square and region where that occurrence falls
 - stores the total as a decimal score, so split distributions retain fractional values
 
+Species with `taxa.exclude_from_rarity_calculations = 1` contribute nothing to `rarity_score`,
+including records against subspecies or other taxa assigned to that species. Their records still
+contribute to `occurrences_count` and `species_count`. The flag also affects
+[taxon rarity categories](#derived-taxon-rarity-categories).
+
 ### Derived taxon rarity categories
 
 After taxa and occurrence imports, run the derived rarity task to populate
@@ -497,6 +502,15 @@ The task:
 - combines those ranks using configurable weights from `rarity.gridSquareWeight`
   and `rarity.occurrenceWeight`
 - assigns categories `1..5` from rarest to commonest within each rarity group
+
+Species with `taxa.exclude_from_rarity_calculations = 1` are omitted from both metric rankings
+and have `rarity_category` set to `NULL`. Remaining species are ranked without them, so their
+categories can change too. Records against descendants of an excluded species do not contribute
+to the rankings. Removing the exclusion lets the species rejoin its group on recalculation.
+
+Either flag transition requests background refreshes of both taxon rarity categories and
+[grid-square rarity scores](#derived-grid-square-stats-counts). Stored values change after each
+task succeeds; rationale-only edits do not request recalculation.
 
 Optional parameters:
 

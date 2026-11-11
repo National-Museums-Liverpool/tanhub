@@ -414,13 +414,16 @@ Other values or operators return HTTP 400. The comment uses normal string filter
 
 Requests do not exclude flagged taxa automatically. Clients building rare-species lists must opt
 into the filter. Exclusions suppress grid-square rarity contributions from all records assigned
-to the species, but leave counts, occupancy, calculated rarity categories, and independent
-global/regional expert rarity statuses unchanged. A flagged species can still have a measured
-rare category or a regional expert rare status.
+to the species and remove the species from taxon rarity rankings. Recalculation sets its measured
+`rarity_category` to null and ranks remaining species without it. Counts, occupancy and independent
+global/regional expert rarity statuses remain unchanged, so a flagged species can still have a
+regional expert rare status.
 
 Staff edits require manager/admin access and a non-blank rationale. Removing exclusion clears its
-rationale. Either flag transition prioritises a background square-statistics recalculation;
-API responses immediately reflect the decision, but square scores change after that task succeeds.
+rationale. Either flag transition prioritises background square-statistics and taxon-rarity
+recalculations. API responses immediately reflect the decision, but square scores and measured
+categories change after their respective tasks succeed. Removing exclusion restores category
+eligibility on recalculation.
 Rationale-only edits do not request recalculation. These are current decisions, not a history.
 
 ### 6.5 Configurable taxon attributes

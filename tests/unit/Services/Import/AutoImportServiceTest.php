@@ -576,6 +576,7 @@ final class AutoImportServiceTest extends CIUnitTestCase
         $model->completion['indicia-occurrences:occurrences'] = true;
         $model->completion['nbn-occurrences:occurrences'] = true;
         $model->completion['derived-stats:grid_square_stats_counts'] = true;
+        $model->completion['derived-stats:taxon_rarity'] = true;
 
         return $model;
     }
@@ -601,6 +602,30 @@ final class AutoImportServiceTest extends CIUnitTestCase
         );
         $task = $service->select();
         $this->assertSame('derived-stats:grid_square_stats_counts', $task['source_key']);
+        $this->assertSame('derived', $task['kind']);
+    }
+
+    /**
+     * Exclusion changes prioritise taxon rarity refreshes before routine derived intervals.
+     */
+    public function testInvalidatedTaxonRarityIsPrioritised(): void
+    {
+        $offsetModel = $this->completeOffsetModel();
+        $offsetModel->completion['derived-stats:taxon_rarity'] = false;
+        $offsetModel->completion['derived-stats:taxon_stats'] = true;
+        $offsetModel->completion['derived-stats:taxon_year_stats'] = true;
+        $runModel = new AutoImportRunModelDouble();
+        $runModel->finishedAt['derived-stats:taxon_rarity'] = '2026-07-31 11:59:59';
+        $runModel->latestDerivedRun = '2026-07-31 11:59:59';
+        $service = new AutoImportService(
+            $offsetModel,
+            $runModel,
+            null,
+            new AutoImportStatsDirtyScopeServiceDouble(),
+            new AutoImportDependencyServiceDouble(),
+        );
+        $task = $service->select();
+        $this->assertSame('derived-stats:taxon_rarity', $task['source_key']);
         $this->assertSame('derived', $task['kind']);
     }
 }

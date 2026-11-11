@@ -45,7 +45,8 @@ class DerivedImportRunner
      * `status` value. If the service throws, the run row is marked `failed`
      * with the exception message and the exception is rethrown to the caller
      * (e.g. {@see \App\Controllers\Imports::run()}) so it can surface the error.
-     * Square-statistics completion acknowledges only the revision observed before computing.
+     * Square and taxon rarity completion acknowledge only the revision observed before computing,
+     * so a concurrent exclusion edit keeps a refresh pending.
      *
      * @param string $sourceKey   Task source key used for run-history tracking
      *                            (e.g. `derived-stats:taxon_stats`).
@@ -83,11 +84,15 @@ class DerivedImportRunner
             'started_at' => date('Y-m-d H:i:s'),
         ]);
         try {
-            if (! $dryRun && $sourceKey === TaxonRarityExclusionService::TASK
+            $usesRefreshRevision = in_array($sourceKey, [
+                TaxonRarityExclusionService::TASK,
+                TaxonRarityExclusionService::TAXON_RARITY_TASK,
+            ], true);
+            if (! $dryRun && $usesRefreshRevision
                 && ! $importOffsetModel->hasSourceKey($sourceKey)) {
                 $importOffsetModel->setCompletion($sourceKey, false);
             }
-            $squareRevision = $sourceKey === TaxonRarityExclusionService::TASK
+            $refreshRevision = $usesRefreshRevision
                 ? $importOffsetModel->getCheckpoint($sourceKey) : null;
             if ($onRunCreated !== null) {
                 $onRunCreated($runId);
@@ -100,9 +105,9 @@ class DerivedImportRunner
             // TaxonStatsService owns rebuild completion; dirty-scope batches must not
             // make an already-populated stats table incomplete.
             if (! $dryRun && $sourceKey !== 'derived-stats:taxon_stats') {
-                if ($sourceKey === TaxonRarityExclusionService::TASK && $status === 'success'
+                if ($usesRefreshRevision && $status === 'success'
                     && (($result['has_more'] ?? false) !== true)) {
-                    $importOffsetModel->completeIfCheckpointUnchanged($sourceKey, $squareRevision);
+                    $importOffsetModel->completeIfCheckpointUnchanged($sourceKey, $refreshRevision);
                 } else {
                     $importOffsetModel->setCompletion(
                         $sourceKey,

@@ -8,12 +8,15 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Saves species-only global exclusions and atomically requests square-statistics refresh.
+ * Saves species-only global exclusions and atomically requests square and taxon rarity refreshes.
  */
 class TaxonRarityExclusionService
 {
     /** @var string Square task whose opaque checkpoint identifies each refresh request. */
     public const TASK = 'derived-stats:grid_square_stats_counts';
+
+    /** @var string Taxon rarity task whose checkpoint identifies each refresh request. */
+    public const TAXON_RARITY_TASK = 'derived-stats:taxon_rarity';
 
     /**
      * Validate an explicit exclusion submission without interpreting omitted fields as clearing.
@@ -47,10 +50,10 @@ class TaxonRarityExclusionService
     }
 
     /**
-     * Save validated fields and invalidate square scores only when the boolean changes.
+     * Save validated fields and invalidate square scores and taxon rarity when the boolean changes.
      *
      * MySQL locks the species row to serialize concurrent staff decisions; SQLite serializes
-     * writes. The refresh revision and decision commit together, including within a detail save.
+     * writes. Both refresh revisions and the decision commit together, including in a detail save.
      *
      * @param int $taxonId Species primary key.
      * @param array<string, mixed> $input Submitted flag and rationale, validated again.
@@ -77,6 +80,7 @@ class TaxonRarityExclusionService
             }
             if ((int) $current['exclude_from_rarity_calculations'] !== $values['exclude_from_rarity_calculations']) {
                 model(ImportOffsetModel::class)->invalidateWithCheckpoint(self::TASK, bin2hex(random_bytes(16)));
+                model(ImportOffsetModel::class)->invalidateWithCheckpoint(self::TAXON_RARITY_TASK, bin2hex(random_bytes(16)));
             }
             if (! $db->transStatus() || ! $db->transCommit()) {
                 throw new RuntimeException('The rarity exclusion could not be saved.');

@@ -192,6 +192,7 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->authenticateAs('taxa-exclusion@example.com', 'manager');
         $offset = model(ImportOffsetModel::class);
         $offset->setCompletion(TaxonRarityExclusionService::TASK, true);
+        $offset->setCompletion(TaxonRarityExclusionService::TAXON_RARITY_TASK, true);
         $invalid = $this->post('taxa/1', [
             'exclude_from_rarity_calculations' => '1',
             'exclude_from_rarity_calculations_comment' => ' ',
@@ -214,6 +215,7 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->assertSame(0, (int) model(TaxonModel::class)->find(1)['exclude_from_rarity_calculations']);
         $this->assertNotSame('Must not save invalid form', model(TaxonModel::class)->find(1)['taxon_remarks']);
         $this->assertTrue($offset->isComplete(TaxonRarityExclusionService::TASK));
+        $this->assertTrue($offset->isComplete(TaxonRarityExclusionService::TAXON_RARITY_TASK));
         $input = [
             'exclude_from_rarity_calculations' => '1',
             'exclude_from_rarity_calculations_comment' => '<script>expansion</script>',
@@ -221,6 +223,10 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->post('taxa/1', $input)->assertStatus(302);
         $this->assertSame(1, (int) model(TaxonModel::class)->find(1)['exclude_from_rarity_calculations']);
         $this->assertFalse($offset->isComplete(TaxonRarityExclusionService::TASK));
+        $this->assertFalse($offset->isComplete(TaxonRarityExclusionService::TAXON_RARITY_TASK));
+        $taxonRevision = $offset->getCheckpoint(TaxonRarityExclusionService::TAXON_RARITY_TASK);
+        $this->assertNotNull($taxonRevision);
+        $offset->completeIfCheckpointUnchanged(TaxonRarityExclusionService::TAXON_RARITY_TASK, $taxonRevision);
         $revision = $offset->getCheckpoint(TaxonRarityExclusionService::TASK);
         $this->assertNotNull($revision);
         $offset->completeIfCheckpointUnchanged(TaxonRarityExclusionService::TASK, $revision);
@@ -228,6 +234,8 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->post('taxa/1', $input)->assertStatus(302);
         $this->assertTrue($offset->isComplete(TaxonRarityExclusionService::TASK));
         $this->assertSame($revision, $offset->getCheckpoint(TaxonRarityExclusionService::TASK));
+        $this->assertTrue($offset->isComplete(TaxonRarityExclusionService::TAXON_RARITY_TASK));
+        $this->assertSame($taxonRevision, $offset->getCheckpoint(TaxonRarityExclusionService::TAXON_RARITY_TASK));
         $this->post('taxa/1', ['taxon_remarks' => 'Unrelated text'])->assertStatus(302);
         $this->assertSame(1, (int) model(TaxonModel::class)->find(1)['exclude_from_rarity_calculations']);
         $this->post('taxa/1', ['exclude_from_rarity_calculations' => '0'])->assertStatus(302);
@@ -237,6 +245,8 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->assertSame(4, (int) $taxon['rarity_category']);
         $this->assertFalse($offset->isComplete(TaxonRarityExclusionService::TASK));
         $this->assertNotSame($revision, $offset->getCheckpoint(TaxonRarityExclusionService::TASK));
+        $this->assertFalse($offset->isComplete(TaxonRarityExclusionService::TAXON_RARITY_TASK));
+        $this->assertNotSame($taxonRevision, $offset->getCheckpoint(TaxonRarityExclusionService::TAXON_RARITY_TASK));
     }
 
     /**
@@ -304,6 +314,35 @@ final class TaxaPagesTest extends CIUnitTestCase
         $this->assertFalse($offset->isComplete(TaxonRarityExclusionService::TASK));
         $this->assertSame('success', $runner->run(TaxonRarityExclusionService::TASK, 'gridSquareStatsCountsService')['status']);
         $this->assertTrue($offset->isComplete(TaxonRarityExclusionService::TASK));
+    }
+
+    /**
+     * Taxon rarity refreshes retain concurrent edits and cannot complete on dry runs or failure.
+     */
+    public function testTaxonRarityRefreshRunnerPreservesPendingRequests(): void
+    {
+        $task = TaxonRarityExclusionService::TAXON_RARITY_TASK;
+        $offset = model(ImportOffsetModel::class);
+        $offset->invalidateWithCheckpoint($task, 'before-run');
+        $runner = new DerivedImportRunner();
+        $result = $runner->run($task, 'taxonRarityService', false, static function (int $runId) use ($offset, $task): void {
+            $offset->invalidateWithCheckpoint($task, 'during-run');
+        });
+        $this->assertSame('success', $result['status']);
+        $this->assertFalse($offset->isComplete($task));
+        $this->assertSame('during-run', $offset->getCheckpoint($task));
+        $this->assertSame('success', $runner->run($task, 'taxonRarityService', true)['status']);
+        $this->assertFalse($offset->isComplete($task));
+        $this->assertSame('success', $runner->run($task, 'taxonRarityService')['status']);
+        $this->assertTrue($offset->isComplete($task));
+
+        $offset->invalidateWithCheckpoint($task, 'failed-run');
+        $service = $this->createMock(\App\Services\Stats\TaxonRarityService::class);
+        $service->method('run')->willReturn(['status' => 'failed', 'errors' => 1]);
+        \Config\Services::injectMock('taxonRarityService', $service);
+        $this->assertSame('failed', $runner->run($task, 'taxonRarityService')['status']);
+        $this->assertFalse($offset->isComplete($task));
+        $this->assertSame('failed-run', $offset->getCheckpoint($task));
     }
 
     /**

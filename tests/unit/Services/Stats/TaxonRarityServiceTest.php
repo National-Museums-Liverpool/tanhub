@@ -13,6 +13,9 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
 {
     protected $db;
 
+    /**
+     * Create isolated rarity tables and reset ranking weights.
+     */
     protected function setUp(): void
     {
         parent::setUp();
@@ -29,6 +32,7 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
             species_id INTEGER NULL,
             rarity_group_name VARCHAR(100) NULL,
             rarity_category INTEGER NULL,
+            exclude_from_rarity_calculations INTEGER NOT NULL DEFAULT 0,
             blocked INTEGER NOT NULL DEFAULT 0,
             deleted_at DATETIME NULL
         )');
@@ -194,6 +198,69 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
     }
 
     /**
+     * Exclusions clear categories and change peer rankings; clearing them restores eligibility.
+     */
+    public function testExclusionsRemoveSpeciesFromRankingsAndSupportReversal(): void
+    {
+        $this->seedTaxa([
+            [1, 'RARE', 'Bees', null],
+            [2, 'MIDDLE', 'Bees', null],
+            [3, 'COMMON', 'Bees', null],
+            [4, 'SINGLETON', 'Birds', null],
+        ]);
+        $this->seedOccurrences([
+            [2, 'SU01A', 0, null],
+            [3, 'SU02A', 0, null],
+            [3, 'SU02B', 0, null],
+        ]);
+        $service = new TaxonRarityService();
+        $this->assertSame('success', $service->run()['status']);
+        $before = ['RARE' => 1, 'MIDDLE' => 3, 'COMMON' => 5, 'SINGLETON' => 1];
+        $this->assertSame($before, $this->taxonCategoryMap());
+
+        $this->db->table('taxa')->whereIn('id', [1, 4])
+            ->update(['exclude_from_rarity_calculations' => 1]);
+        $dryRun = $service->run(true);
+        $this->assertSame('success', $dryRun['status']);
+        $this->assertSame(3, $dryRun['updated']);
+        $this->assertSame($before, $this->taxonCategoryMap());
+
+        $result = $service->run();
+        $this->assertSame('success', $result['status']);
+        $this->assertSame(3, $result['updated']);
+        $this->assertSame([
+            'RARE' => null, 'MIDDLE' => 1, 'COMMON' => 5, 'SINGLETON' => null,
+        ], $this->taxonCategoryMap());
+        $this->assertSame(0, $service->run()['updated']);
+
+        $this->db->table('taxa')->whereIn('id', [1, 4])
+            ->update(['exclude_from_rarity_calculations' => 0]);
+        $this->assertSame('success', $service->run()['status']);
+        $this->assertSame($before, $this->taxonCategoryMap());
+    }
+
+    /**
+     * Previously assigned categories are cleared even when no eligible species remain.
+     */
+    public function testAllExcludedSpeciesHaveNullCategoriesAfterRecalculation(): void
+    {
+        $this->seedTaxa([
+            [1, 'EXCLUDED', 'Bees', 1],
+            [2, 'UNGROUPED', null, 5],
+        ]);
+        $this->db->table('taxa')->update(['exclude_from_rarity_calculations' => 1]);
+        $service = new TaxonRarityService();
+        $this->assertSame(2, $service->run(true)['updated']);
+        $this->assertSame(['EXCLUDED' => 1, 'UNGROUPED' => 5], $this->taxonCategoryMap());
+        $result = $service->run();
+        $this->assertSame('success', $result['status']);
+        $this->assertSame(2, $result['updated']);
+        $this->assertSame(['EXCLUDED' => null, 'UNGROUPED' => null], $this->taxonCategoryMap());
+    }
+
+    /**
+     * Seed species with initial categories and rarity groups.
+     *
      * @param array<int, array{0:int, 1:string, 2:string|null, 3:int|null}> $rows
      */
     private function seedTaxa(array $rows): void
@@ -216,6 +283,8 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
     }
 
     /**
+     * Seed species occurrences with the species projection used by rarity aggregation.
+     *
      * @param array<int, array{0:int, 1:string|null, 2:int, 3:string|null}> $rows
      */
     private function seedOccurrences(array $rows): void
@@ -227,6 +296,7 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
             $payload[] = [
                 'id' => $occurrenceId++,
                 'taxon_id' => $taxonId,
+                'species_id' => $taxonId,
                 'grid_ref_2km' => $gridRef2km,
                 'blocked' => $blocked,
                 'deleted_at' => $deletedAt,
@@ -237,7 +307,9 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
     }
 
     /**
-     * @return array<string, int>
+     * Read persisted categories without conflating an unset category with zero.
+     *
+     * @return array<string, int|null>
      */
     private function taxonCategoryMap(): array
     {
@@ -250,7 +322,8 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
         $categories = [];
 
         foreach ($rows as $row) {
-            $categories[(string) $row['taxon_identifier']] = (int) $row['rarity_category'];
+            $categories[(string) $row['taxon_identifier']] = $row['rarity_category'] === null
+                ? null : (int) $row['rarity_category'];
         }
 
         return $categories;

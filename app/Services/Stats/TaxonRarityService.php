@@ -5,7 +5,7 @@ namespace App\Services\Stats;
 use Config\Rarity;
 
 /**
- * Recomputes taxon rarity categories from active occurrence coverage.
+ * Recomputes taxon rarity categories from active occurrence coverage of non-excluded species.
  */
 class TaxonRarityService
 {
@@ -25,6 +25,9 @@ class TaxonRarityService
 
     /**
      * Recompute rarity_category for taxa grouped by rarity_group_name.
+     *
+     * Excluded species do not influence peer rankings and have their categories cleared.
+     * Removing an exclusion lets the species rejoin its group on the next recalculation.
      *
      * @param bool $dryRun Whether persistence is disabled for this run.
      *
@@ -65,13 +68,19 @@ class TaxonRarityService
                 WHERE t.deleted_at IS NULL
                     AND t.blocked = 0
                     AND t.species_id = t.id
+                    AND t.exclude_from_rarity_calculations = 0
                     AND t.rarity_group_name IS NOT NULL
                     AND TRIM(t.rarity_group_name) <> ""
                 GROUP BY t.id, t.taxon_identifier, t.rarity_group_name, t.rarity_category'
             )->getResultArray();
 
-            $counts['fetched'] = count($rows);
-            $counts['processed'] = count($rows);
+            $excludedRows = $db->table('taxa')->select('id')
+                ->where('exclude_from_rarity_calculations', 1)
+                ->where('rarity_category IS NOT NULL', null, false)
+                ->get()->getResultArray();
+            $counts['fetched'] = count($rows) + count($excludedRows);
+            $counts['processed'] = $counts['fetched'];
+            $counts['updated'] = count($excludedRows);
 
             if ($rows === []) {
                 if (! $dryRun) {
@@ -83,6 +92,12 @@ class TaxonRarityService
 
             $groupedRows = $this->groupRowsByRarityGroup($rows);
             $updates = [];
+
+            if (! $dryRun) {
+                foreach ($excludedRows as $row) {
+                    $updates[] = ['id' => (int) $row['id'], 'rarity_category' => null];
+                }
+            }
 
             foreach ($groupedRows as $groupRows) {
                 $computedRows = $this->computeGroupCategories($groupRows, $config);

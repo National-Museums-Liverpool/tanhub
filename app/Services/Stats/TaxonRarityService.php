@@ -3,9 +3,10 @@
 namespace App\Services\Stats;
 
 use Config\Rarity;
+use InvalidArgumentException;
 
 /**
- * Recomputes taxon rarity categories from active occurrence coverage of non-excluded species.
+ * Recomputes taxon rarity categories from active occurrence coverage of recorded, non-excluded species.
  */
 class TaxonRarityService
 {
@@ -28,6 +29,8 @@ class TaxonRarityService
      *
      * Excluded species do not influence peer rankings and have their categories cleared.
      * Removing an exclusion lets the species rejoin its group on the next recalculation.
+     * Species without active occurrences also have null categories and do not influence
+     * either metric's population. Fetched counts include these species for cleanup.
      *
      * @param bool $dryRun Whether persistence is disabled for this run.
      *
@@ -90,7 +93,6 @@ class TaxonRarityService
                 return $counts;
             }
 
-            $groupedRows = $this->groupRowsByRarityGroup($rows);
             $updates = [];
 
             if (! $dryRun) {
@@ -98,6 +100,28 @@ class TaxonRarityService
                     $updates[] = ['id' => (int) $row['id'], 'rarity_category' => null];
                 }
             }
+
+            $recordedRows = [];
+
+            foreach ($rows as $row) {
+                if ((int) $row['occurrence_count'] > 0) {
+                    $recordedRows[] = $row;
+                    continue;
+                }
+
+                if ($this->nullableInt($row['rarity_category'] ?? null) === null) {
+                    $counts['not changed']++;
+                    continue;
+                }
+
+                if (! $dryRun) {
+                    $updates[] = ['id' => (int) $row['id'], 'rarity_category' => null];
+                }
+
+                $counts['updated']++;
+            }
+
+            $groupedRows = $this->groupRowsByRarityGroup($recordedRows);
 
             foreach ($groupedRows as $groupRows) {
                 $computedRows = $this->computeGroupCategories($groupRows, $config);
@@ -165,89 +189,60 @@ class TaxonRarityService
     }
 
     /**
-     * Compute weighted rarity categories for a single rarity group.
+     * Map weighted metric percentiles directly to fixed 20-point rarity bands.
+     *
+     * Both metrics use the same scale so their distinct-value counts cannot skew
+     * the configured weights. Equal scores remain together without a second ranking.
      *
      * @param array<int, array<string, mixed>> $rows Group rows.
      * @param Rarity                            $config Rarity configuration.
      *
      * @return array<int, array<string, mixed>>
+     *
+     * @throws InvalidArgumentException When weights are non-finite, negative or total zero.
      */
     private function computeGroupCategories(array $rows, Rarity $config): array
     {
-        $squareRanks = $this->denseRanks($rows, 'grid_square_count');
-        $occurrenceRanks = $this->denseRanks($rows, 'occurrence_count');
         $gridSquareWeight = (float) $config->gridSquareWeight;
         $occurrenceWeight = (float) $config->occurrenceWeight;
+        $totalWeight = $gridSquareWeight + $occurrenceWeight;
+
+        if (! is_finite($gridSquareWeight) || ! is_finite($occurrenceWeight)
+            || $gridSquareWeight < 0 || $occurrenceWeight < 0
+            || ! is_finite($totalWeight) || $totalWeight <= 0) {
+            throw new InvalidArgumentException('Rarity weights must be finite, non-negative and have a positive finite total.');
+        }
+
+        $squarePercentiles = $this->percentileRanks($rows, 'grid_square_count');
+        $occurrencePercentiles = $this->percentileRanks($rows, 'occurrence_count');
 
         foreach ($rows as $index => $row) {
             $taxonId = (int) $row['id'];
-            $gridSquareRank = $squareRanks[$taxonId] ?? 1;
-            $occurrenceRank = $occurrenceRanks[$taxonId] ?? 1;
+            $score = ($squarePercentiles[$taxonId] * ($gridSquareWeight / $totalWeight))
+                + ($occurrencePercentiles[$taxonId] * ($occurrenceWeight / $totalWeight));
+            // Prevent floating-point noise moving an exact band boundary into the lower band.
+            $score = round($score, 12);
 
-            $rows[$index]['grid_square_rank'] = $gridSquareRank;
-            $rows[$index]['occurrence_rank'] = $occurrenceRank;
-            $rows[$index]['final_score'] = ($gridSquareRank * $gridSquareWeight) + ($occurrenceRank * $occurrenceWeight);
-        }
-
-        usort($rows, static function (array $left, array $right): int {
-            $scoreComparison = ((float) $left['final_score']) <=> ((float) $right['final_score']);
-
-            if ($scoreComparison !== 0) {
-                return $scoreComparison;
-            }
-
-            $squareComparison = ((int) $left['grid_square_rank']) <=> ((int) $right['grid_square_rank']);
-
-            if ($squareComparison !== 0) {
-                return $squareComparison;
-            }
-
-            $occurrenceComparison = ((int) $left['occurrence_rank']) <=> ((int) $right['occurrence_rank']);
-
-            if ($occurrenceComparison !== 0) {
-                return $occurrenceComparison;
-            }
-
-            return strcmp((string) ($left['taxon_identifier'] ?? ''), (string) ($right['taxon_identifier'] ?? ''));
-        });
-
-        $groupSize = count($rows);
-
-        foreach ($rows as $index => $row) {
-            $rows[$index]['computed_rarity_category'] = $this->categoryForPosition($index, $groupSize);
+            $rows[$index]['final_score'] = $score;
+            $rows[$index]['computed_rarity_category'] = min(5, (int) floor($score / 20) + 1);
         }
 
         return $rows;
     }
 
     /**
-     * Map a sorted position in a group onto the 1-5 rarity category scale.
+     * Compute SQL-style percent ranks, retaining rank gaps for tied metric values.
      *
-     * @param int $index Zero-based index in ascending rarity order.
-     * @param int $groupSize Number of taxa in the rarity group.
-     *
-     * @return int
-     */
-    private function categoryForPosition(int $index, int $groupSize): int
-    {
-        if ($groupSize <= 1) {
-            return 1;
-        }
-
-        $scaledPosition = round(($index / ($groupSize - 1)) * 4);
-
-        return max(1, min(5, (int) $scaledPosition + 1));
-    }
-
-    /**
-     * Compute dense ranks for a metric within a rarity group.
+     * Each score is 100 times the number of species with a lower value divided
+     * by group size minus one. A singleton scores zero, preserving category 1.
+     * Recorded species with zero mapped squares remain eligible for both metrics.
      *
      * @param array<int, array<string, mixed>> $rows Group rows.
      * @param string                            $metric Metric column name.
      *
-     * @return array<int, int>
+     * @return array<int, float> Percentile scores keyed by taxon ID.
      */
-    private function denseRanks(array $rows, string $metric): array
+    private function percentileRanks(array $rows, string $metric): array
     {
         $values = [];
 
@@ -255,13 +250,14 @@ class TaxonRarityService
             $values[] = $this->nullableInt($row[$metric] ?? null) ?? 0;
         }
 
-        $uniqueValues = array_values(array_unique($values));
-        sort($uniqueValues, SORT_NUMERIC);
-
+        sort($values, SORT_NUMERIC);
+        $groupSize = count($values);
         $rankByValue = [];
 
-        foreach ($uniqueValues as $index => $value) {
-            $rankByValue[(string) $value] = $index + 1;
+        foreach ($values as $index => $value) {
+            if (! array_key_exists($value, $rankByValue)) {
+                $rankByValue[$value] = $groupSize <= 1 ? 0.0 : 100 * $index / ($groupSize - 1);
+            }
         }
 
         $ranks = [];
@@ -269,7 +265,7 @@ class TaxonRarityService
         foreach ($rows as $row) {
             $taxonId = (int) $row['id'];
             $value = $this->nullableInt($row[$metric] ?? null) ?? 0;
-            $ranks[$taxonId] = $rankByValue[(string) $value] ?? 1;
+            $ranks[$taxonId] = $rankByValue[$value];
         }
 
         return $ranks;

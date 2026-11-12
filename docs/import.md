@@ -510,10 +510,46 @@ The task:
 - counts active occurrences per taxon (`occurrences.deleted_at IS NULL` and
   `occurrences.blocked = 0`)
 - counts distinct active 2km grid squares per taxon from `occurrences.grid_ref_2km`
-- ranks taxa from low to high for each metric within each rarity group
-- combines those ranks using configurable weights from `rarity.gridSquareWeight`
-  and `rarity.occurrenceWeight`
-- assigns categories `1..5` from rarest to commonest within each rarity group
+- converts each metric to a percentile within the rarity group:
+  `100 * (RANK - 1) / (group size - 1)`, where `RANK - 1` is the number of species
+  with a strictly lower count
+- combines the percentiles as a weighted average using `rarity.gridSquareWeight`
+  and `rarity.occurrenceWeight`, divided by their sum
+- assigns categories directly from that score: below 20 is `1` (Extremely rare),
+  20 to below 40 is `2` (Rare), 40 to below 60 is `3` (Scarce), 60 to below 80 is
+  `4` (Frequent), and 80 to 100 is `5` (Common)
+
+Equal counts share a percentile, and equal combined scores always share a category;
+taxon identifiers do not break ties. Percentiles use rank gaps rather than dense ranks so
+the number of distinct values cannot distort the relative metric weights. Categories are
+fixed score bands, not quotas: a group need not contain species in every category.
+The combined score is rounded to 12 decimal places before applying the bands, preventing
+floating-point noise from moving an exact boundary into the lower category.
+A singleton scores zero and retains category `1`; an all-tied group also scores zero.
+
+The population includes active, non-excluded species (`taxa.species_id = taxa.id`) in a
+non-empty rarity group with at least one active occurrence. Species without active occurrences
+are excluded from both percentile populations and have `rarity_category` set to `NULL`, even
+if an earlier run assigned a category. Otherwise, a large unrecorded species list would inflate
+the apparent commonness of recorded species. Species with active occurrences but no mapped
+squares remain eligible; their square count is zero.
+
+Counts are recalculated from occurrences, not read from `taxon_stats`.
+Although `occupied_square_score` uses the same rank-gap formula, it excludes zero-square
+species and uses 50 for a singleton, so it is not interchangeable with this calculation.
+
+For example, square and occurrence percentiles of 36 and 50 give a score of 43 with equal
+weights, producing category `3`. These categories describe relative recording frequency in
+the chosen rarity group, not an absolute conservation status. A mixed `Unassigned` group
+can still compare species with different recording patterns.
+
+After deploying this scoring change, run `php spark stats:taxon-rarity` to replace stored
+categories; existing values do not change until the task runs successfully.
+Alternatively, reset and run the taxon rarity task in the imports UI. One successful run processes
+the whole population; it is not paginated. The UI reset resets task progress, not stored categories.
+The fetched count includes unrecorded species checked for category cleanup and excluded species
+whose old categories need clearing, so it is not a count of the species used in the percentiles.
+The updated count includes categories cleared to `NULL` and excludes unchanged values.
 
 Species with `taxa.exclude_from_rarity_calculations = 1` are omitted from both metric rankings
 and have `rarity_category` set to `NULL`. Remaining species are ranked without them, so their
@@ -533,6 +569,9 @@ Configuration:
 
 - `rarity.gridSquareWeight` controls the contribution from unique 2km squares.
 - `rarity.occurrenceWeight` controls the contribution from total active occurrences.
+
+Weights must be finite and non-negative, and their sum must be positive and finite.
+A zero weight disables that metric. Invalid weights fail the task without writing categories.
 
 Example `env` overrides:
 

@@ -279,6 +279,9 @@ Defaults are `320x320`, `fit`, and `85` for `thumbnail`; and `1400x1400`,
 - `rarity.occurrenceWeight`: weight assigned to active occurrences; defaults
   to `1.0`.
 
+Weights apply to percentile scores, not raw counts or dense ranks. Both must be finite and
+non-negative, with a positive finite sum; zero disables a metric. Invalid weights fail the task.
+
 See [derived taxon rarity categories](import.md#derived-taxon-rarity-categories)
 for how these weights are applied.
 

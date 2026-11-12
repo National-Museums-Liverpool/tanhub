@@ -51,6 +51,9 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
         $rarityConfig->occurrenceWeight = 1.0;
     }
 
+    /**
+     * Recorded species are ranked independently within their rarity groups.
+     */
     public function testRunAssignsCategoriesWithinEachRarityGroup(): void
     {
         $this->seedTaxa([
@@ -67,16 +70,21 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
         ]);
 
         $this->seedOccurrences([
+            [1, 'SU00A', 0, null],
             [2, 'SU01A', 0, null],
+            [2, 'SU01B', 0, null],
             [3, 'SU02A', 0, null],
             [3, 'SU02B', 0, null],
+            [3, 'SU02C', 0, null],
             [4, 'SU03A', 0, null],
             [4, 'SU03B', 0, null],
             [4, 'SU03C', 0, null],
+            [4, 'SU03D', 0, null],
             [5, 'SU04A', 0, null],
             [5, 'SU04B', 0, null],
             [5, 'SU04C', 0, null],
             [5, 'SU04D', 0, null],
+            [5, 'SU04E', 0, null],
             [6, 'TV01A', 0, null],
             [6, 'TV01B', 0, null],
             [6, 'TV01C', 0, null],
@@ -198,6 +206,247 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
     }
 
     /**
+     * Equal metric counts share categories rather than being split by identifier.
+     */
+    public function testRunKeepsTiedSpeciesInTheSameCategory(): void
+    {
+        $taxa = [];
+        $occurrences = [];
+
+        for ($id = 1; $id <= 5; $id++) {
+            $taxa[] = [$id, 'TIED-' . $id, 'Tied group', null];
+            $occurrences[] = [$id, 'SU01A', 0, null];
+        }
+
+        $this->seedTaxa($taxa);
+        $this->seedOccurrences($occurrences);
+
+        $this->assertSame('success', (new TaxonRarityService())->run()['status']);
+        $this->assertSame([
+            'TIED-1' => 1,
+            'TIED-2' => 1,
+            'TIED-3' => 1,
+            'TIED-4' => 1,
+            'TIED-5' => 1,
+        ], $this->taxonCategoryMap());
+    }
+
+    /**
+     * Percentiles on either side of each 20-point boundary map to fixed bands.
+     */
+    public function testRunUsesEqualTwentyPointCategoryBands(): void
+    {
+        $taxa = [];
+        $occurrences = [];
+
+        for ($index = 0; $index <= 10; $index++) {
+            $id = $index + 1;
+            $taxa[] = [$id, 'BAND-' . $index, 'Bands', null];
+
+            for ($square = 0; $square <= $index; $square++) {
+                $occurrences[] = [$id, sprintf('SU%02dA', $square), 0, null];
+            }
+        }
+
+        $this->seedTaxa($taxa);
+        $this->seedOccurrences($occurrences);
+
+        $config = config(Rarity::class);
+
+        foreach ([[1.0, 1.0], [1.0, 6.0], [0.0, 2.0], [3.0, 0.0]] as [$squareWeight, $occurrenceWeight]) {
+            $config->gridSquareWeight = $squareWeight;
+            $config->occurrenceWeight = $occurrenceWeight;
+
+            $this->assertSame('success', (new TaxonRarityService())->run()['status']);
+            $this->assertSame([1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 5], array_values($this->taxonCategoryMap()));
+        }
+    }
+
+    /**
+     * Weight ratios combine comparable percentiles without changing their scale.
+     */
+    public function testRunNormalizesUnequalWeights(): void
+    {
+        $config = config(Rarity::class);
+        $config->gridSquareWeight = 2.0;
+        $config->occurrenceWeight = 6.0;
+        $taxa = [];
+        $occurrences = [];
+
+        foreach ([1, 5, 3, 2, 4] as $index => $occurrenceCount) {
+            $id = $index + 1;
+            $taxa[] = [$id, 'WEIGHT-' . $id, 'Weighted', null];
+
+            for ($square = 0; $square < $id; $square++) {
+                $occurrences[] = [$id, sprintf('SU%02dA', $square), 0, null];
+            }
+
+            // Unmapped occurrences vary the occurrence rank independently of square coverage.
+            for ($extra = $id; $extra < $occurrenceCount + 5; $extra++) {
+                $occurrences[] = [$id, null, 0, null];
+            }
+        }
+
+        $this->seedTaxa($taxa);
+        $this->seedOccurrences($occurrences);
+
+        $this->assertSame('success', (new TaxonRarityService())->run()['status']);
+        $this->assertSame([1, 5, 3, 2, 5], array_values($this->taxonCategoryMap()));
+    }
+
+    /**
+     * Unrecorded peers cannot promote a below-median recorded species to common.
+     */
+    public function testRunDoesNotPromoteBelowMedianSpeciesToCommon(): void
+    {
+        $taxa = [];
+        $occurrences = [];
+
+        for ($id = 1; $id <= 1000; $id++) {
+            $taxa[] = [$id, sprintf('TAXON-%04d', $id), 'Unassigned', null];
+
+            if ($id <= 360) {
+                [$squares, $records] = [1, 16];
+            } elseif ($id <= 860) {
+                [$squares, $records] = [3, 3 + ($id - 361) % 12];
+            } elseif ($id <= 920) {
+                [$squares, $records] = [2, 15];
+            } else {
+                [$squares, $records] = [4, 30];
+            }
+
+            for ($record = 0; $record < $records; $record++) {
+                $occurrences[] = [$id, sprintf('SU%02dA', $record % $squares), 0, null];
+            }
+        }
+
+        for ($id = 1001; $id <= 5000; $id++) {
+            $taxa[] = [$id, sprintf('TAXON-%04d', $id), 'Unassigned', 5];
+        }
+
+        $this->seedTaxa($taxa);
+        $this->seedOccurrences($occurrences);
+
+        $this->assertSame('success', (new TaxonRarityService())->run()['status']);
+        $categories = $this->taxonCategoryMap();
+        $this->assertSame(3, $categories['TAXON-0920']);
+        // These species have occupancy percentile 36.036 and occurrence percentile 50.0501.
+        foreach (range(861, 920) as $id) {
+            $this->assertSame(3, $categories[sprintf('TAXON-%04d', $id)]);
+        }
+
+        foreach (range(1001, 5000) as $id) {
+            $this->assertNull($categories[sprintf('TAXON-%04d', $id)]);
+        }
+    }
+
+    /**
+     * Unrecorded species are cleared without affecting peers, including after records are blocked.
+     */
+    public function testUnrecordedSpeciesAreClearedAndDryRunsDoNotPersist(): void
+    {
+        $this->seedTaxa([
+            [1, 'RARE', 'Recorded', null],
+            [2, 'MIDDLE', 'Recorded', null],
+            [3, 'COMMON', 'Recorded', null],
+            [4, 'UNRECORDED', 'Recorded', 5],
+            [5, 'BLOCKED-ONLY', 'Recorded', 4],
+            [6, 'DELETED-ONLY', 'Recorded', 3],
+            [7, 'ALREADY-NULL', 'Recorded', null],
+        ]);
+        $this->seedOccurrences([
+            [1, 'SU00A', 0, null],
+            [2, 'SU01A', 0, null],
+            [2, 'SU01B', 0, null],
+            [3, 'SU02A', 0, null],
+            [3, 'SU02B', 0, null],
+            [3, 'SU02C', 0, null],
+            [5, 'SU03A', 1, null],
+            [6, 'SU04A', 0, '2026-07-01 00:00:00'],
+        ]);
+        $service = new TaxonRarityService();
+        $before = $this->taxonCategoryMap();
+        $dryRun = $service->run(true);
+
+        $this->assertSame('success', $dryRun['status']);
+        $this->assertSame(7, $dryRun['fetched']);
+        $this->assertSame(6, $dryRun['updated']);
+        $this->assertSame(1, $dryRun['not changed']);
+        $this->assertSame($before, $this->taxonCategoryMap());
+
+        $result = $service->run();
+        $this->assertSame('success', $result['status']);
+        $this->assertSame(6, $result['updated']);
+        $this->assertSame([
+            'RARE' => 1,
+            'MIDDLE' => 3,
+            'COMMON' => 5,
+            'UNRECORDED' => null,
+            'BLOCKED-ONLY' => null,
+            'DELETED-ONLY' => null,
+            'ALREADY-NULL' => null,
+        ], $this->taxonCategoryMap());
+        $repeat = $service->run();
+        $this->assertSame(0, $repeat['updated']);
+        $this->assertSame(7, $repeat['not changed']);
+
+        $this->db->table('occurrences')->where('species_id', 3)->update(['blocked' => 1]);
+        $this->assertSame('success', $service->run()['status']);
+        $categories = $this->taxonCategoryMap();
+        $this->assertNull($categories['COMMON']);
+        $this->assertSame(5, $categories['MIDDLE']);
+    }
+
+    /**
+     * A group with no active occurrences has no calculated rarity categories.
+     */
+    public function testAllUnrecordedSpeciesHaveNullCategories(): void
+    {
+        $this->seedTaxa([
+            [1, 'STALE', 'Unrecorded', 5],
+            [2, 'UNSET', 'Unrecorded', null],
+        ]);
+
+        $result = (new TaxonRarityService())->run();
+
+        $this->assertSame('success', $result['status']);
+        $this->assertSame(1, $result['updated']);
+        $this->assertSame(1, $result['not changed']);
+        $this->assertSame(['STALE' => null, 'UNSET' => null], $this->taxonCategoryMap());
+    }
+
+    /**
+     * Invalid weights fail explicitly without replacing stored categories.
+     */
+    public function testRunRejectsInvalidWeights(): void
+    {
+        $this->seedTaxa([[1, 'UNCHANGED', 'Invalid weights', 3]]);
+        $this->seedOccurrences([[1, 'SU00A', 0, null]]);
+        $config = config(Rarity::class);
+
+        $invalidWeights = [
+            [0.0, 0.0],
+            [-1.0, 2.0],
+            [1.0, -1.0],
+            [INF, 1.0],
+            [1.0, INF],
+            [NAN, 1.0],
+            [1.0, NAN],
+            [PHP_FLOAT_MAX, PHP_FLOAT_MAX],
+        ];
+
+        foreach ($invalidWeights as [$squareWeight, $occurrenceWeight]) {
+            $config->gridSquareWeight = $squareWeight;
+            $config->occurrenceWeight = $occurrenceWeight;
+            $result = (new TaxonRarityService())->run();
+
+            $this->assertSame('failed', $result['status']);
+            $this->assertSame(1, $result['errors']);
+            $this->assertSame(['UNCHANGED' => 3], $this->taxonCategoryMap());
+        }
+    }
+
+    /**
      * Exclusions clear categories and change peer rankings; clearing them restores eligibility.
      */
     public function testExclusionsRemoveSpeciesFromRankingsAndSupportReversal(): void
@@ -209,9 +458,13 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
             [4, 'SINGLETON', 'Birds', null],
         ]);
         $this->seedOccurrences([
+            [1, 'SU00A', 0, null],
             [2, 'SU01A', 0, null],
+            [2, 'SU01B', 0, null],
             [3, 'SU02A', 0, null],
             [3, 'SU02B', 0, null],
+            [3, 'SU02C', 0, null],
+            [4, 'TV00A', 0, null],
         ]);
         $service = new TaxonRarityService();
         $this->assertSame('success', $service->run()['status']);

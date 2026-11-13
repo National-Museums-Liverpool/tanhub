@@ -3,12 +3,20 @@
 namespace Config;
 
 use CodeIgniter\Config\BaseConfig;
+use InvalidArgumentException;
 
 /**
  * Rarity scoring configuration.
  */
 class Rarity extends BaseConfig
 {
+    /**
+     * Number of calendar years to consider, including the current year through today.
+     *
+     * @var int
+     */
+    public int $historyYears = 50;
+
     /**
      * @var array<int, string>
      */
@@ -37,10 +45,27 @@ class Rarity extends BaseConfig
 
     /**
      * Load rarity scoring overrides from environment variables.
+     *
+     * @throws InvalidArgumentException If the history window is not a positive integer.
      */
     public function __construct()
     {
+        $defaultHistoryYears = $this->historyYears;
         parent::__construct();
+
+        // BaseConfig casts environment values before our stricter integer validation.
+        $this->historyYears = $defaultHistoryYears;
+        $configuredHistoryYears = env('rarity.historyYears');
+
+        if ($configuredHistoryYears !== null && $configuredHistoryYears !== '') {
+            $historyYears = filter_var($configuredHistoryYears, FILTER_VALIDATE_INT);
+
+            if ($historyYears === false || $historyYears < 1) {
+                throw new InvalidArgumentException('rarity.historyYears must be a positive integer.');
+            }
+
+            $this->historyYears = $historyYears;
+        }
 
         $configuredSquareWeight = env('rarity.gridSquareWeight');
 

@@ -3,8 +3,10 @@
 namespace Tests;
 
 use App\Services\Stats\TaxonRarityService;
+use CodeIgniter\I18n\Time;
 use CodeIgniter\Test\CIUnitTestCase;
 use Config\Rarity;
+use InvalidArgumentException;
 
 /**
  * @internal
@@ -14,12 +16,13 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
     protected $db;
 
     /**
-     * Create isolated rarity tables and reset ranking weights.
+     * Create isolated rarity tables and fix the scoring date, window and weights.
      */
     protected function setUp(): void
     {
         parent::setUp();
 
+        Time::setTestNow(Time::parse('2026-11-12 12:00:00'));
         $this->db = db_connect();
         $prefix = $this->db->getPrefix();
 
@@ -42,6 +45,8 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
             taxon_id INTEGER NOT NULL,
             species_id INTEGER NULL,
             grid_ref_2km VARCHAR(5) NULL,
+            from_date DATE NULL,
+            to_date DATE NULL,
             blocked INTEGER NOT NULL DEFAULT 0,
             deleted_at DATETIME NULL
         )');
@@ -49,6 +54,177 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
         $rarityConfig = config(Rarity::class);
         $rarityConfig->gridSquareWeight = 1.0;
         $rarityConfig->occurrenceWeight = 1.0;
+        $rarityConfig->historyYears = 50;
+    }
+
+    /**
+     * Restore the real clock for unrelated tests.
+     */
+    protected function tearDown(): void
+    {
+        Time::setTestNow();
+        parent::tearDown();
+    }
+
+    /**
+     * The default window includes its first day and today, but not old, future or undated data.
+     */
+    public function testRunFiltersStartDatesAndClearsSpeciesWithoutRecentRecords(): void
+    {
+        $this->seedTaxa([
+            [1, 'FIRST-DAY', 'Dates', 5],
+            [2, 'TODAY', 'Dates', 5],
+            [3, 'OLD', 'Dates', 5],
+            [4, 'UNDATED', 'Dates', 5],
+            [5, 'FUTURE', 'Dates', 5],
+            [6, 'OVERLAPPING-RANGE', 'Dates', 5],
+        ]);
+        $this->seedOccurrences([
+            [1, 'SU00A', 0, null, '1977-01-01', '1977-12-31'],
+            [2, 'SU01A', 0, null, '2026-11-12', '2026-11-12'],
+            [3, 'SU02A', 0, null, '1976-12-31', '1976-12-31'],
+            [4, 'SU03A', 0, null, null, null],
+            [5, 'SU04A', 0, null, '2026-11-13', '2026-11-13'],
+            [6, 'SU05A', 0, null, '1976-01-01', '2026-01-01'],
+        ]);
+        $service = new TaxonRarityService();
+        $before = $this->taxonCategoryMap();
+
+        $dryRun = $service->run(true);
+        $this->assertSame('success', $dryRun['status']);
+        $this->assertSame(6, $dryRun['updated']);
+        $this->assertSame($before, $this->taxonCategoryMap());
+
+        $result = $service->run();
+        $this->assertSame('success', $result['status']);
+        $this->assertSame(6, $result['fetched']);
+        $this->assertSame(6, $result['updated']);
+        $this->assertSame([
+            'FIRST-DAY' => 1,
+            'TODAY' => 1,
+            'OLD' => null,
+            'UNDATED' => null,
+            'FUTURE' => null,
+            'OVERLAPPING-RANGE' => null,
+        ], $this->taxonCategoryMap());
+        $this->assertSame(0, $service->run()['updated']);
+    }
+
+    /**
+     * Historical abundance contributes to neither recent occurrence nor square rankings.
+     */
+    public function testRunUsesConfiguredWindowForBothMetrics(): void
+    {
+        $this->seedTaxa([
+            [1, 'FORMERLY-COMMON', 'Window', 5],
+            [2, 'MIDDLE', 'Window', null],
+            [3, 'COMMON', 'Window', null],
+        ]);
+        $occurrences = [
+            [1, 'SU00A', 0, null, '2026-01-01'],
+            [2, 'SU01A', 0, null, '2026-01-01'],
+            [2, 'SU01B', 0, null, '2026-01-01'],
+            [3, 'SU02A', 0, null, '2026-01-01'],
+            [3, 'SU02B', 0, null, '2026-01-01'],
+            [3, 'SU02C', 0, null, '2026-01-01'],
+        ];
+
+        for ($square = 0; $square < 20; $square++) {
+            $occurrences[] = [1, sprintf('TV%02dA', $square), 0, null, '2000-12-31'];
+        }
+
+        $this->seedOccurrences($occurrences);
+        $config = config(Rarity::class);
+        $service = new TaxonRarityService();
+
+        $this->assertSame('success', $service->run()['status']);
+        $this->assertSame(5, $this->taxonCategoryMap()['FORMERLY-COMMON']);
+
+        $config->historyYears = 1;
+        // Check the metrics separately as well as together to catch either missing date filter.
+        foreach ([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]] as [$squareWeight, $occurrenceWeight]) {
+            $config->gridSquareWeight = $squareWeight;
+            $config->occurrenceWeight = $occurrenceWeight;
+            $this->assertSame('success', $service->run()['status']);
+            $this->assertSame([
+                'FORMERLY-COMMON' => 1,
+                'MIDDLE' => 3,
+                'COMMON' => 5,
+            ], $this->taxonCategoryMap());
+        }
+    }
+
+    /**
+     * Advancing the calendar year removes records that have aged out of the window.
+     */
+    public function testRunAdvancesWindowAtTheNewYear(): void
+    {
+        $this->seedTaxa([[1, 'AGED-OUT', 'Dates', 5]]);
+        $this->seedOccurrences([[1, 'SU00A', 0, null, '1977-12-31']]);
+        $service = new TaxonRarityService();
+        $this->assertSame('success', $service->run()['status']);
+        $this->assertSame(1, $this->taxonCategoryMap()['AGED-OUT']);
+
+        Time::setTestNow(Time::parse('2027-01-01 12:00:00'));
+
+        $this->assertSame('success', $service->run()['status']);
+        $this->assertNull($this->taxonCategoryMap()['AGED-OUT']);
+    }
+
+    /**
+     * Invalid history settings fail before any stored categories are changed.
+     */
+    public function testRunRejectsInvalidHistoryWindows(): void
+    {
+        $this->seedTaxa([[1, 'UNCHANGED', 'Dates', 5]]);
+
+        foreach ([0, -1, 2027, PHP_INT_MAX] as $historyYears) {
+            config(Rarity::class)->historyYears = $historyYears;
+            $result = (new TaxonRarityService())->run();
+
+            $this->assertSame('failed', $result['status']);
+            $this->assertSame(1, $result['errors']);
+            $this->assertSame(['UNCHANGED' => 5], $this->taxonCategoryMap());
+        }
+    }
+
+    /**
+     * Environment overrides accept whole positive years without silently truncating invalid values.
+     */
+    public function testHistoryYearsEnvironmentValidation(): void
+    {
+        $key = 'rarity.historyYears';
+        $previousEnv = $_ENV[$key] ?? null;
+        $previousServer = $_SERVER[$key] ?? null;
+
+        try {
+            $_ENV[$key] = $_SERVER[$key] = '10';
+            $this->assertSame(10, (new Rarity())->historyYears);
+
+            $_ENV[$key] = $_SERVER[$key] = '';
+            $this->assertSame(50, (new Rarity())->historyYears);
+
+            foreach (['0', '-1', '1.5', 'invalid'] as $value) {
+                $_ENV[$key] = $_SERVER[$key] = $value;
+
+                try {
+                    new Rarity();
+                    $this->fail('Invalid history years must be rejected: ' . $value);
+                } catch (InvalidArgumentException $exception) {
+                    $this->assertSame('rarity.historyYears must be a positive integer.', $exception->getMessage());
+                }
+            }
+        } finally {
+            unset($_ENV[$key], $_SERVER[$key]);
+
+            if ($previousEnv !== null) {
+                $_ENV[$key] = $previousEnv;
+            }
+
+            if ($previousServer !== null) {
+                $_SERVER[$key] = $previousServer;
+            }
+        }
     }
 
     /**
@@ -538,14 +714,17 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
     /**
      * Seed species occurrences with the species projection used by rarity aggregation.
      *
-     * @param array<int, array{0:int, 1:string|null, 2:int, 3:string|null}> $rows
+     * Dates default to a recent record; explicit null represents an undated occurrence.
+     *
+     * @param array<int, array{0:int, 1:string|null, 2:int, 3:string|null, 4?:string|null, 5?:string|null}> $rows Occurrences and optional start/end dates.
      */
     private function seedOccurrences(array $rows): void
     {
         $payload = [];
         $occurrenceId = 1;
 
-        foreach ($rows as [$taxonId, $gridRef2km, $blocked, $deletedAt]) {
+        foreach ($rows as $row) {
+            [$taxonId, $gridRef2km, $blocked, $deletedAt] = $row;
             $payload[] = [
                 'id' => $occurrenceId++,
                 'taxon_id' => $taxonId,
@@ -553,6 +732,8 @@ final class TaxonRarityServiceTest extends CIUnitTestCase
                 'grid_ref_2km' => $gridRef2km,
                 'blocked' => $blocked,
                 'deleted_at' => $deletedAt,
+                'from_date' => array_key_exists(4, $row) ? $row[4] : '2026-01-01',
+                'to_date' => array_key_exists(5, $row) ? $row[5] : '2026-01-01',
             ];
         }
 

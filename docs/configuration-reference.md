@@ -274,6 +274,10 @@ Defaults are `320x320`, `fit`, and `85` for `thumbnail`; and `1400x1400`,
 
 ## Derived rarity statistics
 
+- `rarity.historyYears`: calendar years of occurrence history used for rarity categories,
+  including the current year through today; defaults to `50`. Must be a positive integer no
+  greater than the current calendar year. Only occurrences whose `from_date` is in the window
+  qualify; undated and future-starting records are excluded. All-time taxon stats are unaffected.
 - `rarity.gridSquareWeight`: weight assigned to distinct active 2km squares;
   defaults to `1.0`.
 - `rarity.occurrenceWeight`: weight assigned to active occurrences; defaults
@@ -284,6 +288,7 @@ non-negative, with a positive finite sum; zero disables a metric. Invalid weight
 
 See [derived taxon rarity categories](import.md#derived-taxon-rarity-categories)
 for how these weights are applied.
+Rerun the taxon rarity task after changing the window; stored categories are not updated on read.
 
 ## Derived frequency trend statistics
 

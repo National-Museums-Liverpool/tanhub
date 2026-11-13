@@ -36,7 +36,7 @@ class TaxonRarity extends BaseCommand
      *
      * @var string
      */
-    protected $description = 'Recompute taxa.rarity_category from active occurrence counts and 2km grid square coverage.';
+    protected $description = 'Recompute taxa.rarity_category from recent active occurrence counts and 2km grid square coverage.';
 
     /**
      * The command's usage description for the --help Spark option.

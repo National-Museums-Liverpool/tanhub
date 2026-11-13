@@ -508,8 +508,8 @@ The task:
 
 - groups taxa by `rarity_group_name`
 - counts active occurrences per taxon (`occurrences.deleted_at IS NULL` and
-  `occurrences.blocked = 0`)
-- counts distinct active 2km grid squares per taxon from `occurrences.grid_ref_2km`
+  `occurrences.blocked = 0`) within the configured recent history window
+- counts distinct 2km grid squares from those same occurrences using `occurrences.grid_ref_2km`
 - converts each metric to a percentile within the rarity group:
   `100 * (RANK - 1) / (group size - 1)`, where `RANK - 1` is the number of species
   with a strictly lower count
@@ -527,15 +527,29 @@ The combined score is rounded to 12 decimal places before applying the bands, pr
 floating-point noise from moving an exact boundary into the lower category.
 A singleton scores zero and retains category `1`; an all-tied group also scores zero.
 
+`rarity.historyYears` defaults to 50 calendar years, including the current year through today
+in the application's timezone. For example, a run on 12 November 2026 includes start dates
+from 1 January 1977 to 12 November 2026, inclusive. A value of 1 includes only the current year
+through today. The window advances each January, preventing historical abundance from
+inflating present-day categories.
+
+Both counts require `occurrences.from_date` within that window. Undated and future-starting
+records are excluded. Date ranges qualify by their start date, not overlap: a range starting
+before the cutoff is excluded even if its end date falls inside the window. No end-date
+restriction is applied. Active, dated records without usable grid references still contribute
+to occurrence counts, but not square counts.
+
 The population includes active, non-excluded species (`taxa.species_id = taxa.id`) in a
-non-empty rarity group with at least one active occurrence. Species without active occurrences
-are excluded from both percentile populations and have `rarity_category` set to `NULL`, even
-if an earlier run assigned a category. Otherwise, a large unrecorded species list would inflate
-the apparent commonness of recorded species. Species with active occurrences but no mapped
-squares remain eligible; their square count is zero.
+non-empty rarity group with at least one qualifying occurrence in the window. Species without
+qualifying occurrences are excluded from both percentile populations and have `rarity_category`
+set to `NULL`, even if an earlier run assigned a category. This includes historical-only taxa;
+absence of recent data does not establish a rarity category. Otherwise, a large unrecorded
+species list would inflate the apparent commonness of recorded species. Species with qualifying
+occurrences but no mapped squares remain eligible; their square count is zero.
 
 Counts are recalculated from occurrences, not read from `taxon_stats`.
-Although `occupied_square_score` uses the same rank-gap formula, it excludes zero-square
+The all-time `taxon_stats` counts and `occupied_square_score` are unchanged by this window.
+Although `occupied_square_score` uses the same rank-gap formula, it also excludes zero-square
 species and uses 50 for a singleton, so it is not interchangeable with this calculation.
 
 For example, square and occurrence percentiles of 36 and 50 give a score of 43 with equal
@@ -545,6 +559,7 @@ can still compare species with different recording patterns.
 
 After deploying this scoring change, run `php spark stats:taxon-rarity` to replace stored
 categories; existing values do not change until the task runs successfully.
+Rerun after changing `rarity.historyYears` and as the calendar window advances.
 Alternatively, reset and run the taxon rarity task in the imports UI. One successful run processes
 the whole population; it is not paginated. The UI reset resets task progress, not stored categories.
 The fetched count includes unrecorded species checked for category cleanup and excluded species
@@ -567,6 +582,8 @@ Optional parameters:
 
 Configuration:
 
+- `rarity.historyYears` controls the number of calendar years, including the current year.
+  It must be a positive integer no greater than the current calendar year; default `50`.
 - `rarity.gridSquareWeight` controls the contribution from unique 2km squares.
 - `rarity.occurrenceWeight` controls the contribution from total active occurrences.
 
@@ -576,6 +593,7 @@ A zero weight disables that metric. Invalid weights fail the task without writin
 Example `env` overrides:
 
 ```dotenv
+rarity.historyYears = 50
 rarity.gridSquareWeight = 1.0
 rarity.occurrenceWeight = 1.0
 ```

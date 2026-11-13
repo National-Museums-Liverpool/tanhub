@@ -2,11 +2,12 @@
 
 namespace App\Services\Stats;
 
+use CodeIgniter\I18n\Time;
 use Config\Rarity;
 use InvalidArgumentException;
 
 /**
- * Recomputes taxon rarity categories from active occurrence coverage of recorded, non-excluded species.
+ * Recomputes taxon rarity categories from recent active occurrences of non-excluded species.
  */
 class TaxonRarityService
 {
@@ -29,7 +30,7 @@ class TaxonRarityService
      *
      * Excluded species do not influence peer rankings and have their categories cleared.
      * Removing an exclusion lets the species rejoin its group on the next recalculation.
-     * Species without active occurrences also have null categories and do not influence
+     * Species without active occurrences in the configured history window have null categories and do not influence
      * either metric's population. Fetched counts include these species for cleanup.
      *
      * @param bool $dryRun Whether persistence is disabled for this run.
@@ -51,6 +52,14 @@ class TaxonRarityService
             $db = db_connect();
             $prefix = $db->getPrefix();
             $config = config(Rarity::class);
+            $today = Time::now();
+            $currentYear = (int) $today->format('Y');
+
+            if ($config->historyYears < 1 || $config->historyYears > $currentYear) {
+                throw new InvalidArgumentException('rarity.historyYears must be between 1 and the current calendar year.');
+            }
+
+            $firstDate = sprintf('%04d-01-01', $currentYear - $config->historyYears + 1);
 
             $rows = $db->query(
                 'SELECT
@@ -68,13 +77,16 @@ class TaxonRarityService
                     ON o.species_id = t.id
                     AND o.deleted_at IS NULL
                     AND o.blocked = 0
+                    AND o.from_date >= ?
+                    AND o.from_date <= ?
                 WHERE t.deleted_at IS NULL
                     AND t.blocked = 0
                     AND t.species_id = t.id
                     AND t.exclude_from_rarity_calculations = 0
                     AND t.rarity_group_name IS NOT NULL
                     AND TRIM(t.rarity_group_name) <> ""
-                GROUP BY t.id, t.taxon_identifier, t.rarity_group_name, t.rarity_category'
+                GROUP BY t.id, t.taxon_identifier, t.rarity_group_name, t.rarity_category',
+                [$firstDate, $today->toDateString()],
             )->getResultArray();
 
             $excludedRows = $db->table('taxa')->select('id')

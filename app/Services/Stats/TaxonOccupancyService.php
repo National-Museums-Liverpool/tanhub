@@ -2,6 +2,9 @@
 
 namespace App\Services\Stats;
 
+use CodeIgniter\I18n\Time;
+use Config\TaxonOccupancy;
+use InvalidArgumentException;
 use RuntimeException;
 
 /**
@@ -18,14 +21,17 @@ class TaxonOccupancyService
      * A species is its own species projection, as in the existing rarity calculation.
      * Missing mapped coverage leaves percentages null and emits a warning. Coverage
      * exceeding the mapped denominator fails explicitly so work remains retryable.
+     * Counts use occurrence start dates in the configured calendar window, not all-time stats.
      *
+     * @throws InvalidArgumentException If the history window exceeds the supported calendar range.
      * @throws RuntimeException If occupied squares exceed the mapped denominator.
      */
     public function refresh(): void
     {
         $db = db_connect();
+        $recentCounts = $this->recentCounts();
         $rows = $db->table('taxon_stats ts')
-            ->select('ts.id, ts.geographic_region_id, ts.occurrences_count, ts.grid_square_count,
+            ->select('ts.id, ts.geographic_region_id,
                 t.id AS active_taxon_id, t.species_id, t.rarity_group_name, gr.id AS active_region_id')
             ->join('taxa t', 't.id = ts.taxon_id AND t.blocked = 0 AND t.deleted_at IS NULL', 'left')
             ->join('geographic_regions gr', 'gr.id = ts.geographic_region_id AND gr.deleted_at IS NULL', 'left')
@@ -64,14 +70,18 @@ class TaxonOccupancyService
             ];
             if ($row['active_taxon_id'] === null
                 || (int) $row['species_id'] !== (int) $row['active_taxon_id']
-                || (int) $row['occurrences_count'] === 0
                 || ($row['geographic_region_id'] !== null && $row['active_region_id'] === null)) {
                 continue;
             }
 
             $scope = $row['geographic_region_id'] === null ? 'global' : (string) $row['geographic_region_id'];
+            $counts = $recentCounts[$scope][(int) $row['active_taxon_id']] ?? null;
+            if ($counts === null) {
+                continue;
+            }
+
             $total = $denominators[$scope] ?? 0;
-            $occupied = (int) $row['grid_square_count'];
+            $occupied = (int) $counts['grid_square_count'];
             if ($total === 0) {
                 $missingCoverage[$scope] = true;
             } elseif ($occupied > $total) {
@@ -108,5 +118,53 @@ class TaxonOccupancyService
         foreach (array_chunk(array_values($updates), 500) as $chunk) {
             $db->table('taxon_stats')->updateBatch($chunk, 'id');
         }
+    }
+
+    /**
+     * Count distinct recent squares per species globally and within each recorded region.
+     *
+     * Query occurrences directly: summing yearly square counts would double-count squares
+     * recorded in multiple years. Ungridded records retain a zero-square scope.
+     *
+     * @return array<string|int, array<int, array<string, mixed>>> Counts keyed by scope and species ID.
+     *
+     * @throws InvalidArgumentException If the history window exceeds the supported calendar range.
+     */
+    private function recentCounts(): array
+    {
+        $today = Time::now();
+        $currentYear = (int) $today->format('Y');
+        $historyYears = config(TaxonOccupancy::class)->historyYears;
+
+        if ($historyYears < 1 || $historyYears > $currentYear) {
+            throw new InvalidArgumentException(
+                'taxonOccupancy.historyYears must be between 1 and the current calendar year.'
+            );
+        }
+
+        $counts = [];
+        foreach ([false, true] as $regional) {
+            $query = db_connect()->table('occurrences o')
+                ->select('o.species_id')
+                ->select('COUNT(DISTINCT NULLIF(UPPER(TRIM(o.grid_ref_2km)), "")) AS grid_square_count', false)
+                ->where('o.deleted_at', null)
+                ->where('o.blocked', 0)
+                ->where('o.species_id IS NOT NULL', null, false)
+                ->where('o.from_date >=', sprintf('%04d-01-01', $currentYear - $historyYears + 1))
+                ->where('o.from_date <=', $today->toDateString())
+                ->groupBy('o.species_id');
+            if ($regional) {
+                $query->select('gro.geographic_region_id')
+                    ->join('geographic_regions_occurrences gro', 'gro.occurrence_id = o.id')
+                    ->groupBy('gro.geographic_region_id');
+            }
+
+            foreach ($query->get()->getResultArray() as $row) {
+                $scope = $regional ? (string) $row['geographic_region_id'] : 'global';
+                $counts[$scope][(int) $row['species_id']] = $row;
+            }
+        }
+
+        return $counts;
     }
 }

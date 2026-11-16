@@ -657,8 +657,11 @@ the row whose `geographic_region_id` is null; regional decisions use that region
 decision scope has no statistics yet, the admin UI can create a zero-count row. Full and incremental
 statistics rebuilds preserve these curated fields and any decision-only scope rows.
 
-Occupancy measurements use all-time active occurrence counts and only apply to species (a taxon
-whose `species_id` is its own ID). Scores compare positive occupied-square counts within the same
+Occupancy measurements use active occurrences starting within `taxonOccupancy.historyYears`
+(default 50 calendar years, including the current year through today). Undated, future-starting
+and pre-window records are excluded; species without qualifying records have NULL measurements.
+All-time count columns are unaffected. Measurements only apply to species (a taxon whose
+`species_id` is its own ID). Scores compare positive occupied-square counts within the same
 trimmed `rarity_group_name` and scope: `100 * (RANK - 1) / (group size - 1)`, using SQL-style rank
 gaps for ties. A singleton receives 50. Equal counts share scores; an all-tied multi-species group
 receives 0, and tied maxima can be below 100. Missing groups, zero-square and decision-only rows

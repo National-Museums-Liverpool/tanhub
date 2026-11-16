@@ -150,6 +150,7 @@ Config\Import.indiciaOccurrencesEsEndpoint= 'es'
 
 # rarity.gridSquareWeight = 1.0
 # rarity.occurrenceWeight = 1.0
+# taxonOccupancy.historyYears = 50
 # taxonFrequencyTrend.gridSquareWeight = 1.0
 # taxonFrequencyTrend.occurrenceWeight = 1.0
 

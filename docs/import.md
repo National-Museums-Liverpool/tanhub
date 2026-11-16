@@ -650,7 +650,14 @@ The task:
 Occupied-square scores use SQL-style percent-rank (0 to 100), with equal counts tied and a
 singleton scoring 50. Only species with positive square counts and a non-empty rarity group enter
 rankings. Percentages are independent of rarity groups; global mapped coverage deduplicates
-overlapping regions. Both use all-time counts, not the frequency-trend window. See
+overlapping regions. Both use `taxonOccupancy.historyYears` (default `50`), independently of
+`rarity.historyYears` and the frequency-trend window. Only active occurrences starting between
+1 January of the first calendar year and today qualify; undated and future-starting records
+are excluded, as are date ranges starting before the cutoff. Squares recorded in multiple
+years count once per scope. Species without qualifying occurrences have both measurements
+cleared to `NULL`; qualifying ungridded records give a zero percentage when coverage exists.
+All-time occurrence and square counts remain unchanged. After changing this setting or as the
+calendar window advances, run `php spark stats:taxon-stats --restart` to refresh stored values. See
 [the schema contract](database.md#taxon_stats) for null values, ties and decision lifecycles.
 
 Mapped-square imports must finish before this task. Taxonomy, geographic-region and mapped-square

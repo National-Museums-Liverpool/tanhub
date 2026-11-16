@@ -3,7 +3,10 @@
 namespace Tests;
 
 use App\Services\Stats\TaxonStatsService;
+use CodeIgniter\I18n\Time;
 use CodeIgniter\Test\CIUnitTestCase;
+use Config\TaxonOccupancy;
+use InvalidArgumentException;
 
 /**
  * @internal
@@ -22,6 +25,8 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
     {
         parent::setUp();
 
+        Time::setTestNow(Time::parse('2026-11-12 12:00:00'));
+        config(TaxonOccupancy::class)->historyYears = 50;
         $this->db = db_connect();
         $prefix = $this->db->getPrefix();
 
@@ -174,6 +179,15 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
     }
 
     /**
+     * Restore the real clock after statistics tests.
+     */
+    protected function tearDown(): void
+    {
+        Time::setTestNow();
+        parent::tearDown();
+    }
+
+    /**
      * Verify global and regional aggregates exclude inactive occurrences.
      *
      * @return void
@@ -290,6 +304,7 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $this->assertSame(50.0, (float) $this->findTaxonStatRow(2, null)['occupied_square_score']);
         $this->assertSame(50.0, (float) $this->findTaxonStatRow(4, null)['occupied_square_score']);
         $this->db->table('taxon_stats')->update(['grid_square_count' => 1]);
+        $this->db->table('occurrences')->update(['grid_ref_2km' => 'SQ1']);
         $service->refresh();
         $this->assertSame(0.0, (float) $this->findTaxonStatRow(1, null)['occupied_square_score']);
         $this->assertSame(0.0, (float) $this->findTaxonStatRow(2, null)['occupied_square_score']);
@@ -308,6 +323,7 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         $this->addOccupancyStats(2, 0);
         $this->addOccupancyStats(4, 0);
         $this->db->table('taxon_stats')->where('taxon_id', 4)->update(['occurrences_count' => 0]);
+        $this->db->table('occurrences')->where('species_id', 4)->delete();
         $this->addOccupancyStats(5, 1);
         $this->db->table('taxa')->where('id', 5)->update(['species_id' => 1]);
         $this->addOccupancyStats(6, 1);
@@ -362,6 +378,8 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             'rarity_status' => 'rare', 'rarity_status_comment' => 'Retain expert decision',
             'rarity_status_decision_date' => '2026-01-01',
         ]);
+        $this->db->table('geographic_regions_occurrences')->emptyTable();
+        $this->db->table('occurrences')->emptyTable();
         $service = new TaxonStatsService();
         $service->resetFullRebuild();
         $this->assertSame('success', $this->runAllTaxonStatBatches($service)['status']);
@@ -406,9 +424,11 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
         }
         (new \App\Services\Stats\TaxonOccupancyService())->refresh();
         $this->assertSame(50.0, (float) $this->findTaxonStatRow(2, null)['occupied_square_score']);
+        $this->db->table('occurrences')->where('species_id', 1)->delete();
         for ($id = 1; $id <= 6; $id++) {
             $this->db->table('occurrences')->insert([
-                'id' => $id, 'taxon_id' => 1, 'grid_ref_2km' => 'SQ' . $id,
+                'taxon_id' => 1, 'species_id' => 1, 'grid_ref_2km' => 'SQ' . $id,
+                'from_date' => '2026-01-01',
             ]);
         }
         model(\App\Models\ImportOffsetModel::class)->setCompletion('derived-stats:taxon_stats', true);
@@ -417,6 +437,10 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             'projection' => 'exact', 'taxon_id' => 1,
         ]);
         $this->db->table('taxon_stats')->where('taxon_id', 4)->update(['grid_square_count' => 11]);
+        $this->db->table('occurrences')->insert([
+            'taxon_id' => 4, 'species_id' => 4, 'grid_ref_2km' => 'SQ11',
+            'from_date' => '2026-01-01',
+        ]);
         $service = new TaxonStatsService(new \App\Services\Stats\StatsDirtyScopeService());
         $failed = $service->run();
         $this->assertSame('failed', $failed['status']);
@@ -445,7 +469,7 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
     }
 
     /**
-     * Add a species and stored counts without requiring occurrence fixture hydration.
+     * Add a species, stored counts and matching recent occurrences, reusing squares across scopes.
      *
      * @param int $taxonId Species identifier.
      * @param int $squares Occupied-square count.
@@ -465,6 +489,149 @@ final class TaxonStatsServiceTest extends CIUnitTestCase
             'first_recorder' => '', 'last_recorder' => '',
             'first_verified_recorder' => '', 'last_verified_recorder' => '',
         ]);
+        for ($square = 1; $square <= max(1, $squares); $square++) {
+            $gridRef = $squares === 0 ? null : 'SQ' . $square;
+            $occurrence = $this->db->table('occurrences')
+                ->where('species_id', $taxonId)->where('grid_ref_2km', $gridRef)
+                ->get()->getRowArray();
+            if ($occurrence === null) {
+                $this->db->table('occurrences')->insert([
+                    'taxon_id' => $taxonId, 'species_id' => $taxonId,
+                    'grid_ref_2km' => $gridRef, 'from_date' => '2026-01-01',
+                ]);
+                $occurrenceId = $this->db->insertID();
+            } else {
+                $occurrenceId = $occurrence['id'];
+            }
+            if ($regionId !== null) {
+                $this->db->table('geographic_regions_occurrences')->insert([
+                    'geographic_region_id' => $regionId, 'occurrence_id' => $occurrenceId,
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Apply the independent history window to both metrics and scopes without changing all-time counts.
+     */
+    public function testOccupancyUsesConfiguredHistoryAndClearsAgedOutSpecies(): void
+    {
+        $this->seedMappedSquares();
+        $this->addOccupancyStats(1, 3);
+        $this->addOccupancyStats(1, 3, 11);
+        $this->addOccupancyStats(2, 2);
+        $this->addOccupancyStats(2, 2, 11);
+        $this->db->table('occurrences')->where('species_id', 1)
+            ->where('grid_ref_2km !=', 'SQ1')->update(['from_date' => '2000-12-31']);
+        $this->db->table('occurrences')->where('species_id', 1)
+            ->where('grid_ref_2km', 'SQ1')->update(['from_date' => '2026-11-12']);
+        $this->db->table('occurrences')->where('species_id', 2)
+            ->update(['from_date' => '2026-01-01']);
+        $service = new \App\Services\Stats\TaxonOccupancyService();
+        $service->refresh();
+        $this->assertSame(100.0, (float) $this->findTaxonStatRow(1, null)['occupied_square_score']);
+
+        config(TaxonOccupancy::class)->historyYears = 1;
+        $service->refresh();
+        foreach ([null, 11] as $regionId) {
+            $first = $this->findTaxonStatRow(1, $regionId);
+            $second = $this->findTaxonStatRow(2, $regionId);
+            $this->assertSame(0.0, (float) $first['occupied_square_score']);
+            $this->assertSame(100.0, (float) $second['occupied_square_score']);
+            $this->assertSame($regionId === null ? 10.0 : 12.5, (float) $first['occupied_square_percentage']);
+            $this->assertSame(3, (int) $first['grid_square_count']);
+        }
+
+        Time::setTestNow(Time::parse('2027-01-01'));
+        $service->refresh();
+        foreach ([null, 11] as $regionId) {
+            $this->assertNull($this->findTaxonStatRow(1, $regionId)['occupied_square_score']);
+            $this->assertNull($this->findTaxonStatRow(1, $regionId)['occupied_square_percentage']);
+        }
+    }
+
+    /**
+     * Include the default cutoff and today, excluding inactive, undated and out-of-window records.
+     */
+    public function testOccupancyFiltersStartDatesAndDeduplicatesSquaresAcrossYears(): void
+    {
+        $this->seedMappedSquares();
+        $this->addOccupancyStats(1, 1);
+        $this->db->table('occurrences')->update(['from_date' => '1977-01-01']);
+        foreach ([
+            ['from_date' => '2026-11-12', 'grid_ref_2km' => ' sq1 '],
+            ['from_date' => '2025-01-01', 'grid_ref_2km' => 'SQ1'],
+            ['from_date' => '1976-12-31', 'to_date' => '2026-01-01'],
+            ['from_date' => null],
+            ['from_date' => '2026-11-13'],
+            ['from_date' => '2026-01-01', 'blocked' => 1],
+            ['from_date' => '2026-01-01', 'deleted_at' => '2026-02-01'],
+        ] as $occurrence) {
+            $this->db->table('occurrences')->insert(array_merge([
+                'taxon_id' => 2, 'species_id' => 1, 'grid_ref_2km' => 'SQ2',
+            ], $occurrence));
+        }
+        (new \App\Services\Stats\TaxonOccupancyService())->refresh();
+        $this->assertSame(10.0, (float) $this->findTaxonStatRow(1, null)['occupied_square_percentage']);
+        $this->assertSame(50.0, (float) $this->findTaxonStatRow(1, null)['occupied_square_score']);
+    }
+
+    /**
+     * Reject invalid runtime windows before modifying stored measurements.
+     */
+    public function testOccupancyRejectsInvalidHistoryWindows(): void
+    {
+        $this->seedMappedSquares();
+        $this->addOccupancyStats(1, 1);
+        $service = new \App\Services\Stats\TaxonOccupancyService();
+        $service->refresh();
+        $before = $this->findTaxonStatRow(1, null);
+        foreach ([0, -1, 2027, PHP_INT_MAX] as $years) {
+            config(TaxonOccupancy::class)->historyYears = $years;
+            try {
+                $service->refresh();
+                $this->fail('Invalid occupancy history must fail.');
+            } catch (InvalidArgumentException $exception) {
+                $this->assertSame(
+                    'taxonOccupancy.historyYears must be between 1 and the current calendar year.',
+                    $exception->getMessage()
+                );
+            }
+            $this->assertSame($before, $this->findTaxonStatRow(1, null));
+        }
+    }
+
+    /**
+     * Validate environment overrides without truncating fractional or malformed years.
+     */
+    public function testOccupancyHistoryEnvironmentValidation(): void
+    {
+        $key = 'taxonOccupancy.historyYears';
+        $previousEnv = $_ENV[$key] ?? null;
+        $previousServer = $_SERVER[$key] ?? null;
+        try {
+            $_ENV[$key] = $_SERVER[$key] = '10';
+            $this->assertSame(10, (new TaxonOccupancy())->historyYears);
+            $_ENV[$key] = $_SERVER[$key] = '';
+            $this->assertSame(50, (new TaxonOccupancy())->historyYears);
+            foreach (['0', '-1', '1.5', 'invalid'] as $value) {
+                $_ENV[$key] = $_SERVER[$key] = $value;
+                try {
+                    new TaxonOccupancy();
+                    $this->fail('Invalid history must be rejected: ' . $value);
+                } catch (InvalidArgumentException $exception) {
+                    $this->assertSame('taxonOccupancy.historyYears must be a positive integer.', $exception->getMessage());
+                }
+            }
+        } finally {
+            unset($_ENV[$key], $_SERVER[$key]);
+            if ($previousEnv !== null) {
+                $_ENV[$key] = $previousEnv;
+            }
+            if ($previousServer !== null) {
+                $_SERVER[$key] = $previousServer;
+            }
+        }
     }
 
     /**

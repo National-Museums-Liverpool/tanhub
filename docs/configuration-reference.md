@@ -290,6 +290,17 @@ See [derived taxon rarity categories](import.md#derived-taxon-rarity-categories)
 for how these weights are applied.
 Rerun the taxon rarity task after changing the window; stored categories are not updated on read.
 
+## Derived occupancy statistics
+
+- `taxonOccupancy.historyYears`: calendar years of occurrence history used for
+  `occupied_square_percentage` and `occupied_square_score`, including the current year through
+  today; defaults to `50`. Must be a positive integer no greater than the current calendar year.
+  Only active occurrences whose `from_date` is in the window qualify. This setting is independent
+  of `rarity.historyYears`; all-time counts and mapped-square denominators are unaffected.
+
+Run `php spark stats:taxon-stats --restart` after changing the window or as the calendar window
+advances. Stored measurements are not updated on read.
+
 ## Derived frequency trend statistics
 
 - `taxonFrequencyTrend.gridSquareWeight`: weight assigned to the occupied 2km

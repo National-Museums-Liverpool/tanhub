@@ -150,6 +150,62 @@ final class NbnAtlasOccurrencesAdapterTest extends CIUnitTestCase
     }
 
     /**
+     * Verify name arrays are joined while strings and missing values are preserved.
+     */
+    public function testFetchPageNormalizesRecorderAndIdentifierNames(): void
+    {
+        $response = $this->createMock(ResponseInterface::class);
+        $response->method('getStatusCode')->willReturn(200);
+        $response->method('getBody')->willReturn((string) json_encode([
+            'occurrences' => [
+                [
+                    'recordedBy' => ['Recorder One', 'Recorder Two'],
+                    'identifiedBy' => ['Identifier One', 'Identifier Two'],
+                ],
+                [
+                    'recorded_by' => ['Recorder One'],
+                    'identified_by' => ['Identifier One'],
+                    'recordedBy' => ['Ignored Recorder'],
+                    'identifiedBy' => ['Ignored Identifier'],
+                ],
+                [
+                    'recordedBy' => ' Recorder One; Recorder Two ',
+                    'identifiedBy' => ' Identifier One; Identifier Two ',
+                ],
+                ['recorded_by' => 'Recorder One', 'identified_by' => 'Identifier One'],
+                ['recordedBy' => [], 'identifiedBy' => []],
+                [],
+            ],
+        ], JSON_THROW_ON_ERROR));
+
+        $client = $this->createMock(CURLRequest::class);
+        $client->method('get')->willReturn($response);
+
+        $page = (new NbnAtlasOccurrencesAdapter(
+            $client,
+            ['endpoint' => 'https://example.test/nbn'],
+            10,
+        ))->fetchPage(null, 10);
+
+        $this->assertSame([
+            'Recorder One; Recorder Two',
+            'Recorder One',
+            ' Recorder One; Recorder Two ',
+            'Recorder One',
+            '',
+            null,
+        ], array_column($page->records, 'recorded_by'));
+        $this->assertSame([
+            'Identifier One; Identifier Two',
+            'Identifier One',
+            ' Identifier One; Identifier Two ',
+            'Identifier One',
+            '',
+            null,
+        ], array_column($page->records, 'identified_by'));
+    }
+
+    /**
      * Verify NBN verification status values are standardized for stats.
      *
      * @return void

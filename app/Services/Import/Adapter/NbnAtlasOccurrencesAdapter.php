@@ -345,12 +345,15 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
 
         $eventDate = $record['eventDate'] ?? $record['event']['eventDate'] ?? $this->eventDateFromParts($record);
         [$fromDate, $toDate] = $this->normalizeEventDate($eventDate);
-        $verificationStatus = $record['identification_verification_status'] ?? $record['identificationVerificationStatus'] ?? 'Un';
-        if ($verificationStatus === 'Ac') {
+        $verificationStatus = $record['identification_verification_status'] ?? $record['identificationVerificationStatus'] ?? 'Unverified';
+        if (substr($verificationStatus, 0, 2) === 'Ac') {
             $verificationStatus = 'V';
-        } elseif ($verificationStatus === 'Un') {
+        } elseif (substr($verificationStatus, 0, 2) === 'Un') {
             $verificationStatus = null;
         }
+
+        $recordedBy = $record['recorded_by'] ?? $record['recordedBy'] ?? null;
+        $identifiedBy = $record['identified_by'] ?? $record['identifiedBy'] ?? null;
 
         return [
             'remote_id' => $remoteId,
@@ -365,8 +368,8 @@ class NbnAtlasOccurrencesAdapter implements OccurrenceSourceAdapterInterface
             'grid_ref_system' => $gridRefSystem,
             'grid_ref_2km' => $gridRef2km,
             'locality' => $record['locality'] ?? null,
-            'recorded_by' => $record['recorded_by'] ?? $record['recordedBy'] ?? null,
-            'identified_by' => $record['identified_by'] ?? $record['identifiedBy'] ?? null,
+            'recorded_by' => is_array($recordedBy) ? implode('; ', $recordedBy) : $recordedBy,
+            'identified_by' => is_array($identifiedBy) ? implode('; ', $identifiedBy) : $identifiedBy,
             'identification_verification_status' => $verificationStatus,
             'sex' => $record['sex'] ?? null,
             'life_stage' => $record['life_stage'] ?? null,

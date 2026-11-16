@@ -6,4 +6,5 @@
 
 <?= $this->section('scripts') ?>
 <script src="<?= esc(base_url('js/taxon-search.js')) ?>" defer></script>
+<script src="<?= esc(base_url('js/search-filters.js')) ?>" defer></script>
 <?= $this->endSection() ?>

@@ -23,14 +23,16 @@ $rows = $page[$path];
 
         <?= $this->include('search/filters') ?>
 
-        <p class="text-muted"><?= esc((string) $page['total']) ?> <?= $taxa ? 'taxa' : 'occurrences' ?> found.</p>
+        <?php if (! $page['editingFilters']): ?>
+            <p class="text-muted"><?= esc((string) $page['total']) ?> <?= $taxa ? 'taxa' : 'occurrences' ?> found.</p>
+        <?php endif; ?>
         <div class="table-responsive">
             <table class="table table-striped table-hover align-middle">
                 <thead>
                 <tr>
                     <?php foreach ($columns as $key => $label): ?>
                         <th scope="col">
-                            <?php if ($key === 'regions'): ?>
+                            <?php if ($key === 'regions' || $page['editingFilters']): ?>
                                 <?= esc($label) ?>
                             <?php else: ?>
                                 <?php
@@ -52,7 +54,8 @@ $rows = $page[$path];
                 <?php if ($rows === []): ?>
                     <tr>
                         <td colspan="<?= count($columns) + 1 ?>" class="text-muted">
-                            <?= $page['errors'] === [] ? 'No ' . esc(strtolower($title)) . ' found.' : 'Correct the search errors to see results.' ?>
+                            <?= $page['editingFilters'] ? 'Select Search to apply your conditions.'
+                                : ($page['errors'] === [] ? 'No ' . esc(strtolower($title)) . ' found.' : 'Correct the search errors to see results.') ?>
                         </td>
                     </tr>
                 <?php else: ?>

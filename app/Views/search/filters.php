@@ -1,37 +1,17 @@
 <?php
 /**
- * Shared staff filters supplied by TaxonSearchService::page().
+ * Shared typed staff filters supplied by TaxonSearchService::page().
  *
- * The selected ID is submitted separately from its editable name. The server-rendered
- * selection list remains usable without JavaScript and is enhanced by taxon-search.js.
+ * Rows are server rendered so editing and taxon selection remain usable without
+ * JavaScript. The browser only enhances this same GET contract.
  *
- * @var array<string, mixed> $page Search state, validation errors and reference options.
+ * @var array<string, mixed> $page Rows, field metadata, choices and validated search state.
  */
 $filters = $page['filters'];
-$taxa = $page['isTaxa'];
-$path = $taxa ? 'taxa' : 'occurrences';
-$labels = $page['filterLabels'];
-$options = [
-    'geographic_region_id' => ['rows' => $page['regions'], 'field' => 'higher_geography'],
-    'taxon_group_id' => ['rows' => $page['groups'], 'field' => 'title'],
-    'recording_scheme_id' => ['rows' => $page['recordingSchemes'], 'field' => 'title'],
-];
-foreach ($page['classifications'] as $alias => $rank) {
-    $options[$alias . '_id'] = ['rows' => $page['classificationOptions'][$alias], 'field' => 'scientific_name'];
-}
-if ($taxa) {
-    $options['rank_id'] = ['rows' => $page['ranks'], 'field' => 'rank'];
-}
-$selected = $page['selectedTaxon'];
-$taxonLabel = $selected === null ? $filters['taxon_name']
-    : $selected['scientific_name'] . (empty($selected['vernacular_name']) ? '' : ' - ' . $selected['vernacular_name']);
-// Expose active/invalid controls so a collapsed panel cannot conceal restrictive criteria.
-$advancedActive = false;
-foreach ($filters as $key => $value) {
-    if ($key !== 'q') {
-        $advancedActive = $advancedActive || $value !== '' || isset($page['errors'][$key]);
-    }
-}
+$path = $page['isTaxa'] ? 'taxa' : 'occurrences';
+$rows = $page['conditionRows'];
+$active = $rows !== [] || $page['errors'] !== [];
+$rows = $rows === [] ? [['field' => '', 'value' => '']] : $rows;
 ?>
 <?php if ($page['errors'] !== []): ?>
     <div class="alert alert-danger" role="alert">
@@ -43,133 +23,80 @@ foreach ($filters as $key => $value) {
         </ul>
     </div>
 <?php endif; ?>
-<form class="row g-3 mb-4" method="get" action="<?= esc(site_url($path)) ?>" data-taxon-search="<?= esc(site_url('taxon-search')) ?>">
+<?php if ($page['editingFilters']): ?>
+    <div class="alert alert-info" role="status">Filters updated. Complete the values and select Search to apply them.</div>
+<?php endif; ?>
+<form class="row g-3 mb-4" method="get" action="<?= esc(site_url($path)) ?>" data-filter-builder data-taxon-search="<?= esc(site_url('taxon-search')) ?>">
+    <input type="hidden" name="filter_form" value="1">
     <input type="hidden" name="sort" value="<?= esc($page['sort']) ?>">
     <input type="hidden" name="direction" value="<?= esc($page['direction']) ?>">
     <div class="col-12 col-lg-6">
-        <label class="form-label" for="q"><?= esc($labels['q']) ?></label>
-        <input class="form-control <?= isset($page['errors']['q']) ? 'is-invalid' : '' ?>" id="q" name="q" type="search" maxlength="200" value="<?= esc($filters['q']) ?>" placeholder="Search <?= esc($path) ?>...">
-        <?php if (isset($page['errors']['q'])): ?><div class="invalid-feedback"><?= esc($page['errors']['q']) ?></div><?php endif; ?>
+        <label class="form-label" for="q">Search any descriptive field</label>
+        <input class="form-control" id="q" name="q" type="search" maxlength="200" value="<?= esc($filters['q']) ?>" placeholder="Search <?= esc($path) ?>...">
     </div>
     <div class="col-12 col-lg-auto d-flex align-items-lg-end gap-2">
         <button class="btn btn-brand" type="submit">Search</button>
         <a class="btn btn-outline-secondary" href="<?= esc(site_url($path)) ?>">Clear</a>
-        <?php if ($page['errors'] === []): ?>
+        <?php if ($page['errors'] === [] && ! $page['editingFilters']): ?>
             <a class="btn btn-outline-brand" href="<?= esc(site_url('exports/new') . '?' . http_build_query(
                 $filters + ['resource' => $path, 'sort' => $page['sort'], 'direction' => $page['direction'],
                     'estimated_total' => $page['total']]
-            )) ?>" title="Download the displayed search; apply any edited filters with Search first.">Download CSV</a>
+            )) ?>" title="Download the applied search; select Search first after editing.">Download CSV</a>
         <?php endif; ?>
     </div>
     <div class="col-12">
-        <details id="advanced-search" <?= $advancedActive ? 'open' : '' ?>>
-            <summary class="mb-2">Advanced<?= $advancedActive ? ' (filters active)' : '' ?></summary>
-            <div class="row g-3 border rounded-3 bg-body-tertiary p-3 mx-0 mt-0">
-                <?php foreach ($page['attributeDefinitions'] ?? [] as $attributeKey => $definition): ?>
-                    <?php
-                    $field = 'attribute__' . $attributeKey;
-                    $submitted = $filters[$field] ?? [];
-                    $submitted = is_array($submitted) ? $submitted : ['eq' => $submitted];
-                    $selectedTerms = $submitted['in'] ?? $submitted['eq'] ?? [];
-                    $selectedTerms = is_array($selectedTerms) ? $selectedTerms : explode(',', (string) $selectedTerms);
-                    ?>
-                    <div class="col-12 col-md-6" id="<?= esc($field) ?>">
-                        <label class="form-label" for="<?= esc($field . '_value') ?>"><?= esc($definition['label']) ?></label>
-                        <?php if ($definition['type'] === 'term'): ?>
-                            <select class="form-select" multiple id="<?= esc($field . '_value') ?>" name="<?= esc($field) ?>[in][]">
-                                <?php
-                                $choices = $page['attributeChoices'][$attributeKey] ?? [];
-                                $available = array_column($choices, 'term_key');
-                                ?>
-                                <?php foreach ($choices as $choice): ?>
-                                    <option value="<?= esc($choice['term_key']) ?>" <?= in_array($choice['term_key'], $selectedTerms, true) ? 'selected' : '' ?>><?= esc($choice['label']) ?></option>
-                                <?php endforeach; ?>
-                                <?php foreach ($selectedTerms as $selectedTerm): ?>
-                                    <?php if (is_string($selectedTerm) && ! in_array($selectedTerm, $available, true)): ?>
-                                        <option selected value="<?= esc($selectedTerm) ?>">Unavailable: <?= esc($selectedTerm) ?></option>
-                                    <?php endif; ?>
-                                <?php endforeach; ?>
-                            </select>
-                            <div class="form-text">Match any selected value.</div>
-                        <?php else: ?>
-                            <div class="d-flex gap-2">
-                                <input class="form-control" type="number" step="1" id="<?= esc($field . '_value') ?>" name="<?= esc($field) ?>[gte]" value="<?= esc(is_scalar($submitted['gte'] ?? '') ? (string) ($submitted['gte'] ?? '') : '') ?>" aria-label="<?= esc($definition['label'] . ' minimum') ?>" placeholder="Minimum">
-                                <input class="form-control" type="number" step="1" name="<?= esc($field) ?>[lte]" value="<?= esc(is_scalar($submitted['lte'] ?? '') ? (string) ($submitted['lte'] ?? '') : '') ?>" aria-label="<?= esc($definition['label'] . ' maximum') ?>" placeholder="Maximum">
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                <?php endforeach; ?>
-                <div class="col-12 col-md-6 col-lg-3">
-                    <label class="form-label" for="year"><?= esc($labels['year']) ?></label>
-                    <input class="form-control <?= isset($page['errors']['year']) ? 'is-invalid' : '' ?>" id="year" name="year" value="<?= esc($filters['year']) ?>" placeholder="e.g. 2010 or 2010-2015" aria-describedby="year-help">
-                    <div class="form-text" id="year-help">Single year, range, 2010- or -2015. Record dates must be fully contained.</div>
-                    <?php if (isset($page['errors']['year'])): ?><div class="invalid-feedback"><?= esc($page['errors']['year']) ?></div><?php endif; ?>
-                </div>
-                <?php foreach ($options as $key => $option): ?>
-                    <div class="col-12 col-md-6 col-lg-3">
-                        <label class="form-label" for="<?= esc($key) ?>"><?= esc($labels[$key]) ?></label>
-                        <select class="form-select <?= isset($page['errors'][$key]) ? 'is-invalid' : '' ?>" id="<?= esc($key) ?>" name="<?= esc($key) ?>">
-                            <option value="">All</option>
-                            <?php foreach ($option['rows'] as $row): ?>
-                                <?php $label = $key === 'taxon_group_id' && ! empty($row['friendly']) ? $row['friendly'] : $row[$option['field']]; ?>
-                                <option value="<?= esc((string) $row['id']) ?>" <?= $filters[$key] === (string) $row['id'] ? 'selected' : '' ?>><?= esc($label) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <?php if (isset($page['errors'][$key])): ?><div class="invalid-feedback"><?= esc($page['errors'][$key]) ?></div><?php endif; ?>
-                    </div>
-                <?php endforeach; ?>
-                <div class="col-12 col-lg-6 position-relative">
-                    <label class="form-label" for="taxon_name"><?= esc($labels['taxon_name']) ?></label>
-                    <input class="form-control <?= isset($page['errors']['taxon_name']) ? 'is-invalid' : '' ?>" id="taxon_name" name="taxon_name" type="search" maxlength="200" autocomplete="off" value="<?= esc($taxonLabel) ?>" aria-describedby="taxon-help taxon-status">
-                    <div class="form-text" id="taxon-help">Search scientific, vernacular or synonymous names and select a taxon.</div>
-                    <div id="taxon-status" class="form-text" role="status" aria-live="polite"></div>
-                    <ul class="list-group position-absolute start-0 end-0 mx-3 shadow z-3 overflow-auto" id="taxon-suggestions" style="max-height: 20rem" hidden></ul>
-                    <?php if (isset($page['errors']['taxon_name'])): ?><div class="invalid-feedback"><?= esc($page['errors']['taxon_name']) ?></div><?php endif; ?>
-                    <div data-taxon-fallback>
-                        <label class="form-label mt-2" for="taxon_id"><?= esc($labels['taxon_id']) ?></label>
-                        <select class="form-select <?= isset($page['errors']['taxon_id']) ? 'is-invalid' : '' ?>" id="taxon_id" name="taxon_id">
-                            <option value="">No selection</option>
-                            <?php if ($selected !== null): ?>
-                                <option value="<?= esc((string) $selected['id']) ?>" selected><?= esc($taxonLabel) ?></option>
-                            <?php endif; ?>
-                            <?php foreach ($page['taxonMatches'] as $match): ?>
-                                <option value="<?= esc((string) $match['id']) ?>"><?= esc($match['scientific_name'] . ' - ' . $match['vernacular_name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <div class="form-text">Without JavaScript: enter a name and Search to load up to 20 choices; select one and Search again to include descendants.</div>
-                    </div>
-                    <?php if (isset($page['errors']['taxon_id'])): ?><div class="text-danger small"><?= esc($page['errors']['taxon_id']) ?></div><?php endif; ?>
-                </div>
-                <div class="col-12 col-md-4">
-                    <label class="form-label" for="data_source_id"><?= esc($labels['data_source_id']) ?></label>
-                    <select class="form-select <?= isset($page['errors']['data_source_id']) ? 'is-invalid' : '' ?>" id="data_source_id" name="data_source_id">
-                        <option value="">All</option>
-                        <?php foreach ($page['dataSources'] as $source): ?>
-                            <option value="<?= esc((string) $source['id']) ?>" <?= $filters['data_source_id'] === (string) $source['id'] ? 'selected' : '' ?>><?= esc($source['title']) ?></option>
+        <details id="advanced-search" <?= $active ? 'open' : '' ?>>
+            <summary class="mb-2">Advanced<?= $active ? ' (filters active or being edited)' : '' ?></summary>
+            <div class="border rounded-3 bg-body-tertiary p-3">
+                <p class="form-text mt-0">All rows must match (AND). Multiple choices within one row match any selected value.</p>
+                <div class="mb-3">
+                    <label class="form-label" for="stats_scope">Statistics scope</label>
+                    <select class="form-select" id="stats_scope" name="stats_scope" aria-describedby="statistics-help">
+                        <option value="global" <?= $page['statisticsScope'] === 'global' ? 'selected' : '' ?>>Global</option>
+                        <?php foreach ($page['regions'] as $region): ?>
+                            <option value="<?= esc((string) $region['id']) ?>" <?= $page['statisticsScope'] === (string) $region['id'] ? 'selected' : '' ?>><?= esc($region['higher_geography']) ?></option>
                         <?php endforeach; ?>
+                        <?php if (isset($page['errors']['stats_scope'])): ?>
+                            <option selected value="<?= esc($page['statisticsScope']) ?>">Unavailable selection</option>
+                        <?php endif; ?>
                     </select>
-                    <?php if (isset($page['errors']['data_source_id'])): ?><div class="invalid-feedback"><?= esc($page['errors']['data_source_id']) ?></div><?php endif; ?>
+                    <div class="form-text" id="statistics-help">
+                        Stored statistics describe the exact accepted taxon in this scope and exclude blocked evidence.
+                        Occurrence year, region and source filters do not recalculate them. Scope alone does not filter rows.
+                        Missing statistics are not zero; decision-only rows can have zero counts.
+                        Occupancy score is a rarity-group percentile; occupancy percentage measures mapped area.
+                        Occupancy and curated rarity status apply to species, without inheritance.
+                        <?= esc($page['statisticsHelp']) ?>
+                    </div>
                 </div>
-                <?php foreach (['taxon_blocked', 'blocked'] as $key): ?>
-                    <div class="col-12 col-md-4">
-                        <label class="form-label" for="<?= esc($key) ?>"><?= esc($labels[$key]) ?></label>
-                        <select class="form-select <?= isset($page['errors'][$key]) ? 'is-invalid' : '' ?>" id="<?= esc($key) ?>" name="<?= esc($key) ?>">
-                            <?php foreach (['' => 'All', '0' => 'No', '1' => 'Yes'] as $value => $text): ?>
-                                <option value="<?= esc((string) $value) ?>" <?= $filters[$key] === (string) $value ? 'selected' : '' ?>><?= esc($text) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <?php if (isset($page['errors'][$key])): ?><div class="invalid-feedback"><?= esc($page['errors'][$key]) ?></div><?php endif; ?>
-                    </div>
-                <?php endforeach; ?>
-                <?php foreach (['from_date', 'to_date'] as $key): ?>
-                    <div class="col-12 col-md-4">
-                        <label class="form-label" for="<?= esc($key) ?>"><?= esc($labels[$key]) ?></label>
-                        <input class="form-control <?= isset($page['errors'][$key]) ? 'is-invalid' : '' ?>" type="date" id="<?= esc($key) ?>" name="<?= esc($key) ?>" value="<?= esc($filters[$key]) ?>">
-                        <?php if (isset($page['errors'][$key])): ?><div class="invalid-feedback"><?= esc($page['errors'][$key]) ?></div><?php endif; ?>
-                    </div>
-                <?php endforeach; ?>
-                <div class="col-12 form-text">Year and precise date filters both apply. Blocked data is included unless excluded above.</div>
+                <div data-filter-rows id="conditions">
+                    <?php foreach ($rows as $index => $row): ?>
+                        <?= view('search/condition-row', ['page' => $page, 'index' => $index, 'row' => $row]) ?>
+                    <?php endforeach; ?>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-outline-brand" type="submit" name="filter_action" value="add" data-add-filter formnovalidate>Add condition</button>
+                    <noscript>
+                        <button class="btn btn-outline-secondary" type="submit" name="filter_action" value="refresh" formnovalidate>Update fields</button>
+                    </noscript>
+                </div>
+                <noscript>
+                    <div class="form-text">Choose a field then Update fields to load its controls.
+                        For Taxon (including descendants), enter a name and Update fields to load choices,
+                        then select one. Select Search to apply your filters.</div>
+                </noscript>
+                <div class="form-text">Year accepts 2010, 2010-2015, 2010- or -2015; complete record intervals must fit.
+                    Blocked data is included unless explicitly excluded. Up to 50 conditions.</div>
+                <div class="form-text" data-filter-status role="status" aria-live="polite"></div>
             </div>
         </details>
     </div>
+    <script type="application/json" data-filter-schema><?= json_encode(
+        ['fields' => $page['searchFields'], 'choices' => $page['fieldChoices']],
+        JSON_THROW_ON_ERROR | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+    ) ?></script>
+    <template data-filter-template><?= view('search/condition-row', [
+        'page' => $page, 'index' => '__INDEX__', 'row' => ['field' => '', 'value' => ''],
+    ]) ?></template>
+    <input type="hidden" name="filter_complete" value="1">
 </form>

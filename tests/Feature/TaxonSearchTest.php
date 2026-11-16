@@ -154,6 +154,216 @@ final class TaxonSearchTest extends CIUnitTestCase
     }
 
     /**
+     * Build one condition using the public bookmark contract.
+     *
+     * @param string $field Available field key.
+     * @param string $operator Typed operator.
+     * @param string|list<string> $value Scalar or any-of choices.
+     * @param string $upper Inclusive range endpoint.
+     * @return array<string, mixed> Submitted row.
+     */
+    private function condition(string $field, string $operator, string|array $value = '', string $upper = ''): array
+    {
+        return ['field' => $field, 'operator' => $operator, 'value' => $value, 'upper' => $upper];
+    }
+
+    /**
+     * Seed derived and decision-only scopes without running background rebuilds.
+     *
+     * @param int $taxon Taxon owning the stored row.
+     * @param int|null $region Region, or global.
+     * @param array<string, mixed> $values Measurements and curated decisions.
+     */
+    private function statistics(int $taxon, ?int $region, array $values): void
+    {
+        db_connect()->table('taxon_stats')->insert($values + [
+            'uuid' => \App\Services\Stats\TaxonStatsIdentity::uuidForScope($taxon, $region),
+            'taxon_id' => $taxon, 'geographic_region_id' => $region,
+            'occurrences_count' => 0, 'grid_square_count' => 0,
+            'first_recorder' => '', 'last_recorder' => '',
+            'first_verified_recorder' => '', 'last_verified_recorder' => '',
+        ]);
+    }
+
+    /**
+     * Scope and three-state key-species decisions agree on both indexes without inheritance.
+     */
+    public function testScopedKeySpeciesAndMissingStatisticsOnBothIndexes(): void
+    {
+        $this->statistics(40, null, ['key_species' => 1, 'occurrences_count' => 12]);
+        $this->statistics(40, 1, ['key_species' => 0]);
+        $this->statistics(41, 1, ['key_species' => 1, 'occurrences_count' => 3]);
+        foreach ([
+            ['global', '1', [40], [2, 4, 5, 6]],
+            ['1', '1', [41], [1]], ['1', '0', [40], [2, 4, 5, 6]],
+        ] as [$scope, $flag, $taxa, $occurrences]) {
+            $input = ['stats_scope' => $scope,
+                'conditions' => [$this->condition('stats__key_species', 'in', [$flag])]];
+            $this->assertSame($taxa, $this->ids($input));
+            $this->assertSame($occurrences, $this->ids($input, false));
+        }
+        $unset = ['stats_scope' => '1', 'conditions' => [$this->condition('stats__key_species', 'empty')]];
+        $this->assertSame([10, 20, 21, 30, 31, 42, 50, 51], $this->ids($unset));
+        $this->assertSame([3, 8, 9], $this->ids($unset, false));
+        $this->assertSame([40], $this->ids(['stats_scope' => '1',
+            'conditions' => [$this->condition('stats__occurrences_count', 'eq', '0')]]));
+        $this->assertCount(10, $this->ids(['stats_scope' => '1']));
+        $this->assertSame([], $this->ids(['stats_scope' => '1', 'conditions' => [
+            $this->condition('stats__available', 'eq', '0'),
+            $this->condition('stats__occurrences_count', 'eq', '0'),
+        ]]));
+        $input = ['stats_scope' => '1', 'conditions' => [
+            $this->condition('stats__key_species', 'in', ['0']),
+            $this->condition('geographic_region_id', 'eq', '2'),
+            $this->condition('year', 'eq', '2010'),
+        ]];
+        $this->assertSame([40], $this->ids($input));
+        $this->assertSame([], $this->ids($input, false));
+        $fields = (new TaxonSearchService())->fields(false);
+        $this->assertArrayNotHasKey('stats__key_species_comment', $fields);
+        $this->assertArrayNotHasKey('stats__key_species_decision_date', $fields);
+    }
+
+    /**
+     * Numeric/date boundaries preserve NULL, zero and full precision in ID-only queries too.
+     */
+    public function testStatisticsRangesDatesAndIdOnlyQueries(): void
+    {
+        $this->statistics(40, null, ['occurrences_count' => 5, 'occupied_square_score' => 100,
+            'occupied_square_percentage' => 0, 'mean_occurrences_per_year' => 1.2345,
+            'last_record_date' => '2010-12-31', 'frequency_trend_state' => 'decreasing']);
+        $this->statistics(41, null, ['occupied_square_score' => 0]);
+        $input = ['stats_scope' => 'global', 'conditions' => [
+            $this->condition('stats__occupied_square_score', 'between', '0', '100'),
+            $this->condition('stats__mean_occurrences_per_year', 'gte', '1.2345'),
+            $this->condition('stats__last_record_date', 'lte', '2010-12-31'),
+        ]];
+        $search = new TaxonSearchService();
+        foreach ([true, false] as $taxa) {
+            $expected = $taxa ? [40] : [2, 4, 5, 6];
+            $this->assertSame($expected, $this->ids($input, $taxa));
+            $criteria = $search->criteria($input, $taxa);
+            $this->assertSame($expected, array_map('intval', array_column(
+                $search->query($criteria, $taxa, null, true)->orderBy($taxa ? 't.id' : 'o.id')
+                    ->get()->getResultArray(), 'id'
+            )));
+        }
+        $this->assertSame([41], $this->ids(['conditions' => [
+            $this->condition('stats__occupied_square_score', 'eq', '0'),
+        ]]));
+        $this->assertSame([40], $this->ids(['conditions' => [
+            $this->condition('stats__occupied_square_percentage', 'eq', '0'),
+        ]]));
+        $this->assertContains(31, $this->ids(['conditions' => [
+            $this->condition('stats__occupied_square_score', 'empty'),
+        ]]));
+    }
+
+    /**
+     * Effective designations match whole tokens and exclusion belongs to the owning species.
+     */
+    public function testTypedTaxonPredicatesAndRepeatedConditions(): void
+    {
+        $db = db_connect();
+        $db->table('taxa')->where('id', 40)->update(['gb_red_list' => 'LCX',
+            'gb_red_list_override' => 'LC;VU', 'id_difficulty' => 3, 'rarity_category' => 2,
+            'exclude_from_rarity_calculations' => 1]);
+        $db->table('taxa')->where('id', 41)->update(['gb_red_list' => 'LCX', 'id_difficulty' => 4]);
+        $input = ['conditions' => [
+            $this->condition('gb_red_list', 'in', ['LC', 'EN']),
+            $this->condition('id_difficulty', 'gte', '3'),
+            $this->condition('id_difficulty', 'lte', '3'),
+        ]];
+        $this->assertSame([40], $this->ids($input));
+        $this->assertSame([2, 4, 5, 6], $this->ids($input, false));
+        $this->assertSame([], $this->ids(['q' => 'Turnip', 'conditions' => [
+            $this->condition('gb_red_list', 'in', ['LCX']),
+        ]]));
+        $this->assertSame([40, 41], $this->ids(['conditions' => [
+            $this->condition('exclude_from_rarity_calculations', 'eq', '1'),
+        ]]));
+        $this->assertSame([], $this->ids(['taxon_id' => '40', 'conditions' => [
+            $this->condition('scientific_name', 'eq', 'Other family'),
+        ]]));
+        $this->assertSame([2, 4, 5, 6], $this->ids(['conditions' => [
+            $this->condition('rank_id', 'eq', '40'), $this->condition('taxon_id', 'eq', '40'),
+        ]], false));
+    }
+
+    /**
+     * All live rows constrain one occurrence and remain independent of stored measurements.
+     */
+    public function testBuilderOccurrenceEvidenceAndAdditionalOccurrenceFields(): void
+    {
+        $this->assertSame([], $this->ids(['conditions' => [
+            $this->condition('year', 'eq', '2012'),
+            $this->condition('geographic_region_id', 'eq', '1'),
+            $this->condition('rank_id', 'eq', '40'),
+        ]]));
+        $this->assertSame([1], $this->ids(['conditions' => [
+            $this->condition('geographic_region_id', 'eq', '1'),
+            $this->condition('geographic_region_id', 'eq', '2'),
+        ]], false));
+        db_connect()->table('occurrences')->where('id', 2)->update([
+            'sex' => 'female', 'life_stage' => 'adult', 'organism_quantity' => 'many',
+        ]);
+        $this->assertSame([2], $this->ids(['conditions' => [
+            $this->condition('sex', 'in', 'female, male'),
+            $this->condition('life_stage', 'eq', 'adult'),
+            $this->condition('organism_quantity', 'eq', 'many'),
+            $this->condition('recorded_name', 'contains', 'segetum'),
+        ]], false));
+        $this->assertSame([3], $this->ids(['conditions' => [
+            $this->condition('unique_key', 'eq', 'SEARCH:3'),
+            $this->condition('identification_verification_status', 'in', ['V', 'V1']),
+        ]], false));
+    }
+
+    /**
+     * Malformed rows, invalid scopes and stale references never broaden a query.
+     */
+    public function testBuilderValidationAndNonJavascriptEditing(): void
+    {
+        $search = new TaxonSearchService();
+        foreach ([
+            ['conditions' => 'wrong'], ['stats_scope' => '999'],
+            ['filter_form' => '1', 'conditions' => []],
+            ['conditions' => [$this->condition('stats__key_species_comment', 'contains', 'text')]],
+            ['conditions' => [$this->condition('stats__key_species', 'in', ['false'])]],
+            ['conditions' => [$this->condition('stats__occupied_square_score', 'eq', '100.0001')]],
+            ['conditions' => [$this->condition('stats__mean_occurrences_per_year', 'eq', '1.23456')]],
+            ['conditions' => [$this->condition('stats__last_record_date', 'eq', '2025-02-29')]],
+            ['conditions' => [$this->condition('id_difficulty', 'between', '5', '2')]],
+            ['conditions' => [$this->condition('taxon_id', 'eq', '999')]],
+            ['conditions' => [$this->condition('family_id', 'eq', '40')]],
+            ['conditions' => [$this->condition('year', 'eq', '2012-2010')]],
+            ['conditions' => [$this->condition('sex', 'eq', 'male')]],
+        ] as $input) {
+            $criteria = $search->criteria($input, true);
+            $this->assertNotEmpty($criteria->errors, json_encode($input));
+            $this->assertSame([], $search->query($criteria, true)->get()->getResultArray());
+        }
+        $input = ['conditions' => [$this->condition('stats__key_species', 'in', '')],
+            'filter_action' => 'add'];
+        $page = $search->page($input, true);
+        $this->assertSame([], $page['errors']);
+        $this->assertCount(2, $page['conditionRows']);
+        $this->assertSame([], $page['taxa']);
+        $page = $search->page(['filter_action' => 'remove:0',
+            'conditions' => [$this->condition('taxon_id', 'eq', '40')]], false);
+        $this->assertSame([], $page['conditionRows']);
+        $page = $search->page(['filter_action' => 'refresh', 'conditions' => [
+            ['field' => 'taxon_id', 'operator' => 'eq', 'value' => '', 'text' => 'Old turnip'],
+        ]], true);
+        $this->assertSame([40], array_column($page['rowMatches'][0], 'id'));
+        $summary = $search->summary($search->criteria(['stats_scope' => '1', 'conditions' => [
+            $this->condition('stats__key_species', 'in', ['0']),
+        ]], false), $search->ordering([], false), false);
+        $this->assertContains(['label' => 'Statistics scope', 'value' => 'West region'], $summary);
+        $this->assertContains(['label' => 'Statistics: key species', 'value' => 'Includes any No'], $summary);
+    }
+
+    /**
      * Checklist values and text predicates agree with effective SQL ordering, including ties.
      */
     public function testGbOverridesDriveChecklistSearchAndOrdering(): void
@@ -217,6 +427,15 @@ final class TaxonSearchTest extends CIUnitTestCase
             $input = ['attribute__sqs' => ['gte' => '1', 'lte' => '1'],
                 'attribute__habitat' => ['in' => ['indicia:40', 'indicia:140']]];
             $this->assertSame([40], $this->ids($input));
+            $builderInput = ['conditions' => [
+                $this->condition('attribute__sqs', 'between', '1', '1'),
+                $this->condition('attribute__habitat', 'in', ['indicia:40', 'indicia:140']),
+            ]];
+            $this->assertSame([40], $this->ids($builderInput));
+            $this->assertSame([2, 4, 5, 6], $this->ids($builderInput, false));
+            $this->assertSame([41], $this->ids(['taxon_id' => '40', 'conditions' => [
+                $this->condition('attribute__sqs', 'empty'),
+            ]]));
             $this->assertSame([30], $this->ids(['attribute__sqs' => '9']));
             $this->assertSame([8], $this->ids(['attribute__sqs' => '9'], false));
             $search = new TaxonSearchService($db);
@@ -227,7 +446,7 @@ final class TaxonSearchTest extends CIUnitTestCase
             )));
             $this->assertSame([40], array_column($search->lookup('Agrotis', $criteria), 'id'));
             $html = view('search/filters', ['page' => $search->page($input, true)]);
-            $this->assertStringContainsString('name="attribute__habitat[in][]"', $html);
+            $this->assertStringContainsString('name="conditions[1][value][]"', $html);
             $this->assertStringContainsString('value="indicia:140" selected', $html);
             $invalid = $search->criteria(['attribute__sqs' => ['gte' => '4', 'lte' => '2']], true);
             $this->assertArrayHasKey('attribute__sqs', $invalid->errors);
@@ -573,23 +792,53 @@ final class TaxonSearchTest extends CIUnitTestCase
             . ' and contains(@class, "rounded-3") and contains(@class, "bg-body-tertiary")]'
         )->length);
         $this->assertSame(0, $xpath->query('//details//input[@name="q"]')->length);
-        $this->assertSame(1, $xpath->query('//details[@id="advanced-search"]//input[@name="year"]')->length);
-        $this->assertSame(1, $xpath->query('//details[@id="advanced-search"]//select[@name="rank_id"]')->length);
-        $this->assertSame(1, $xpath->query('//details[@id="advanced-search"]//input[@name="taxon_name"]')->length);
-        $this->assertSame(1, $xpath->query('//details[@id="advanced-search"]//select[@name="blocked"]')->length);
-        $this->assertSame(1, $xpath->query('//details[@id="advanced-search"]//select[@name="recording_scheme_id"]')->length);
+        foreach (['year', 'rank_id', 'taxon_id', 'blocked', 'recording_scheme_id'] as $field) {
+            $this->assertSame(1, $xpath->query('//details//select[@data-condition-field]/optgroup/option[@value="' . $field . '"]')->length);
+        }
         foreach (['taxa', 'occurrences'] as $resource) {
             $schemePage = $this->get($resource . '?recording_scheme_id=2');
             $schemePage->assertStatus(200);
-            $schemePage->assertSee('Recording scheme (including parent taxa)');
+            $schemePage->assertSee('Recording scheme (including parents)');
             $schemePage->assertDontSee('Deleted scheme');
             $this->assertStringContainsString('<details id="advanced-search" open>', $schemePage->getBody());
             $document->loadHTML($schemePage->getBody(), LIBXML_NOERROR | LIBXML_NOWARNING);
             $xpath = new \DOMXPath($document);
             $this->assertSame(1, $xpath->query(
-                '//select[@name="recording_scheme_id"]/option[@value="2" and @selected]'
+                '//select[@name="conditions[0][value]"]/option[@value="2" and @selected]'
             )->length);
             $this->get($resource . '?recording_scheme_id=4')->assertStatus(400);
+            $builder = $this->get($resource . '?' . http_build_query(['stats_scope' => '1',
+                'conditions' => [$this->condition('stats__key_species', 'empty')]]));
+            $builder->assertStatus(200);
+            $this->assertStringContainsString('conditions%5B0%5D%5Bfield%5D=stats__key_species', $builder->getBody());
+            $this->assertStringContainsString('stats_scope=1', $builder->getBody());
+            $document->loadHTML($builder->getBody(), LIBXML_NOERROR | LIBXML_NOWARNING);
+            $xpath = new \DOMXPath($document);
+            $this->assertSame(1, $xpath->query(
+                '//noscript//button[@name="filter_action" and @value="refresh"]'
+            )->length);
+            $this->assertSame(0, $xpath->query(
+                '//button[@name="filter_action" and @value="refresh" and not(ancestor::noscript)]'
+            )->length);
+            $names = $this->get($resource . '?' . http_build_query([
+                'conditions' => [$this->condition('scientific_name', 'contains', 'Agrotis')],
+            ]));
+            $names->assertStatus(200);
+            $names->assertSee('Enter all or part of a scientific name, then select Search.');
+            $names->assertSee('Agrotis segetum');
+            $names->assertDontSee('data-taxon-input');
+            $picker = $this->get($resource . '?' . http_build_query([
+                'filter_action' => 'refresh', 'conditions' => [
+                    ['field' => 'taxon_id', 'operator' => 'eq', 'text' => 'Agrotis', 'value' => ''],
+                ],
+            ]));
+            $picker->assertStatus(200);
+            $picker->assertSee('Type at least two characters and choose a taxon');
+            $document->loadHTML($picker->getBody(), LIBXML_NOERROR | LIBXML_NOWARNING);
+            $xpath = new \DOMXPath($document);
+            $this->assertSame(1, $xpath->query(
+                '//select[@data-taxon-selection]/option[@value="30"]'
+            )->length);
         }
         $page = $this->get('taxa?year=2010&family_id=20&rank_id=30');
         $page->assertStatus(200);
@@ -602,7 +851,7 @@ final class TaxonSearchTest extends CIUnitTestCase
         $this->get('taxa?sort[]=bad')->assertStatus(400);
         $occurrences = $this->get('occurrences?year=2010');
         $occurrences->assertStatus(200);
-        $this->assertStringContainsString('border rounded-3 bg-body-tertiary p-3 mx-0 mt-0', $occurrences->getBody());
+        $this->assertStringContainsString('border rounded-3 bg-body-tertiary p-3', $occurrences->getBody());
         $occurrences->assertSee('East region; West region');
         $occurrences->assertDontSee('name="rank_id"');
         $lookup = $this->get('taxon-search?taxon_name=Old%20turnip&rank_id=40');

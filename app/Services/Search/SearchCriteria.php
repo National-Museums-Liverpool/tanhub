@@ -30,15 +30,29 @@ final class SearchCriteria
     /** @var list<string> Inclusive YYYY-MM-DD upper bounds from year and precise-date filters. */
     public array $upperDates = [];
 
+    /** @var array<int, array{field: string, operator: string, value: string|list<string>, upper: string, text: string}> Validated AND rows. */
+    public array $conditions = [];
+
+    /** @var array<int, self> Parsed legacy predicates keyed by condition position. */
+    public array $legacyConditions = [];
+
     /**
      * Parse supported filters without silently ignoring malformed input.
      *
      * @param array<string, mixed> $input Request query parameters.
      * @param list<string> $classificationKeys Available classification aliases.
-     * @param bool $taxa Whether to allow the taxa-only rank filter.
+     * @param bool $taxa Whether filtering taxa rather than original occurrences.
      */
     public function __construct(array $input, array $classificationKeys, bool $taxa)
     {
+        $fromForm = array_key_exists('filter_form', $input);
+        if ($fromForm || array_key_exists('conditions', $input)) {
+            $this->values['filter_form'] = '1';
+        }
+        // The last control detects PHP max_input_vars truncation before filters can widen.
+        if ($fromForm && ($input['filter_complete'] ?? null) !== '1') {
+            $this->errors['conditions'] = 'Too many submitted values. Remove some choices or conditions.';
+        }
         $keys = ['q', 'year', 'geographic_region_id', 'taxon_group_id', 'recording_scheme_id', 'taxon_id',
             'taxon_name', 'data_source_id', 'blocked', 'taxon_blocked', 'from_date', 'to_date'];
         if ($taxa) {
@@ -53,6 +67,7 @@ final class SearchCriteria
                 $this->errors[$key] = 'This filter is not available on this page.';
             }
         }
+        $this->parseConditions($input, $classificationKeys, $taxa);
         foreach ($keys as $key) {
             $value = $input[$key] ?? '';
             if (! is_scalar($value)) {
@@ -94,6 +109,68 @@ final class SearchCriteria
                 $this->errors[$key] = $exception->getMessage();
             }
         }
+        if (isset($this->values['filter_form'])) {
+            $this->values['filter_complete'] = ! $fromForm || ($input['filter_complete'] ?? null) === '1' ? '1' : '0';
+        }
+    }
+
+    /**
+     * Parse the row contract separately from the legacy scalar bookmark contract.
+     *
+     * @param array<string, mixed> $input Submitted parameters.
+     * @param list<string> $classificationKeys Installed classifications.
+     * @param bool $taxa Whether displaying taxa.
+     */
+    private function parseConditions(array $input, array $classificationKeys, bool $taxa): void
+    {
+        $scope = $input['stats_scope'] ?? null;
+        if (array_key_exists('stats_scope', $input)) {
+            if (! is_string($scope) || ($scope !== 'global' && (! ctype_digit($scope) || (int) $scope < 1))) {
+                $this->errors['stats_scope'] = 'Choose Global or an available region.';
+                $scope = 'global';
+            }
+            $this->values['stats_scope'] = $scope;
+        }
+        $fields = SearchFieldCatalog::fields($classificationKeys, $taxa);
+        $rows = array_key_exists('conditions', $input) ? $input['conditions'] : [];
+        if (! is_array($rows) || ! array_is_list($rows) || count($rows) > 50) {
+            $this->errors['conditions'] = 'Submit a list of no more than 50 conditions.';
+            $rows = [];
+        }
+        if (array_key_exists('conditions', $input)) {
+            $this->values['conditions'] = $rows;
+        }
+        foreach ($rows as $index => $row) {
+            if ($row === ['field' => ''] || (is_array($row) && ($row['field'] ?? null) === ''
+                && ($row['value'] ?? '') === '' && ($row['text'] ?? '') === '' && ($row['upper'] ?? '') === '')) {
+                continue;
+            }
+            try {
+                if (! is_array($row)) {
+                    throw new InvalidArgumentException('Submit a field, operator and value.');
+                }
+                $condition = SearchFieldCatalog::condition($row, $fields);
+                $field = $fields[$condition['field']];
+                if (! empty($field['legacy'])) {
+                    $legacyInput = [$condition['field'] => $condition['value']];
+                    if ($field['type'] === 'taxon' && $condition['value'] === '') {
+                        $legacyInput = ['taxon_name' => $condition['text']];
+                    }
+                    // Rank remains a flat taxa-only contract for old bookmarks/exports.
+                    $legacy = new self($legacyInput, $classificationKeys, true);
+                    if ($legacy->errors !== []) {
+                        throw new InvalidArgumentException(implode(' ', $legacy->errors));
+                    }
+                    $this->legacyConditions[$index] = $legacy;
+                }
+                if ($field['domain'] === 'attribute') {
+                    (new TaxonAttributeService())->criteria(self::attributeInput($condition));
+                }
+                $this->conditions[$index] = $condition;
+            } catch (InvalidArgumentException $exception) {
+                $this->errors['condition_' . $index] = $exception->getMessage();
+            }
+        }
     }
 
     /**
@@ -117,6 +194,11 @@ final class SearchCriteria
      */
     public function needsOccurrences(): bool
     {
+        foreach ($this->legacyConditions as $condition) {
+            if ($condition->needsOccurrences()) {
+                return true;
+            }
+        }
         foreach (['year', 'from_date', 'to_date', 'geographic_region_id', 'data_source_id', 'blocked'] as $key) {
             if ($this->value($key) !== '') {
                 return true;
@@ -124,6 +206,76 @@ final class SearchCriteria
         }
 
         return false;
+    }
+
+    /**
+     * Translate one attribute row into the existing exact-taxon attribute contract.
+     *
+     * @param array<string, mixed> $condition Validated builder row.
+     * @return array<string, mixed> Attribute service input.
+     */
+    public static function attributeInput(array $condition): array
+    {
+        if ($condition['operator'] === 'empty') {
+            return [$condition['field'] => ['eq' => 'null']];
+        }
+        $value = $condition['operator'] === 'between'
+            ? ['gte' => $condition['value'], 'lte' => $condition['upper']]
+            : [$condition['operator'] => $condition['value']];
+
+        return [$condition['field'] => $value];
+    }
+
+    /**
+     * Resolve explicit scope, retaining the historical export convention for old URLs.
+     *
+     * @return string Region ID, or empty for global statistics.
+     */
+    public function statisticsRegion(): string
+    {
+        $scope = $this->value('stats_scope');
+
+        return $scope === '' ? $this->value('geographic_region_id') : ($scope === 'global' ? '' : $scope);
+    }
+
+    /**
+     * Detect an explicit exclusion of blocked taxa for descendant occurrence evidence.
+     *
+     * @return bool Whether blocked exact children must not qualify a parent.
+     */
+    public function excludesBlockedTaxa(): bool
+    {
+        if ($this->value('taxon_blocked') === '0') {
+            return true;
+        }
+        foreach ($this->legacyConditions as $condition) {
+            if ($condition->value('taxon_blocked') === '0') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Keep non-occurrence constraints when selecting bounded export candidates.
+     *
+     * @param array<string, array<string, mixed>> $fields Field catalogue for this search.
+     * @return array<string, mixed> Criteria without contributing-record predicates.
+     */
+    public function withoutOccurrences(array $fields): array
+    {
+        $values = $this->values;
+        $values['stats_scope'] = $this->statisticsRegion() ?: 'global';
+        foreach (['year', 'from_date', 'to_date', 'geographic_region_id', 'data_source_id', 'blocked'] as $key) {
+            unset($values[$key]);
+        }
+        if (isset($values['conditions'])) {
+            $values['conditions'] = array_values(array_filter($this->conditions,
+                static fn (array $row): bool => $fields[$row['field']]['domain'] !== 'occurrence'));
+        }
+
+        return $values;
     }
 
     /**

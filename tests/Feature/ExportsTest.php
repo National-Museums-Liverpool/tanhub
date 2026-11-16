@@ -134,6 +134,50 @@ final class ExportsTest extends CIUnitTestCase
     }
 
     /**
+     * Builder predicates survive bounded capture and CSV statistics use the independent scope.
+     */
+    public function testBuilderFiltersAndExplicitStatisticsScopeOnBothResources(): void
+    {
+        $db = db_connect();
+        $db->table('geographic_regions')->upsert(['id' => 91, 'higher_geography' => 'Westshire',
+            'higher_geography_identifier' => 'BUILDER-WEST', 'location_type' => 'Vice county', 'data_source_id' => 91]);
+        $db->table('geographic_regions_occurrences')->insert(['geographic_region_id' => 91, 'occurrence_id' => 2]);
+        foreach ([[null, 23, 1], [91, 0, 0]] as [$region, $count, $flag]) {
+            $db->table('taxon_stats')->insert([
+                'uuid' => \App\Services\Stats\TaxonStatsIdentity::uuidForScope(2, $region),
+                'taxon_id' => 2, 'geographic_region_id' => $region, 'key_species' => $flag,
+                'occurrences_count' => $count, 'grid_square_count' => 0,
+                'first_recorder' => '', 'last_recorder' => '', 'first_verified_recorder' => '', 'last_verified_recorder' => '',
+            ]);
+        }
+        $input = ['stats_scope' => 'global', 'conditions' => [
+            ['field' => 'stats__key_species', 'operator' => 'in', 'value' => ['1']],
+            ['field' => 'geographic_region_id', 'operator' => 'eq', 'value' => '91'],
+            ['field' => 'year', 'operator' => 'eq', 'value' => '2010'],
+        ]];
+        foreach ([['taxa', 'grid'], ['taxa', 'stats'], ['occurrences', 'grid']] as [$resource, $template]) {
+            $job = $this->finish($this->exports->create(1, $resource, $input, $template));
+            $records = $this->records($job);
+            $this->assertCount(2, $records);
+            $heading = $resource === 'taxa' ? 'Taxon identifier' : 'Unique key';
+            $this->assertSame($resource === 'taxa' ? 'TAX-2' : 'EXPORT:2',
+                $records[1][array_search($heading, $records[0], true)]);
+            if ($template === 'stats') {
+                $this->assertSame('23', $records[1][array_search('Occurrences count', $records[0], true)]);
+                $this->assertSame('Global', json_decode($job['contract'], true)['statistics_scope']);
+            }
+        }
+        $legacy = $this->exports->create(1, 'taxa', ['geographic_region_id' => '91'], 'stats');
+        $contract = json_decode($legacy['contract'], true, 512, JSON_THROW_ON_ERROR);
+        $contract['version'] = 6;
+        $db->table('export_jobs')->where('id', $legacy['id'])->update([
+            'contract' => json_encode($contract, JSON_THROW_ON_ERROR),
+        ]);
+        $records = $this->records($this->finish($legacy));
+        $this->assertSame('0', $records[1][array_search('Occurrences count', $records[0], true)]);
+    }
+
+    /**
      * Detailed/statistics templates retain attribute arrays and exact search membership.
      */
     public function testAttributeTemplatesAndFrozenConfiguration(): void
@@ -175,6 +219,13 @@ final class ExportsTest extends CIUnitTestCase
             $grid = ExportTemplate::columns(true, 'grid', []);
             $this->assertArrayNotHasKey('attribute__sqs', $grid);
             $job = $this->exports->create(1, 'taxa', $input, 'details');
+            $builderJob = $this->exports->create(1, 'taxa', ['conditions' => [
+                ['field' => 'attribute__sqs', 'operator' => 'eq', 'value' => '1'],
+                ['field' => 'attribute__habitat', 'operator' => 'in', 'value' => ['indicia:1']],
+            ]], 'grid');
+            $builderContract = json_decode($builderJob['contract'], true, 512, JSON_THROW_ON_ERROR);
+            $this->assertArrayHasKey('attribute_signature', $builderContract);
+            $this->assertCount(2, $this->records($this->finish($builderJob)));
             $configuration->attributes['sqs']['multiValue'] = true;
             $this->expectException(RuntimeException::class);
             $this->expectExceptionMessage('Taxon attribute configuration changed');

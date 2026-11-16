@@ -14,8 +14,8 @@ use App\Services\TaxonDesignationService;
  * Reusable live queries and batch row preparation for staff indexes.
  *
  * Occurrence rows keep the exact recorded taxon; taxa rows can qualify through their
- * configured reporting descendants. Live records, not asynchronously rebuilt statistics,
- * are used so contained multi-year intervals have consistent search semantics.
+ * configured reporting descendants. Live occurrence predicates are separate from explicitly
+ * scoped stored-statistics predicates; date/source filters never recalculate stored statistics.
  *
  * {@see self::query()} builds predicates without pagination, {@see self::hydrate()}
  * prepares any result batch, and {@see self::page()} adapts these to the staff views.
@@ -127,6 +127,31 @@ final class TaxonSearchService
                 $criteria->errors[$key] = 'Choose a taxon of the indicated classification rank.';
             }
         }
+        if ($criteria->statisticsRegion() !== '' && $this->db->table('geographic_regions')
+            ->where('id', $criteria->statisticsRegion())->where('deleted_at', null)->countAllResults() === 0) {
+            $criteria->errors['stats_scope'] = 'Choose an available statistics region.';
+        }
+        foreach ($criteria->legacyConditions as $index => $legacy) {
+            $validated = $this->criteria($legacy->values, true);
+            if ($validated->errors !== []) {
+                $criteria->errors['condition_' . $index] = implode(' ', $validated->errors);
+            }
+        }
+        $attributes = new TaxonAttributeService($this->db);
+        $attributeChoices = null;
+        foreach ($criteria->conditions as $index => $condition) {
+            if (! str_starts_with($condition['field'], 'attribute__') || $condition['operator'] !== 'in') {
+                continue;
+            }
+            $attributeChoices ??= $attributes->choices();
+            $available = array_column($attributeChoices[substr($condition['field'], 11)] ?? [], 'term_key');
+            if (array_diff($condition['value'], $available) !== []) {
+                $criteria->errors['condition_' . $index] = 'Choose available attribute terms.';
+            }
+        }
+        if ($criteria->errors === [] && array_key_exists('conditions', $criteria->values)) {
+            $criteria->values['conditions'] = array_values($criteria->conditions);
+        }
 
         return $criteria;
     }
@@ -153,6 +178,7 @@ final class TaxonSearchService
                 ['q', 'taxon_group_id', 'recording_scheme_id', 'taxon_blocked', 'taxon_id', 'taxon_name']
             ));
             $lookupOnly = $idsOnly && $this->db->DBDriver === 'MySQLi'
+                && $criteria->conditions === []
                 && array_filter($taxonFilters, static fn (string $value): bool => $value !== '') === [];
             if ($lookupOnly) {
                 // Prevent a buffered taxon join from sorting the entire ID range before LIMIT.
@@ -223,6 +249,7 @@ final class TaxonSearchService
         if ($criteria->attributeCriteria !== []) {
             (new TaxonAttributeService($this->db))->apply($builder, $criteria->attributeCriteria);
         }
+        $this->applyConditions($builder, $criteria, $taxa);
         if ($taxa && $criteria->needsOccurrences()) {
             $matches = $this->matchingTaxa($criteria, $candidateIds);
             $builder->join(
@@ -261,7 +288,7 @@ final class TaxonSearchService
         $evidence = $this->db->table('occurrences evidence')
             ->join('taxa exact_taxon', 'exact_taxon.id = evidence.taxon_id AND exact_taxon.deleted_at IS NULL')
             ->where('evidence.deleted_at', null);
-        if ($criteria->value('taxon_blocked') === '0') {
+        if ($criteria->excludesBlockedTaxa()) {
             // Excluding blocked taxa also excludes blocked children as checklist evidence.
             // Selecting blocked parents does not require their children to be blocked.
             $evidence->where('exact_taxon.blocked', 0);
@@ -303,6 +330,12 @@ final class TaxonSearchService
      */
     public function page(array $input, bool $taxa): array
     {
+        // Editing actions only rebuild controls. Search/export still validate every row.
+        $editing = isset($input['filter_action']) && is_string($input['filter_action']);
+        $formInput = $input;
+        if ($editing) {
+            unset($input['conditions']);
+        }
         $criteria = $this->criteria($input, $taxa);
         $ordering = $this->ordering($input, $taxa);
         $criteria->errors += $ordering['errors'];
@@ -315,12 +348,42 @@ final class TaxonSearchService
         }
         $query = $this->query($criteria, $taxa);
         // Resetting the count builder would clear shared connection aliases needed by the row query.
-        $total = (clone $query)->countAllResults(false);
+        $total = $editing ? 0 : (clone $query)->countAllResults(false);
         $this->orderQuery($query, $ordering, $taxa);
-        $rows = $query->get(20, ($page - 1) * 20)->getResultArray();
+        $rows = $editing ? [] : $query->get(20, ($page - 1) * 20)->getResultArray();
         $pager = service('pager');
         $pager->store('default', $page, 20, $total);
         $options = $this->options();
+        $fields = $this->fields($taxa);
+        $formRows = $this->formConditions($editing ? $formInput : $criteria->values, $fields);
+        if ($editing) {
+            $action = $formInput['filter_action'];
+            if ($action === 'add' && count($formRows) < 50) {
+                $formRows[] = ['field' => '', 'operator' => '', 'value' => ''];
+            } elseif (preg_match('/^remove:([0-9]+)$/D', $action, $match) === 1) {
+                unset($formRows[(int) $match[1]]);
+                $formRows = array_values($formRows);
+            }
+        }
+        $choices = $this->fieldChoices($options);
+        $rowMatches = [];
+        foreach ($formRows as $index => &$row) {
+            if (($row['field'] ?? '') !== 'taxon_id') {
+                continue;
+            }
+            $id = is_scalar($row['value'] ?? null) ? (string) $row['value'] : '';
+            if ($id !== '' && ctype_digit($id)) {
+                $taxon = $this->db->table('taxa')->where('id', $id)->where('deleted_at', null)->get()->getRowArray();
+                if ($taxon !== null) {
+                    $row['text'] = $taxon['scientific_name']
+                        . (empty($taxon['vernacular_name']) ? '' : ' - ' . $taxon['vernacular_name']);
+                    $choices['taxon_id'][$id] = $row['text'];
+                }
+            } elseif (is_string($row['text'] ?? null) && mb_strlen($row['text']) >= 2) {
+                $rowMatches[$index] = $this->lookup($row['text'], $criteria);
+            }
+        }
+        unset($row);
         $selected = null;
         if ($criteria->value('taxon_id') !== '' && ! isset($criteria->errors['taxon_id'])) {
             $selected = $this->db->table('taxa')->select('id, scientific_name, vernacular_name')
@@ -339,6 +402,12 @@ final class TaxonSearchService
             'q' => $criteria->value('q'), 'sort' => $sort, 'direction' => $direction,
             'pager' => $pager, 'total' => $total, 'selectedTaxon' => $selected, 'taxonMatches' => $matches,
             'filterLabels' => $this->filterLabels($taxa), 'columnLabels' => $this->columnLabels($taxa),
+            'searchFields' => $fields, 'fieldChoices' => $choices, 'conditionRows' => $formRows,
+            'rowMatches' => $rowMatches, 'editingFilters' => $editing,
+            'statisticsScope' => $criteria->statisticsRegion() ?: 'global',
+            'statisticsHelp' => config(\Config\TaxonYearStats::class)->historyYears === 0
+                ? 'Yearly means use all available completed calendar years.'
+                : 'Yearly means use the last ' . config(\Config\TaxonYearStats::class)->historyYears . ' completed calendar years.',
         ]);
     }
 
@@ -481,7 +550,38 @@ final class TaxonSearchService
         }
         $summary = [];
         foreach ($criteria->values as $key => $value) {
+            if (in_array($key, ['filter_form', 'filter_complete'], true)) {
+                continue;
+            }
             if ($value === '') {
+                continue;
+            }
+            if ($key === 'conditions') {
+                $fields = $this->fields($taxa);
+                $choices = $this->fieldChoices($this->options());
+                foreach ($criteria->conditions as $row) {
+                    $field = $fields[$row['field']];
+                    $parts = is_array($row['value']) ? $row['value'] : [$row['value']];
+                    $captions = array_map(static fn (string $part): string =>
+                        (string) ($choices[$row['field']][$part] ?? $part), $parts);
+                    $caption = implode(', ', $captions);
+                    if ($row['field'] === 'taxon_id' && $row['value'] !== '') {
+                        $selected = $this->db->table('taxa')->where('id', $row['value'])->get()->getRowArray();
+                        $caption = $selected['scientific_name'] ?? 'Unavailable selection';
+                    } elseif ($row['field'] === 'taxon_id') {
+                        $caption = $row['text'];
+                    }
+                    $summary[] = ['label' => $field['label'],
+                        'value' => SearchFieldCatalog::operators($field)[$row['operator']] . ' ' . $caption
+                            . ($row['operator'] === 'between' ? ' to ' . $row['upper'] : '')];
+                }
+                continue;
+            }
+            if ($key === 'stats_scope') {
+                $scope = $criteria->statisticsRegion();
+                $region = $scope === '' ? null : $this->db->table('geographic_regions')->where('id', $scope)->get()->getRowArray();
+                $summary[] = ['label' => 'Statistics scope', 'value' => $scope === '' ? 'Global'
+                    : ($region['higher_geography'] ?? 'Unavailable region')];
                 continue;
             }
             if (str_starts_with($key, 'attribute__')) {
@@ -537,6 +637,13 @@ final class TaxonSearchService
             'geographic_region_id', 'data_source_id', 'blocked'] as $key) {
             unset($values[$key]);
         }
+        $fields = $this->fields(true);
+        if (isset($values['conditions'])) {
+            $values['conditions'] = array_values(array_filter($criteria->conditions,
+                static fn (array $row): bool => in_array($fields[$row['field']]['domain'] ?? '',
+                    ['taxon', 'classification', 'attribute'], true)
+                    && ! in_array($row['field'], ['rank_id', 'taxon_id', 'taxon_name'], true)));
+        }
         $context = $this->criteria($values, true);
         $builder = $this->query($context, true);
         $this->applyNameSearch($builder, $term, 't');
@@ -557,6 +664,266 @@ final class TaxonSearchService
             'vernacular_name' => $row['vernacular_name'] ?? '', 'rank' => $row['rank_title'] ?? '',
             'matched_name' => $matched[$row['id']] ?? '',
         ], $rows);
+    }
+
+    /**
+     * Expose the same allowlist to parser, row editor and export candidate selection.
+     *
+     * @param bool $taxa Whether displaying taxa.
+     * @return array<string, array<string, mixed>> Field metadata with operators.
+     */
+    public function fields(bool $taxa): array
+    {
+        $fields = SearchFieldCatalog::fields(array_keys($this->classifications), $taxa);
+        foreach ($fields as &$field) {
+            $field['operators'] = SearchFieldCatalog::operators($field);
+        }
+        unset($field);
+
+        return $fields;
+    }
+
+    /**
+     * Convert old bookmarks to editable rows without altering their query contract.
+     *
+     * @param array<string, mixed> $values Old scalar filters plus any new rows.
+     * @param array<string, array<string, mixed>> $fields Available field metadata.
+     * @return list<array<string, mixed>> Rows for form redisplay, including invalid input.
+     */
+    private function formConditions(array $values, array $fields): array
+    {
+        $rows = is_array($values['conditions'] ?? null) ? array_values($values['conditions']) : [];
+        $rows = array_map(static fn (mixed $row): array => is_array($row) ? $row : ['field' => '', 'value' => $row], $rows);
+        foreach ($values as $key => $value) {
+            if ($value === '' || ! isset($fields[$key])) {
+                continue;
+            }
+            if ($key === 'taxon_name' && ($values['taxon_id'] ?? '') !== '') {
+                continue;
+            }
+            if ($fields[$key]['domain'] === 'attribute') {
+                $parts = is_array($value) ? $value : ['eq' => $value];
+                if (isset($parts['gte'], $parts['lte'])) {
+                    $rows[] = ['field' => $key, 'operator' => 'between',
+                        'value' => $parts['gte'], 'upper' => $parts['lte']];
+                    unset($parts['gte'], $parts['lte']);
+                }
+                foreach ($parts as $operator => $part) {
+                    if ($operator === 'eq' && $part === 'null') {
+                        $rows[] = ['field' => $key, 'operator' => 'empty', 'value' => ''];
+                        continue;
+                    }
+                    $rows[] = ['field' => $key, 'operator' => $operator === 'eq'
+                        && $fields[$key]['type'] === 'choice' ? 'in' : $operator, 'value' => $part];
+                }
+            } else {
+                $rows[] = ['field' => $key, 'operator' => array_key_first($fields[$key]['operators']), 'value' => $value];
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Supply bounded reference/attribute lists and taxon-level controlled choices.
+     *
+     * Occurrence recorder/locality values remain text fields: enumerating them would
+     * scan the largest table merely to render a search form.
+     *
+     * @param array<string, mixed> $options Existing small reference lists.
+     * @return array<string, array<int|string, string>> Choice values and captions per field.
+     */
+    private function fieldChoices(array $options): array
+    {
+        $choices = [];
+        foreach (['rank_id' => ['ranks', 'rank'], 'taxon_group_id' => ['groups', 'title'],
+            'recording_scheme_id' => ['recordingSchemes', 'title'],
+            'geographic_region_id' => ['regions', 'higher_geography'],
+            'data_source_id' => ['dataSources', 'title']] as $key => [$source, $label]) {
+            foreach ($options[$source] as $row) {
+                $choices[$key][$row['id']] = $key === 'taxon_group_id' && ! empty($row['friendly'])
+                    ? $row['friendly'] : $row[$label];
+            }
+        }
+        foreach ($options['classificationOptions'] as $alias => $rows) {
+            $choices[$alias . '_id'] = array_column($rows, 'scientific_name', 'id');
+        }
+        foreach ((new TaxonAttributeService($this->db))->choices() as $key => $rows) {
+            $choices['attribute__' . $key] = array_column($rows, 'label', 'term_key');
+        }
+        $choices['stats__key_species'] = ['1' => 'Yes', '0' => 'No'];
+        $choices['stats__rarity_status'] = ['common' => 'Common', 'rare' => 'Rare'];
+        foreach (['increasing', 'decreasing', 'stable', 'insufficient_data', 'unclear'] as $value) {
+            $choices['stats__frequency_trend_state'][$value] = ucfirst(str_replace('_', ' ', $value));
+        }
+        $rows = $this->db->table('taxa')->select('rarity_group_name')
+            ->where('deleted_at', null)->distinct()->get()->getResultArray();
+        foreach ($rows as $row) {
+            if (trim($row['rarity_group_name']) !== '') {
+                $choices['rarity_group_name'][$row['rarity_group_name']] = $row['rarity_group_name'];
+            }
+        }
+        foreach (TaxonDesignationService::FIELDS as $key) {
+            $rows = $this->db->table('taxa t')->select(TaxonDesignationService::effectiveSql($key) . ' AS designation', false)
+                ->where('t.deleted_at', null)->distinct()->get()->getResultArray();
+            foreach ($rows as $row) {
+                foreach (explode(';', $row['designation'] ?? '') as $token) {
+                    if ($token !== '') {
+                        $choices[$key][$token] = $token;
+                    }
+                }
+            }
+        }
+        foreach ($choices as &$list) {
+            asort($list, SORT_NATURAL | SORT_FLAG_CASE);
+        }
+        unset($list);
+
+        return $choices;
+    }
+
+    /**
+     * Apply row conditions without changing legacy bookmark or export behavior.
+     *
+     * @param BaseBuilder $builder Query already owning taxon alias t.
+     * @param SearchCriteria $criteria Validated scalar and row conditions.
+     * @param bool $taxa Whether filtering displayed taxa.
+     */
+    private function applyConditions(BaseBuilder $builder, SearchCriteria $criteria, bool $taxa): void
+    {
+        $fields = $this->fields($taxa);
+        $statsRows = [];
+        foreach ($criteria->conditions as $index => $row) {
+            if (isset($criteria->errors['condition_' . $index])) {
+                continue;
+            }
+            $field = $fields[$row['field']];
+            if ($field['domain'] === 'statistics') {
+                $statsRows[] = $row;
+            } elseif ($field['domain'] === 'attribute') {
+                $attributes = new TaxonAttributeService($this->db);
+                $attributes->apply($builder, $attributes->criteria(SearchCriteria::attributeInput($row)));
+            } elseif ($field['domain'] === 'occurrence') {
+                if (empty($field['legacy'])) {
+                    if ($row['field'] === 'recorded_name') {
+                        $names = $this->db->table('taxon_names rn')->select('1')
+                            ->where('rn.id = o.taxon_name_id', null, false)->where('rn.deleted_at', null);
+                        $this->applyValue($names, 'rn.name', $row, $field);
+                        $builder->where('EXISTS (' . $names->getCompiledSelect(false) . ')', null, false);
+                    } else {
+                        $this->applyValue($builder, 'o.' . $field['column'], $row, $field);
+                    }
+                }
+            } elseif (! empty($field['legacy'])) {
+                $key = $row['field'];
+                if ($key === 'taxon_id') {
+                    if ($row['value'] === '') {
+                        $this->applyNameSearch($builder, $row['text'], 't');
+                    } else {
+                        $this->applySubtree($builder, 't', (int) $row['value']);
+                    }
+                } elseif ($key === 'taxon_name') {
+                    $this->applyNameSearch($builder, $row['value'], 't');
+                } elseif ($key === 'recording_scheme_id') {
+                    $aliases = $this->db->aliasedTables;
+                    $roots = $this->db->table('taxa')->select('id')->where('recording_scheme_id', $row['value'])
+                        ->where('deleted_at', null)->get()->getResultArray();
+                    $this->db->setAliasedTables($aliases);
+                    $this->applyDescendants($builder, 't', array_map('intval', array_column($roots, 'id')));
+                } else {
+                    $column = match ($key) {
+                        'taxon_blocked' => 't.blocked', 'rank_id' => 't.taxon_rank_id',
+                        'taxon_group_id' => 't.taxon_group_id',
+                        default => ($taxa ? 't.' : 'o.') . $key,
+                    };
+                    $builder->where($column, $row['value']);
+                }
+            } else {
+                $column = 't.' . $field['column'];
+                if (in_array($row['field'], TaxonDesignationService::FIELDS, true)) {
+                    $column = $this->effectiveDesignations ? TaxonDesignationService::effectiveSql($row['field']) : $column;
+                } elseif ($row['field'] === 'exclude_from_rarity_calculations') {
+                    $species = $this->db->table('taxa exclusion_species')
+                        ->select('exclusion_species.exclude_from_rarity_calculations')
+                        ->where('exclusion_species.id = t.species_id', null, false)
+                        ->where('exclusion_species.species_id = exclusion_species.id', null, false);
+                    $column = 'COALESCE((' . $species->getCompiledSelect(false) . '), 0)';
+                }
+                $this->applyValue($builder, $column, $row, $field);
+            }
+        }
+        if ($statsRows === []) {
+            return;
+        }
+        $scope = $this->db->table('taxon_stats filter_stats')->select('1')
+            ->where('filter_stats.taxon_id = t.id', null, false)
+            ->where('filter_stats.geographic_region_id', $criteria->statisticsRegion() ?: null);
+        $matching = clone $scope;
+        $acceptMissing = true;
+        foreach ($statsRows as $row) {
+            $field = $fields[$row['field']];
+            if ($row['field'] === 'stats__available') {
+                if ($row['value'] === '0') {
+                    $matching->where('1 = 0', null, false);
+                } else {
+                    $acceptMissing = false;
+                }
+            } else {
+                $acceptMissing = $acceptMissing && $row['operator'] === 'empty';
+                $this->applyValue($matching, 'filter_stats.' . $field['column'], $row, $field);
+            }
+        }
+        // A missing row is unset, but never a synthetic zero or an explicit No.
+        $builder->groupStart()->where('EXISTS (' . $matching->getCompiledSelect(false) . ')', null, false);
+        if ($acceptMissing) {
+            $builder->orWhere('NOT EXISTS (' . $scope->getCompiledSelect(false) . ')', null, false);
+        }
+        $builder->groupEnd();
+    }
+
+    /**
+     * Apply a typed value against an application-owned column or expression.
+     *
+     * @param BaseBuilder $builder Target predicate builder.
+     * @param string $column Trusted SQL, never a request-supplied identifier.
+     * @param array<string, mixed> $row Validated condition.
+     * @param array<string, mixed> $field Trusted field metadata.
+     */
+    private function applyValue(BaseBuilder $builder, string $column, array $row, array $field): void
+    {
+        $operator = $row['operator'];
+        if (in_array($operator, ['empty', 'not_empty'], true)) {
+            $empty = in_array($field['type'], ['text', 'textlist', 'tokens', 'choice'], true)
+                ? "({$column} IS NULL OR TRIM({$column}) = '')" : "{$column} IS NULL";
+            $builder->where(($operator === 'not_empty' ? 'NOT (' . $empty . ')' : $empty), null, false);
+        } elseif ($operator === 'in') {
+            if ($field['type'] === 'tokens') {
+                $expression = $this->db->DBDriver === 'SQLite3'
+                    ? "(';' || COALESCE({$column}, '') || ';')" : "CONCAT(';', COALESCE({$column}, ''), ';')";
+                $builder->groupStart();
+                foreach ($row['value'] as $value) {
+                    $builder->orLike(new RawSql($expression), ';' . $value . ';');
+                }
+                $builder->groupEnd();
+            } else {
+                $builder->whereIn(new RawSql($column), $row['value']);
+            }
+        } elseif (in_array($operator, ['contains', 'prefix'], true)) {
+            $builder->like(new RawSql($column), $row['value'], $operator === 'prefix' ? 'after' : 'both');
+        } elseif ($operator === 'between') {
+            $lower = $field['type'] === 'date' ? $row['value'] : (float) $row['value'];
+            $upper = $field['type'] === 'date' ? $row['upper'] : (float) $row['upper'];
+            $builder->where($column . ' >= ' . $this->db->escape($lower), null, false)
+                ->where($column . ' <= ' . $this->db->escape($upper), null, false);
+        } else {
+            $comparison = ['eq' => '=', 'gte' => '>=', 'lte' => '<=', 'gt' => '>', 'lt' => '<'][$operator];
+            // SQLite expressions (unlike table columns) have no numeric affinity.
+            $value = match ($field['type']) {
+                'integer', 'flag' => (int) $row['value'], 'decimal' => (float) $row['value'],
+                default => $row['value'],
+            };
+            $builder->where($column . ' ' . $comparison . ' ' . $this->db->escape($value), null, false);
+        }
     }
 
     /**
@@ -646,8 +1013,9 @@ final class TaxonSearchService
      * @param BaseBuilder $builder Query being constrained.
      * @param SearchCriteria $criteria Validated filters.
      * @param string $alias Internal occurrence alias.
+     * @param string $suffix Unique join suffix for repeated regional predicates.
      */
-    private function applyOccurrenceFilters(BaseBuilder $builder, SearchCriteria $criteria, string $alias): void
+    private function applyOccurrenceFilters(BaseBuilder $builder, SearchCriteria $criteria, string $alias, string $suffix = ''): void
     {
         foreach (['data_source_id', 'blocked'] as $key) {
             if ($criteria->value($key) !== '') {
@@ -668,9 +1036,12 @@ final class TaxonSearchService
         if ($criteria->value('geographic_region_id') !== '') {
             // One selected region plus the link table's compound key yields at most one
             // joined row per occurrence; joining avoids dependent region subqueries.
-            $builder->join('geographic_regions_occurrences matched_region', "matched_region.occurrence_id = {$alias}.id")
-                ->join('geographic_regions matched_geography', 'matched_geography.id = matched_region.geographic_region_id AND matched_geography.deleted_at IS NULL')
-                ->where('matched_region.geographic_region_id', $criteria->value('geographic_region_id'));
+            $builder->join('geographic_regions_occurrences matched_region' . $suffix, "matched_region{$suffix}.occurrence_id = {$alias}.id")
+                ->join('geographic_regions matched_geography' . $suffix, "matched_geography{$suffix}.id = matched_region{$suffix}.geographic_region_id AND matched_geography{$suffix}.deleted_at IS NULL")
+                ->where('matched_region' . $suffix . '.geographic_region_id', $criteria->value('geographic_region_id'));
+        }
+        foreach ($criteria->legacyConditions as $index => $condition) {
+            $this->applyOccurrenceFilters($builder, $condition, $alias, '_row' . $index);
         }
     }
 

@@ -142,12 +142,15 @@ final class ExportService
                 'classifications' => $classifications, 'columns' => $columns,
                 'estimated_total' => $estimatedTotal];
             $attributes = new \App\Services\TaxonAttributeService($this->db);
-            if ($attributes->definitions() !== [] && ($template !== 'grid' || $criteria->attributeCriteria !== [])) {
+            $attributeRows = array_filter($criteria->conditions,
+                static fn (array $row): bool => str_starts_with($row['field'], 'attribute__'));
+            if ($attributes->definitions() !== [] && ($template !== 'grid'
+                || $criteria->attributeCriteria !== [] || $attributeRows !== [])) {
                 $contract['attribute_definitions'] = $attributes->definitions();
                 $contract['attribute_signature'] = $attributes->fingerprint();
             }
             if ($template === 'stats') {
-                $contract['statistics_scope'] = $this->statisticsScope($criteria->value('geographic_region_id'));
+                $contract['statistics_scope'] = $this->statisticsScope($criteria->statisticsRegion());
             }
             // The ceiling excludes records inserted after this job starts without claiming a snapshot.
             $maximum = $this->db->table($resource)->selectMax('id')->get()->getRowArray();
@@ -185,7 +188,7 @@ final class ExportService
             $lock = $this->fileLock($uuid, LOCK_EX);
             try {
                 $contract = json_decode($job['contract'], true, 512, JSON_THROW_ON_ERROR);
-                if (! in_array($contract['version'], [1, 2, 3, 4, 5, ExportTemplate::VERSION], true)) {
+                if (! in_array($contract['version'], [1, 2, 3, 4, 5, 6, ExportTemplate::VERSION], true)) {
                     throw new RuntimeException('The export template changed. Cancel and create a new export.');
                 }
                 if ($job['phase'] === 'capturing') {
@@ -366,16 +369,7 @@ final class ExportService
         if ($taxa && $criteria->needsOccurrences()) {
             // Pick taxa by taxonomic filters first. The full query below checks occurrence
             // evidence only for this bounded ID batch, avoiding a full evidence UNION per batch.
-            $candidateFilters = array_intersect_key($contract['filters'], array_flip(array_merge(
-                ['q', 'taxon_group_id', 'recording_scheme_id', 'taxon_blocked', 'taxon_id', 'taxon_name', 'rank_id'],
-                array_map(static fn (string $rank): string => $rank . '_id',
-                    array_keys($contract['classifications']))
-            )));
-            foreach ($contract['filters'] as $key => $value) {
-                if (str_starts_with($key, 'attribute__')) {
-                    $candidateFilters[$key] = $value;
-                }
-            }
+            $candidateFilters = $criteria->withoutOccurrences($search->fields(true));
             $candidateCriteria = new SearchCriteria(
                 $candidateFilters, array_keys($contract['classifications']), true
             );
@@ -394,7 +388,8 @@ final class ExportService
         }
         $rows = $search->hydrate($query->get($this->config->batchSize)->getResultArray(), $taxa);
         if ($contract['template'] === 'stats' && $rows !== []) {
-            $this->hydrateStats($rows, $contract['filters']['geographic_region_id']);
+            $this->hydrateStats($rows, $contract['version'] >= 7
+                ? $criteria->statisticsRegion() : ($contract['filters']['geographic_region_id'] ?? ''));
         }
         $attributeColumns = array_filter(array_keys($contract['columns']),
             static fn (string $key): bool => str_starts_with($key, 'attribute__'));

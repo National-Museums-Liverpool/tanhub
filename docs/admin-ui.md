@@ -9,8 +9,8 @@ Apply edited form values with Search first: download confirmation uses the displ
 Choose a grid-equivalent template, detailed taxa/occurrences, or taxa with stored all-date
 statistics.
 Detailed occurrences include raw dates, identifiers, recorder/identifier, locality, coordinates
-and moderation context. Stored statistics use the selected region, or global scope; year/source
-filters select qualifying taxa but do not recalculate the stored statistics.
+and moderation context. Stored statistics use the independent **Statistics scope** selection;
+year/source filters select qualifying taxa but do not recalculate the stored statistics.
 Statistics headings use short names such as **Occurrences count** and **Stats available**.
 The shared statistics scope appears in export metadata rather than repeating in every CSV row.
 
@@ -37,11 +37,16 @@ at a time. Confirmation displays search-control captions and selected names rath
 IDs. Progress identifies the chosen column template by its full name; its version identifies the
 column layout and query semantics, not a point-in-time data version.
 
-New taxon exports (contract version 6) use effective GB designation overrides for text search,
+Taxon exports from contract version 6 use effective GB designation overrides for text search,
 CSV cells and sorting, matching the checklist and API. Older contracts retain imported designation
 values and search/sort semantics, even when resumed. Previously captured rows and completed files
 are not rewritten. GB text sort keys retain the existing 255-character staging limit; longer keys
 fail explicitly rather than being truncated.
+
+Contract version 7 preserves the shared condition rows and independent statistics scope.
+Statistics filters apply to both taxa and occurrence downloads; occurrence templates do not add
+statistics columns. Versions 1-6 keep their frozen behavior, including the old statistics-template
+scope rule: use the occurrence region, or Global if no region was selected.
 
 This is a rolling capture, not a point-in-time snapshot. Capture applies the search filters in SQL,
 then selects a batch of matching IDs in ascending order up to the ID ceiling set at creation.
@@ -273,11 +278,24 @@ A record's complete date interval must fit inside the chosen range. A record dat
 therefore does not qualify for 2011, but does qualify for 2010-2012. Records with missing date
 bounds do not qualify for date-filtered searches.
 
-Only the text search and Search/Clear controls are shown initially. Expand Advanced for all
-other filters, including year, region, classification, taxon selection, precise date bounds,
-source and independent taxon/occurrence blocked filters. The panel opens automatically when
-an advanced filter is active or invalid, so hidden filters cannot silently affect the results.
-Expanded controls sit in a bordered, rounded, lightly shaded panel with internal spacing.
+Only text search and Search/Clear controls are shown initially. Expand **Advanced** and choose
+**Add condition** to build Field / Operator / Value rows. All rows combine with AND; multiple
+choices within a row match any selected value. Repeated fields are independent AND conditions.
+Numeric and statistics-date fields support inclusive Between ranges. Not set / empty needs no
+value. The panel opens automatically when a condition is active, being edited or invalid.
+Up to 50 conditions are accepted; excessive or malformed input is rejected explicitly.
+
+The shared catalogue includes taxonomy, configured classifications and attributes, live occurrence
+evidence, and stored statistics. Taxon fields include difficulty, rarity group/category, effective
+species-owned rarity exclusion, exact/text names and identifiers, remarks and missing-value checks.
+GB Red List and GB Status choices match complete abbreviations in the effective override-aware
+list: `LC` does not match `LCX`. Multiple selected abbreviations match any of them.
+
+Occurrences additionally offer unique key, recorded name, grid reference/2km square, locality,
+recorder, identifier, verification code, sex, life stage and quantity. Verification, sex and life
+stage support exact or comma-separated any-of values without enumerating the occurrence table.
+Quantity remains text because values can be enumerations such as "many".
+
 Year and precise date constraints both apply when supplied together. Blocked data
 is included by default because these are staff pages; select No for both blocked filters
 when producing a checklist that excludes blocked evidence. Deleted data is always excluded.
@@ -287,7 +305,7 @@ Taxon blocked = Yes selects blocked listed taxa without requiring their children
 On taxa, choose Rank = Species to list species with matching records, or Rank = Genus to list
 genera. Rank is independent of classification: Family = Noctuidae and Rank = Genus lists genera
 in that family. The Rank selector offers configured reporting ranks, not every imported rank.
-There is no Rank filter on occurrences, whose rows remain original individual records.
+On occurrences, Rank constrains the exact accepted taxon's rank; rows remain original records.
 
 Year, region, source and occurrence status must match the same contributing record. A record
 of a child taxon qualifies its configured reporting ancestors, so subspecies evidence can qualify
@@ -296,22 +314,57 @@ configured and imported. This does not create missing ancestors or change import
 When Rank is blank, non-reporting taxa retain exact-record evidence; unconfigured ancestor
 roll-up is not provided. With no occurrence filters, taxa without records remain visible.
 
-These searches use live occurrences, not periodically rebuilt statistics. Taxa occurrence
-filters first build a deduplicated set of exact and reporting taxon IDs, then join it to taxa,
-avoiding an occurrence scan for every taxon in the taxonomy. Annual statistics
+The occurrence-evidence filters use live occurrences, not periodically rebuilt statistics.
+Taxa occurrence filters first build a deduplicated set of exact and reporting taxon IDs, then
+join it to taxa, avoiding an occurrence scan for every taxon in the taxonomy. Annual statistics
 only assign records whose date bounds fall in the same year, whereas a multi-year index search
 can include an interval spanning years when the whole interval is contained.
 
+### Stored statistics filters
+
+Both pages offer counts, completed-year means, occupancy score/percentage, frequency trend/state,
+key-species and curated rarity decisions, and first/last record and verified-record dates.
+**Key species** filters the flag only: choose Yes, No or Not set. Its comment and decision date are
+not filter fields. Curated rarity offers Common, Rare or Not set.
+
+Choose **Statistics scope** independently of **Occurrence geographic region**: Global or one active
+region. All statistics conditions constrain the same stored row for the displayed taxon, or the
+occurrence's exact accepted taxon. Subspecies do not inherit their species' statistics. Selecting
+a scope alone does not require records or a statistics row.
+
+Statistics exclude blocked/deleted evidence and update asynchronously. Live occurrence year,
+source, region and blocked filters select qualifying records/taxa but never recalculate these
+measurements. The form describes the configured completed-year window for means; the current
+incomplete calendar year is excluded. Occupancy score is a rarity-group percentile, while occupancy
+percentage measures mapped-square coverage. Occupancy and curated rarity status are species-only.
+
+Missing rows are not synthetic zeros: count/measurement comparisons require stored values.
+**Statistics: available** distinguishes row presence; a decision-only row can be available with
+zero counts. Not set includes missing rows and NULL measurements/decisions. An explicit key-species
+No is distinct from Not set. Use occurrence constraints as well when records must exist.
+
+For example, select scope Cheshire, Rank = Species, GB Red List including EN or VU,
+Statistics grid-square count Between 1 and 10, and Statistics last-record date before 2010-01-01.
+This finds taxa using stored Cheshire measurements, not counts recalculated from other filters.
+
 ### Taxon selection and results
 
-Type at least two characters for suggestions matching scientific names, vernacular names or
-synonyms. Suggestions show the accepted name, rank and matched synonym where applicable.
+Choose **Scientific name** to match name text (for example Contains `Lasius`), then select
+**Search** to display matching results. This field does not show taxon suggestions.
+**Taxon names and synonyms** also matches vernacular names and synonyms as text.
+
+For the taxon picker, choose **Taxon (including descendants)**. Type at least two characters for
+suggestions matching scientific names, vernacular names or synonyms.
+Suggestions show the accepted name, rank and matched synonym where applicable.
 Use arrow keys and Enter to select, or Escape to dismiss. A selected taxon includes itself
 and its descendants. Editing the name clears the stored selection.
 
-Without JavaScript, enter a name and Search to load up to 20 choices in Selected taxon.
-Choose one and Search again to include descendants. A name without a selection performs
+With JavaScript, controls and taxon suggestions update automatically; no update button is shown.
+Without JavaScript, choose a field and **Update fields** to load its controls.
+For a taxon, enter a name and use that button to load up to 20 choices below the name.
+Choose one and Search to include descendants. A name without a selection performs
 name matching; general text search is also available without selecting a taxon.
+Add/remove/update actions only edit the form; complete the values and select Search to apply them.
 
 Occurrence tables show readable taxon/classification/source labels, one date or date interval,
 and all linked regions in alphabetical order separated by semicolons. Filtering by one region
@@ -320,7 +373,7 @@ its rank and configured classification columns; they do not show a misleading si
 
 Filters and sorting are preserved in pagination links and bookmarkable GET URLs. Search resets
 the page number; Clear resets all filters. Invalid filters display errors rather than silently
-widening the results. Downloads are not implemented in this iteration.
+widening the results. CSV downloads use the applied conditions, ordering and statistics scope.
 
 See [Staff search presentation](configuration-reference.md#staff-search-presentation) to choose
 which classification ranks appear.
